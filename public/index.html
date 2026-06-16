@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="description" content="Play UNO online with friends — real-time multiplayer card game for 2-20 players" />
+  <meta name="theme-color" content="#0f0f1a" />
+  <title>UNO — Multiplayer Card Game</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=10" />
+</head>
+<body>
+  <!-- ── Screen 1: Lobby ── -->
+  <div id="lobby" class="screen active">
+    <div class="lobby-container">
+      <div class="logo-section">
+        <div class="uno-logo">
+          <span class="logo-u">U</span><span class="logo-n">N</span><span class="logo-o">O</span>
+        </div>
+        <p class="tagline">Play with friends — anywhere, anytime</p>
+      </div>
+
+      <div class="form-card">
+        <input type="text" id="nickname" placeholder="Your nickname" maxlength="16" autocomplete="off" />
+        <button id="btn-create" class="btn btn-primary">
+          <span class="btn-icon">✦</span> Create Room
+        </button>
+        <div class="divider"><span>or join a friend</span></div>
+        <input type="text" id="room-code" placeholder="Room code (e.g. UNO-4X9K)" maxlength="8" autocomplete="off" />
+        <button id="btn-join" class="btn btn-secondary">Join Room</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Screen 2: Waiting Room ── -->
+  <div id="waiting-room" class="screen">
+    <div class="lobby-container">
+      <div class="room-header">
+        <h2>Room</h2>
+        <div class="room-code-display" id="display-code"></div>
+        <p class="share-text">Share this code with friends!</p>
+      </div>
+
+      <div class="players-card">
+        <h3>Players <span id="player-count" class="badge">0</span></h3>
+        <ul id="player-list"></ul>
+      </div>
+
+      <div class="settings-card" id="host-settings" style="display:none;">
+        <label class="toggle-label">
+          <span>Allow card stacking (+2/+4/+8)</span>
+          <div class="toggle-switch">
+            <input type="checkbox" id="stacking-toggle" />
+            <span class="toggle-slider"></span>
+          </div>
+        </label>
+      </div>
+
+      <button id="btn-start" class="btn btn-primary btn-start" disabled>
+        Waiting for players...
+      </button>
+
+      <button id="btn-leave" class="btn btn-ghost">Leave Room</button>
+    </div>
+  </div>
+
+  <!-- ── Screen 3: Game Canvas ── -->
+  <div id="game-screen" class="screen">
+    <canvas id="game-canvas"></canvas>
+    <div id="anim-overlay"></div>
+    <div id="toast-container"></div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="assets/cards.js?v=10"></script>
+  <script src="renderer.js?v=10"></script>
+  <script src="game.js?v=10"></script>
+  <script src="main.js?v=10"></script>
+</body>
+</html>
