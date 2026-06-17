@@ -146,6 +146,24 @@ io.on('connection', (socket) => {
     broadcastRoomUpdate(roomCode);
   });
 
+  // ── Reorder Players (host only, lobby only) ──
+  socket.on('reorder_players', ({ roomCode, order }) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return socket.emit('error', { message: 'Room not found' });
+    if (room.status !== 'lobby') return socket.emit('error', { message: 'Cannot reorder during game' });
+    if (socket.data?.playerId !== room.hostId) return socket.emit('error', { message: 'Only host can reorder players' });
+    if (!Array.isArray(order)) return;
+
+    // Build a lookup map and reorder, ignoring unknown IDs
+    const map = new Map(room.players.map(p => [p.id, p]));
+    const reordered = order.map(id => map.get(id)).filter(Boolean);
+    // Append any players not in the order array (safety net)
+    room.players.forEach(p => { if (!order.includes(p.id)) reordered.push(p); });
+    room.players = reordered;
+
+    broadcastRoomUpdate(roomCode);
+  });
+
   // ── Start Game ──
   socket.on('start_game', ({ roomCode }, callback) => {
     const room = roomManager.getRoom(roomCode);

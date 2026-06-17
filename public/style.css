@@ -404,6 +404,46 @@ input[type="text"]:focus {
   font-weight: 700;
 }
 
+/* Drag-to-reorder (host only) */
+#player-list li .drag-handle {
+  cursor: grab;
+  font-size: 16px;
+  color: rgba(255,255,255,0.2);
+  margin-right: 2px;
+  flex-shrink: 0;
+  user-select: none;
+  transition: color 0.15s;
+  line-height: 1;
+  letter-spacing: -2px;
+}
+#player-list li:hover .drag-handle {
+  color: rgba(255,255,255,0.45);
+}
+#player-list li.drag-over {
+  border: 1.5px solid rgba(100,180,255,0.55);
+  background: rgba(30,136,229,0.1);
+}
+#player-list li.dragging {
+  opacity: 0.4;
+}
+/* Sequence number badge */
+#player-list li .seq-num {
+  font-size: 11px;
+  color: rgba(255,255,255,0.28);
+  font-weight: 700;
+  min-width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+/* Hint for host */
+.reorder-hint {
+  font-size: 11px;
+  color: rgba(255,255,255,0.28);
+  text-align: center;
+  margin-top: 6px;
+  letter-spacing: 0.3px;
+}
+
 /* ── Settings Card ─────────────────────────────────────────────────────────── */
 .settings-card {
   width: 100%;

@@ -16,6 +16,7 @@
   let players = [];
   let stackingEnabled = false;   // track room stacking setting
   let _autoDrawTimer = null;     // pending auto-draw timeout
+  let _roomSeq = 0;              // increments on every room_updated; prevents stale callbacks
 
   // ── DOM refs ───────────────────────────────────────────────────────────────
   const $lobby = document.getElementById('lobby');
@@ -134,13 +135,66 @@
   }
 
   // ── Player List Rendering ──────────────────────────────────────────────────
+  let _dragSrcIndex = null; // index of the row being dragged
+
   function renderPlayerList() {
     $playerList.innerHTML = '';
     $playerCount.textContent = players.length;
+    const amHost = myPlayerId === hostId;
 
     players.forEach((p, i) => {
       const li = document.createElement('li');
+      li.dataset.playerId = p.id;
 
+      // ── Sequence number ─────────────────────────────────────────────────
+      const seq = document.createElement('span');
+      seq.className = 'seq-num';
+      seq.textContent = i + 1;
+      li.appendChild(seq);
+
+      // ── Drag handle (host only) ─────────────────────────────────────────
+      if (amHost) {
+        const handle = document.createElement('span');
+        handle.className = 'drag-handle';
+        handle.textContent = '⠿⠿';
+        handle.title = 'Drag to reorder';
+        li.appendChild(handle);
+
+        li.draggable = true;
+
+        li.addEventListener('dragstart', (e) => {
+          _dragSrcIndex = i;
+          li.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', i);
+        });
+        li.addEventListener('dragend', () => {
+          _dragSrcIndex = null;
+          li.classList.remove('dragging');
+          document.querySelectorAll('#player-list li').forEach(el => el.classList.remove('drag-over'));
+        });
+        li.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          document.querySelectorAll('#player-list li').forEach(el => el.classList.remove('drag-over'));
+          if (_dragSrcIndex !== null && _dragSrcIndex !== i) li.classList.add('drag-over');
+        });
+        li.addEventListener('drop', (e) => {
+          e.preventDefault();
+          const srcIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
+          if (isNaN(srcIndex) || srcIndex === i) return;
+
+          // Build new order from current DOM positions, then apply the swap
+          const ids = players.map(pl => pl.id);
+          const moved = ids.splice(srcIndex, 1)[0];
+          ids.splice(i, 0, moved);
+
+          // Let server be the authority — emit and wait for room_updated
+          socket.emit('reorder_players', { roomCode: currentRoomCode, order: ids });
+        });
+      }
+
+      // ── Avatar ─────────────────────────────────────────────────────────
       const avatar = document.createElement('div');
       avatar.className = 'player-avatar';
       avatar.style.background = getAvatarColor(i);
@@ -170,8 +224,16 @@
       $playerList.appendChild(li);
     });
 
+    // Hint for host
+    if (amHost && players.length > 1) {
+      const hint = document.createElement('p');
+      hint.className = 'reorder-hint';
+      hint.textContent = '⠿ Drag players to set turn order';
+      $playerList.appendChild(hint);
+    }
+
     // Update host-specific UI
-    isHost = myPlayerId === hostId;
+    isHost = amHost;
     $hostSettings.style.display = isHost ? 'block' : 'none';
 
     if (isHost) {
@@ -245,7 +307,8 @@
       myNickname = res.nickname;
       currentRoomCode = code;
       hostId = res.hostId;
-      players = res.players;
+      // Only apply callback players if room_updated hasn't arrived yet
+      if (_roomSeq === 0) players = res.players;
 
       $displayCode.textContent = code;
       $stackingToggle.checked = res.settings?.stacking || false;
@@ -268,6 +331,8 @@
     socket.connect();
     currentRoomCode = null;
     myPlayerId = null;
+    players = [];
+    _roomSeq = 0;   // reset so next join starts fresh
     showScreen($lobby);
   });
 
@@ -306,7 +371,8 @@
   // ═══════════════════════════════════════════════════════════════════════════
 
   socket.on('room_updated', (data) => {
-    players = data.players;
+    _roomSeq++;                  // server is always authoritative
+    players = data.players;      // exact order from server, no local mutation
     hostId = data.hostId;
     if (data.settings) {
       $stackingToggle.checked = data.settings.stacking;
