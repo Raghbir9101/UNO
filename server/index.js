@@ -171,6 +171,7 @@ io.on('connection', (socket) => {
     io.to(roomCode).emit('game_started', {
       ...publicState,
       playerOrder: activePlayers.map(p => ({ id: p.id, nickname: p.nickname })),
+      settings: room.settings,
     });
 
     callback?.({ success: true });
@@ -211,11 +212,14 @@ io.on('connection', (socket) => {
       }
     }
 
-    // Emit card effect for animations
+    // Emit card effect for animations — include target of draw effects
+    const drawEffect = result.effects.find(e => e.type === 'draw');
     io.to(roomCode).emit('card_effect', {
       cardType: result.card.type,
       cardColor: result.card.color,
+      chosenColor: chosenColor || null,
       playedBy: playerId,
+      targetPlayerId: drawEffect ? drawEffect.playerId : null,
     });
 
     // Broadcast updated game state
@@ -249,9 +253,30 @@ io.on('connection', (socket) => {
       return socket.emit('error', { message: result.error });
     }
 
-    // Send updated hand
+    // Send updated hand to the player who drew
     sendHandToPlayer(socket, playerId, room.gameState);
-    io.to(roomCode).emit('player_drew', { playerId, count: result.count });
+    // Notify everyone of the draw (include mustPass so client shows Pass button)
+    io.to(roomCode).emit('player_drew', {
+      playerId,
+      count: result.count,
+      forced: result.forced || false,
+      mustPass: result.mustPass || false,
+    });
+    broadcastGameState(roomCode);
+  });
+
+  // ── Pass Turn (player passes after drawing) ──
+  socket.on('pass_turn', ({ roomCode }) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room || !room.gameState) return socket.emit('error', { message: 'No active game' });
+
+    const playerId = socket.data?.playerId;
+    const result = gameLogic.passTurn(room.gameState, playerId);
+
+    if (result.error) {
+      return socket.emit('error', { message: result.error });
+    }
+
     broadcastGameState(roomCode);
   });
 

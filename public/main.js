@@ -14,6 +14,8 @@
   let hostId = null;
   let isHost = false;
   let players = [];
+  let stackingEnabled = false;   // track room stacking setting
+  let _autoDrawTimer = null;     // pending auto-draw timeout
 
   // ── DOM refs ───────────────────────────────────────────────────────────────
   const $lobby = document.getElementById('lobby');
@@ -32,6 +34,86 @@
   const $hostSettings = document.getElementById('host-settings');
   const $canvas = document.getElementById('game-canvas');
   const $toastContainer = document.getElementById('toast-container');
+  const $createSection = document.getElementById('create-section');
+
+  // ── Invite Link: pre-fill room code if ?room=CODE in URL ──────────────────
+  const _urlParams  = new URLSearchParams(window.location.search);
+  const _inviteCode = (_urlParams.get('room') || '').toUpperCase().trim();
+  if (_inviteCode) {
+    $createSection.style.display = 'none';          // hide Create Room + divider
+    $roomCode.value = _inviteCode;
+    $roomCode.setAttribute('readonly', 'readonly'); // code is fixed from link
+    $nickname.placeholder = 'Enter your nickname to join';
+    $nickname.focus();
+    history.replaceState({}, '', window.location.pathname); // clean the URL
+  }
+  const $btnFullscreen = document.getElementById('btn-fullscreen');
+
+  // ── Fullscreen / Landscape Toggle ────────────────────────────────────────
+  let _landscapeMode = false;
+  $btnFullscreen.addEventListener('click', () => {
+    const supportsFS = document.documentElement.requestFullscreen ||
+                       document.documentElement.webkitRequestFullscreen;
+    if (supportsFS && !_landscapeMode) {
+      // Try native fullscreen first
+      const el = document.documentElement;
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      req.call(el).then(() => {
+        // Also try screen orientation lock to landscape
+        if (screen.orientation && screen.orientation.lock) {
+          screen.orientation.lock('landscape').catch(() => {});
+        }
+        _landscapeMode = true;
+        $btnFullscreen.textContent = '×';
+        $btnFullscreen.title = 'Exit Fullscreen';
+        setTimeout(() => Game.resizeCanvas(), 100);
+      }).catch(() => {
+        // Fullscreen denied (iOS) — use CSS rotation fallback
+        toggleLandscapeFallback();
+      });
+    } else if (_landscapeMode) {
+      // Exit
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        exit.call(document).catch(() => {});
+      }
+      document.body.classList.remove('landscape');
+      _landscapeMode = false;
+      $btnFullscreen.textContent = '⛶';
+      $btnFullscreen.title = 'Fullscreen / Landscape';
+      setTimeout(() => Game.resizeCanvas(), 100);
+    } else {
+      toggleLandscapeFallback();
+    }
+  });
+
+  function toggleLandscapeFallback() {
+    _landscapeMode = !_landscapeMode;
+    document.body.classList.toggle('landscape', _landscapeMode);
+    $btnFullscreen.textContent = _landscapeMode ? '×' : '⛶';
+    $btnFullscreen.title = _landscapeMode ? 'Exit Landscape' : 'Fullscreen / Landscape';
+    setTimeout(() => Game.resizeCanvas(), 150);
+  }
+
+  // Sync state when user exits fullscreen via Escape
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement && _landscapeMode) {
+      document.body.classList.remove('landscape');
+      _landscapeMode = false;
+      $btnFullscreen.textContent = '⛶';
+      $btnFullscreen.title = 'Fullscreen / Landscape';
+      setTimeout(() => Game.resizeCanvas(), 100);
+    }
+  });
+  document.addEventListener('webkitfullscreenchange', () => {
+    if (!document.webkitFullscreenElement && _landscapeMode) {
+      document.body.classList.remove('landscape');
+      _landscapeMode = false;
+      $btnFullscreen.textContent = '⛶';
+      $btnFullscreen.title = 'Fullscreen / Landscape';
+      setTimeout(() => Game.resizeCanvas(), 100);
+    }
+  });
 
   // ── Screen Switching ───────────────────────────────────────────────────────
   function showScreen(screen) {
@@ -122,9 +204,29 @@
       currentRoomCode = res.roomCode;
 
       $displayCode.textContent = res.roomCode;
+      // Push invite link into address bar so host can copy it easily
+      history.replaceState({}, '', `?room=${res.roomCode}`);
       showScreen($waitingRoom);
     });
   });
+
+  // ── Waiting Room: Copy Invite Link ─────────────────────────────────
+  const $btnCopyLink = document.getElementById('btn-copy-link');
+  $btnCopyLink.addEventListener('click', () => {
+    const url = `${location.origin}${location.pathname}?room=${currentRoomCode}`;
+    navigator.clipboard.writeText(url).then(() => {
+      $btnCopyLink.textContent = '✓ Link Copied!';
+      $btnCopyLink.classList.add('copied');
+      setTimeout(() => {
+        $btnCopyLink.innerHTML = '🔗 Copy Invite Link';
+        $btnCopyLink.classList.remove('copied');
+      }, 2500);
+    }).catch(() => {
+      // Fallback: show the URL as toast
+      showToast(`Invite: ${url}`);
+    });
+  });
+
 
   // ── Lobby: Join Room ───────────────────────────────────────────────────────
   $btnJoin.addEventListener('click', () => {
@@ -147,6 +249,7 @@
 
       $displayCode.textContent = code;
       $stackingToggle.checked = res.settings?.stacking || false;
+      stackingEnabled = res.settings?.stacking || false;
       renderPlayerList();
 
       if (res.gameInProgress && res.reconnected) {
@@ -207,12 +310,14 @@
     hostId = data.hostId;
     if (data.settings) {
       $stackingToggle.checked = data.settings.stacking;
+      stackingEnabled = data.settings.stacking || false;
     }
     renderPlayerList();
   });
 
   socket.on('game_started', (data) => {
     showToast('Game started!');
+    if (data.settings) stackingEnabled = data.settings.stacking || false;
     startGameUI();
 
     // Set player order
@@ -223,6 +328,9 @@
     }));
     Game.setPlayers(playerOrder);
     Game.updateGameState(data);
+
+    // Animate the initial 7-card deal from the deck to the player's hand
+    setTimeout(() => Game.triggerAnimation('deal', { count: 7 }), 300);
   });
 
   socket.on('hand_updated', (data) => {
@@ -231,37 +339,74 @@
 
   socket.on('game_state', (data) => {
     Game.updateGameState(data);
+
+    // Auto-draw: if stacking is ON, it's my turn, I have a pendingDraw,
+    // and I have NO valid stack card → automatically draw after a brief delay
+    // (gives time for the +N flash animation to finish)
+    if (stackingEnabled && data.pendingDraw > 0 && data.currentPlayer === myPlayerId) {
+      const myHand = Game.state.myHand || [];
+      const drawType = data.pendingDrawType; // 'draw2' | 'wild4' | 'wild8'
+      const canStack = myHand.some(c => c.type === drawType);
+      if (!canStack) {
+        clearTimeout(_autoDrawTimer);
+        _autoDrawTimer = setTimeout(() => {
+          // Double-check it's still my turn with pending draw
+          if (Game.state.pendingDraw > 0 && Game.state.currentPlayer === myPlayerId) {
+            socket.emit('draw_card', { roomCode: currentRoomCode });
+          }
+        }, 1200); // wait for +N animation
+      }
+    } else {
+      clearTimeout(_autoDrawTimer);
+    }
   });
 
   socket.on('card_effect', (data) => {
-    const { cardType } = data;
-    // Power card animations
+    const { cardType, chosenColor } = data;
+    // Show label + flash ONLY — no card-fly here (that's player_drew's job)
     if (cardType === 'draw2') {
-      Game.triggerAnimation('plus', { text: '+2', count: 2 });
-      Game.triggerAnimation('multi_card_draw', { count: 2 });
+      Game.showDomAnim('anim-plus', '+2', 1200);
+      Game.showDomAnim('anim-red-flash', '', 600);
     } else if (cardType === 'wild4') {
-      Game.triggerAnimation('plus', { text: '+4', count: 4 });
-      Game.triggerAnimation('multi_card_draw', { count: 4 });
+      Game.showDomAnim('anim-plus', '+4', 1200);
+      Game.showDomAnim('anim-red-flash', '', 600);
     } else if (cardType === 'wild8') {
-      Game.triggerAnimation('plus', { text: '+8', count: 8 });
-      Game.triggerAnimation('multi_card_draw', { count: 8 });
+      Game.showDomAnim('anim-plus', '+8', 1200);
+      Game.showDomAnim('anim-red-flash', '', 600);
     } else if (cardType === 'reverse') {
       Game.triggerAnimation('reverse');
     } else if (cardType === 'skip') {
       Game.triggerAnimation('skip');
     } else if (cardType === 'wild') {
-      Game.triggerAnimation('color_change');
+      Game.triggerAnimation('color_change', { color: chosenColor });
     } else {
       Game.triggerAnimation('card_played');
     }
+    // Build the discard pile visual stack
+    Game.triggerAnimation('discard_land');
   });
 
+  // ── player_drew: THE only place card-fly animations happen ──────────────
+  // Direction: toSelf = fly to bottom (your hand). !toSelf = fly to top (opponent).
   socket.on('player_drew', (data) => {
     const p = players.find(pl => pl.id === data.playerId);
     const name = p ? p.nickname : 'Player';
     if (data.playerId !== myPlayerId) {
       showToast(`${name} drew ${data.count} card${data.count > 1 ? 's' : ''}`);
     }
+
+    const toSelf = data.playerId === myPlayerId;
+    for (let i = 0; i < data.count; i++) {
+      setTimeout(() => {
+        Game.triggerAnimation('fly_card', { index: i, total: data.count, toSelf });
+      }, i * 120);
+    }
+
+    // If this was MY normal draw (not forced), show Pass Turn button
+    if (toSelf && data.mustPass) {
+      Game.state.hasDrawnThisTurn = true;
+    }
+
     if (data.count > 1) {
       Game.triggerAnimation('draw_flash');
     }
@@ -294,8 +439,12 @@
   });
 
   socket.on('player_won', (data) => {
-    Game.setWinner(data.playerId, data.nickname);
-    showToast(`🎉 ${data.nickname} wins!`);
+    // Confetti first, then winner screen after a brief delay
+    Game.triggerAnimation('winner');
+    setTimeout(() => {
+      Game.setWinner(data.playerId, data.nickname);
+      showToast(`🎉 ${data.nickname} wins!`);
+    }, 600);
   });
 
   socket.on('game_restarted', () => {
@@ -346,6 +495,11 @@
 
     Game.onDrawCard = () => {
       socket.emit('draw_card', { roomCode: currentRoomCode });
+    };
+
+    Game.onPassTurn = () => {
+      Game.state.hasDrawnThisTurn = false;
+      socket.emit('pass_turn', { roomCode: currentRoomCode });
     };
 
     Game.onCallUno = () => {

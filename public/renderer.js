@@ -139,7 +139,7 @@ const Renderer = (() => {
     ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = vs(1); ctx.stroke();
   }
 
-  function drawPlayerHand(ctx, cards, selIdx, scrollOff, W, H) {
+  function drawPlayerHand(ctx, cards, selIdx, scrollOff, W, H, flyingCardId) {
     if (!cards || !cards.length) return { cardRects: [] };
     const cw = Math.min(W * 0.16, vs(60));
     const ch = cw * 1.45;
@@ -151,7 +151,16 @@ const Renderer = (() => {
     const rects = [];
     for (let i = 0; i < cards.length; i++) {
       const cx = sx + i * ov;
-      drawCard(ctx, cards[i], cx, baseY, cw, ch, { selected: i === selIdx, faceUp: true });
+      const isFlying = flyingCardId && cards[i].id === flyingCardId;
+      if (isFlying) {
+        // Draw a very faint placeholder so layout doesn't shift
+        ctx.save();
+        ctx.globalAlpha = 0.0; // fully invisible — DOM img is on top
+        drawCard(ctx, cards[i], cx, baseY, cw, ch, { selected: false, faceUp: true });
+        ctx.restore();
+      } else {
+        drawCard(ctx, cards[i], cx, baseY, cw, ch, { selected: i === selIdx, faceUp: true });
+      }
       rects.push({ x: cx, y: baseY, w: cw, h: ch, index: i, cardId: cards[i].id });
     }
     return { cardRects: rects, handY: baseY, cardW: cw, cardH: ch };
@@ -251,41 +260,58 @@ const Renderer = (() => {
     ctx.fillText(drawCount, dx + cw / 2, centerY + ch + vs(6));
     rects.draw = { x: dx, y: centerY, w: cw, h: ch };
 
-    // Discard pile (right)
+    // Discard pile (right) — stacked history with subtle rotations
     const dcx = W / 2 + gap;
     if (discardTop) {
-      // Slight rotation for natural look
+      const stack = (typeof Game !== 'undefined' && Game.discardStack) ? Game.discardStack : [];
+      const showDepth = Math.min(stack.length, 4);
+      // Draw older cards as slightly rotated ghosts beneath the top card
+      for (let si = 0; si < showDepth - 1; si++) {
+        const entry = stack[si];
+        ctx.save();
+        ctx.translate(dcx + cw / 2, centerY + ch / 2);
+        ctx.rotate((entry.rot || 0) * Math.PI / 180);
+        _cardBack(ctx, -cw / 2, -ch / 2, cw, ch);
+        ctx.restore();
+      }
+      // Draw top card — always upright (0 rotation), no offset
       ctx.save();
       ctx.translate(dcx + cw / 2, centerY + ch / 2);
-      ctx.rotate(0.03);
       drawCard(ctx, discardTop, -cw / 2, -ch / 2, cw, ch, { faceUp: true });
       ctx.restore();
     }
     rects.discard = { x: dcx, y: centerY, w: cw, h: ch };
 
-    // Active color indicator
+    // Active color indicator — drawn BELOW both piles so it's never hidden
     if (activeColor && activeColor !== 'wild') {
       const ci = CardColors[activeColor];
-      const ix = dcx + cw + vs(10), iy = centerY + ch / 2;
-      const sz = vs(14);
-      // Diamond shape
+      // Center it between the two piles, below them
+      const ix = W / 2;
+      const iy = centerY + ch + vs(18);
+      const sz = vs(10);
       ctx.save();
-      ctx.shadowColor = ci.fill; ctx.shadowBlur = vs(8);
+      ctx.shadowColor = ci.fill; ctx.shadowBlur = vs(10);
       ctx.beginPath();
       ctx.moveTo(ix, iy - sz); ctx.lineTo(ix + sz, iy);
       ctx.lineTo(ix, iy + sz); ctx.lineTo(ix - sz, iy);
       ctx.closePath();
       ctx.fillStyle = ci.fill; ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = vs(1.5); ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = vs(1.5); ctx.stroke();
+      // Label
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.font = `600 ${vs(8)}px ${font}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(activeColor.toUpperCase(), ix, iy + sz + vs(3));
       ctx.restore();
     }
 
-    // Direction arrow between piles
-    const ax = W / 2, ay = centerY + ch + vs(6);
+    // Direction arrow — centered between piles, above them
+    const ax = W / 2, ay = centerY - vs(18);
     const pulse = (Math.sin(Date.now() / 500) + 1) / 2;
-    ctx.save(); ctx.globalAlpha = 0.35 + pulse * 0.15;
-    ctx.fillStyle = '#fff'; ctx.font = `400 ${vs(16)}px ${font}`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.save(); ctx.globalAlpha = 0.4 + pulse * 0.2;
+    ctx.fillStyle = '#fff'; ctx.font = `400 ${vs(14)}px ${font}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
     ctx.fillText(dir_global === 1 ? '↻' : '↺', ax, ay);
     ctx.restore();
 
@@ -303,25 +329,34 @@ const Renderer = (() => {
     const totalW = vs(200);
     const startX = (W - totalW) / 2;
 
-    // Draw / Pass
+    // Draw / Pass — or "Pass Turn" after player has already drawn
     const dbw = vs(110);
     const dbx = startX;
+    const hasDrawn = state.hasDrawnThisTurn || false;
     ctx.save();
     rr(ctx, dbx, by, dbw, bh, br);
     const dg = ctx.createLinearGradient(dbx, by, dbx, by + bh);
-    if (state.isMyTurn) {
+    if (state.isMyTurn && hasDrawn) {
+      // Pass Turn: green
+      dg.addColorStop(0, 'rgba(67,160,71,0.7)'); dg.addColorStop(1, 'rgba(46,125,50,0.7)');
+    } else if (state.isMyTurn) {
       dg.addColorStop(0, 'rgba(30,136,229,0.6)'); dg.addColorStop(1, 'rgba(20,100,180,0.6)');
     } else {
       dg.addColorStop(0, 'rgba(255,255,255,0.06)'); dg.addColorStop(1, 'rgba(255,255,255,0.03)');
     }
     ctx.fillStyle = dg; ctx.fill();
     rr(ctx, dbx, by, dbw, bh, br);
-    ctx.strokeStyle = state.isMyTurn ? 'rgba(100,180,255,0.5)' : 'rgba(255,255,255,0.1)';
+    ctx.strokeStyle = state.isMyTurn
+      ? (hasDrawn ? 'rgba(100,220,100,0.5)' : 'rgba(100,180,255,0.5)')
+      : 'rgba(255,255,255,0.1)';
     ctx.lineWidth = vs(1.5); ctx.stroke();
     ctx.fillStyle = state.isMyTurn ? '#fff' : 'rgba(255,255,255,0.3)';
     ctx.font = `700 ${vs(13)}px ${font}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(state.pendingDraw > 0 ? `Draw ${state.pendingDraw}` : 'Draw / Pass', dbx + dbw / 2, by + bh / 2);
+    const drawLabel = state.pendingDraw > 0
+      ? `Draw ${state.pendingDraw}`
+      : (hasDrawn ? 'Pass Turn' : 'Draw / Pass');
+    ctx.fillText(drawLabel, dbx + dbw / 2, by + bh / 2);
     ctx.restore();
     rects.draw = { x: dbx, y: by, w: dbw, h: bh };
 

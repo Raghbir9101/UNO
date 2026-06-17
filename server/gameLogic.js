@@ -284,16 +284,11 @@ function playCard(state, playerId, cardId, chosenColor) {
 
     case 'reverse':
       state.activeColor = card.color;
-      if (state.playerCount === 2) {
-        // Acts as skip with 2 players
-        advanceTurn(state);
-        result.effects.push({ type: 'skip', playerId: getCurrentPlayerId(state) });
-        advanceTurn(state);
-      } else {
-        state.direction *= -1;
-        result.effects.push({ type: 'reverse', direction: state.direction });
-        advanceTurn(state);
-      }
+      // Always flip direction regardless of player count.
+      // With 2 players this gives the turn to the other player (previous).
+      state.direction *= -1;
+      result.effects.push({ type: 'reverse', direction: state.direction });
+      advanceTurn(state);
       break;
 
     case 'draw2':
@@ -377,11 +372,20 @@ function playerDrawCard(state, playerId) {
     return { drawn, count: drawn.length, forced: true, nextPlayer: getCurrentPlayerId(state) };
   }
 
-  // Normal draw: draw 1 card
+  // Normal draw: draw 1 card, but DO NOT advance the turn yet.
+  // Player must explicitly pass (or play the drawn card in future).
   const drawn = drawCards(state, playerId, 1);
-  // After drawing, turn advances (simplified — no "play drawn card" option for now)
+  return { drawn, count: drawn.length, forced: false, mustPass: true };
+}
+
+// ─── Pass Turn (after drawing) ────────────────────────────────────────────────
+
+function passTurn(state, playerId) {
+  if (getCurrentPlayerId(state) !== playerId) {
+    return { error: "It's not your turn" };
+  }
   advanceTurn(state);
-  return { drawn, count: drawn.length, forced: false, nextPlayer: getCurrentPlayerId(state) };
+  return { success: true, nextPlayer: getCurrentPlayerId(state) };
 }
 
 // ─── UNO Call ─────────────────────────────────────────────────────────────────
@@ -442,6 +446,7 @@ module.exports = {
   initGame,
   playCard,
   playerDrawCard,
+  passTurn,
   callUno,
   catchUno,
   getPublicState,
