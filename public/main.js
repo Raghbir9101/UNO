@@ -518,7 +518,9 @@
     }
 
     _dealInProgress   = true;
-    _bufferedDealHand = null;
+    // Do NOT reset _bufferedDealHand here — hand_updated arrives BEFORE game_started
+    // and already stored the cards there. Clearing it would lose them.
+    // _bufferedDealHand is only nulled at the end of the deal loop.
     // Do NOT call setDealMode(true) — that blanks the hand canvas.
     // Cards are revealed incrementally via Game.state.myHand direct mutation.
 
@@ -556,9 +558,10 @@
   });
 
   socket.on('hand_updated', (data) => {
-    // During the deal animation, buffer the hand and reveal cards one-by-one
-    // in sync with each card landing (handled in game_started deal loop).
-    if (_dealInProgress) {
+    // The server sends hand_updated BEFORE game_started, so _dealInProgress is
+    // still false when this arrives for the initial deal. Detect this by checking
+    // if the game canvas hasn't been initialized yet.
+    if (!Game.state.active || _dealInProgress) {
       _bufferedDealHand = data.cards;
       return;
     }
@@ -593,6 +596,7 @@
     }
   });
 
+
   socket.on('game_state', (data) => {
     // While deal animation is running, skip card count updates entirely —
     // the deal loop increments counts one-by-one in sync with the animations.
@@ -605,7 +609,9 @@
       }));
       Game.setPlayers(updated);
     }
-    Game.updateGameState(data);
+    // During deal, also strip cardCounts from updateGameState so the
+    // direct player-count increments in the deal loop aren't overwritten.
+    Game.updateGameState(_dealInProgress ? { ...data, cardCounts: null } : data);
 
     // Show 30s turn timer in UI
     if (data.currentPlayer) {
