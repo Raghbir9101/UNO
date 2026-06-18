@@ -246,6 +246,50 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ── Kick Player ──
+  socket.on('kick_player', ({ roomCode, targetPlayerId }) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return;
+    if (room.status !== 'lobby') return;
+    if (socket.data?.playerId !== room.hostId) return; // Only host can kick
+    if (targetPlayerId === room.hostId) return; // Can't kick self
+
+    const targetPlayer = room.players.find(p => p.id === targetPlayerId);
+    if (!targetPlayer) return;
+
+    // Find the target socket
+    let targetSocketId = null;
+    if (room.socketMap && room.socketMap[targetPlayerId]) {
+      targetSocketId = room.socketMap[targetPlayerId];
+    } else {
+      // Fallback: Find target socket via connected clients in the room
+      const clients = io.sockets.adapter.rooms.get(roomCode);
+      if (clients) {
+        for (const clientId of clients) {
+          const clientSocket = io.sockets.sockets.get(clientId);
+          if (clientSocket && clientSocket.data?.playerId === targetPlayerId) {
+            targetSocketId = clientId;
+            break;
+          }
+        }
+      }
+    }
+
+    roomManager.removePlayer(roomCode, targetPlayerId);
+
+    if (targetSocketId) {
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (targetSocket) {
+        targetSocket.leave(roomCode);
+        targetSocket.data = {};
+        targetSocket.emit('kicked_from_room');
+      }
+    }
+
+    io.to(roomCode).emit('player_kicked', { nickname: targetPlayer.nickname });
+    broadcastRoomUpdate(roomCode);
+  });
+
   // ── Toggle Stacking ──
   socket.on('toggle_stacking', ({ roomCode, enabled }) => {
     const room = roomManager.getRoom(roomCode);

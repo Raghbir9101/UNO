@@ -256,6 +256,19 @@
         host.className = 'host-badge';
         host.textContent = 'HOST';
         li.appendChild(host);
+      } else if (amHost) {
+        // Kick button for host
+        const kickBtn = document.createElement('button');
+        kickBtn.className = 'btn-kick';
+        kickBtn.innerHTML = '✖';
+        kickBtn.title = 'Kick player';
+        kickBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (confirm(`Kick ${p.nickname}?`)) {
+            socket.emit('kick_player', { roomCode: currentRoomCode, targetPlayerId: p.id });
+          }
+        });
+        li.appendChild(kickBtn);
       }
 
       $playerList.appendChild(li);
@@ -480,6 +493,20 @@
       stackingEnabled = data.settings.stacking || false;
     }
     renderPlayerList();
+  });
+
+  socket.on('player_kicked', (data) => {
+    showToast(`${data.nickname} was kicked from the room`);
+  });
+
+  socket.on('kicked_from_room', () => {
+    showToast('You were kicked from the room', true);
+    myPlayerId = null;
+    currentRoomCode = null;
+    hostId = null;
+    isHost = false;
+    players = [];
+    showScreen($lobby);
   });
 
   socket.on('game_started', (data) => {

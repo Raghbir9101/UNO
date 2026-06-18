@@ -400,6 +400,22 @@ input[type="text"]:focus {
   user-select: none; transition: color 0.15s;
   line-height: 1; letter-spacing: -2px;
 }
+#player-list li .btn-kick {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--red);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  opacity: 0.6;
+  transition: opacity 0.2s, background 0.2s;
+}
+#player-list li .btn-kick:hover {
+  opacity: 1;
+  background: rgba(229, 57, 53, 0.1);
+}
 #player-list li:hover .drag-handle { color: rgba(255,255,255,0.45); }
 #player-list li.drag-over {
   border-color: rgba(100,180,255,0.55);

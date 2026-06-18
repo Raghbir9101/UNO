@@ -193,6 +193,7 @@ const Game = (() => {
 
     // UNO button
     if (hit(x, y, hitRegions.buttonRects?.uno)) {
+      state.unoClickTime = Date.now();
       // Call UNO: player just got to 1 card — unoState may not have arrived yet,
       // so only require hand length === 1 (server validates the rest)
       if (state.myHand.length === 1) {

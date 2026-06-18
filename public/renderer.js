@@ -435,14 +435,23 @@ const Renderer = (() => {
     // ── Positions: buttons flanking the piles ────────────────────────────────
     const btnY = _CY;
     const BSZ  = _cw * 0.62;   // smaller diamond buttons
-    const unoCX  = _dx - BSZ*0.72;
     const passCX = _dcx + _cw + BSZ*0.72;
 
-    // ── UNO Diamond Button (left) ──────────────────────────────────────────
+    const unoBSZ = _cw * 1.6;  // Huge UNO button
+    const unoCX = _CX;
+    const unoCY = _dy - vs(55); // Top part of the oval
+
+    // ── UNO Diamond Button (top) ──────────────────────────────────────────
     ctx.save();
-    ctx.translate(unoCX, btnY);
+    ctx.translate(unoCX, unoCY);
+    
+    // Click scale effect (shrinks significantly for 200ms)
+    if (state.unoClickTime && Date.now() - state.unoClickTime < 200) {
+      ctx.scale(0.7, 0.7);
+    }
+    
     ctx.rotate(Math.PI/4);
-    const unoSide = BSZ * 0.72;
+    const unoSide = unoBSZ * 0.72;
     const ug = ctx.createLinearGradient(-unoSide/2,-unoSide/2,unoSide/2,unoSide/2);
     if (state.unoHighlight) {
       ctx.shadowColor='#E53935'; ctx.shadowBlur=vs(14+pulse3*10);
@@ -459,12 +468,16 @@ const Renderer = (() => {
     ctx.restore();
     // UNO text
     ctx.save();
-    ctx.fillStyle='#fff'; ctx.font=`900 ${vs(11)}px ${font}`;
+    ctx.translate(unoCX, unoCY);
+    if (state.unoClickTime && Date.now() - state.unoClickTime < 200) {
+      ctx.scale(0.7, 0.7);
+    }
+    ctx.fillStyle='#fff'; ctx.font=`900 ${vs(26)}px ${font}`;
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=vs(3);
-    ctx.fillText('UNO!', unoCX, btnY);
+    ctx.fillText('UNO!', 0, 0);
     ctx.restore();
-    rects.uno = { x:unoCX-BSZ/2, y:btnY-BSZ/2, w:BSZ, h:BSZ };
+    rects.uno = { x:unoCX-unoBSZ/2, y:unoCY-unoBSZ/2, w:unoBSZ, h:unoBSZ };
 
     // ── Color indicator (above pass button) ───────────────────────────────
     if (state.activeColor && state.activeColor!=='wild') {
