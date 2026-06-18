@@ -4,11 +4,11 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 const CardColors = {
-  red:    { fill: '#E53935', dark: '#B71C1C', light: '#EF5350', name: 'Red' },
-  blue:   { fill: '#1E88E5', dark: '#0D47A1', light: '#42A5F5', name: 'Blue' },
-  green:  { fill: '#43A047', dark: '#1B5E20', light: '#66BB6A', name: 'Green' },
-  yellow: { fill: '#FDD835', dark: '#F57F17', light: '#FFEE58', name: 'Yellow' },
-  wild:   { fill: '#212121', dark: '#111111', light: '#424242', name: 'Wild' },
+  red:    { fill: '#E53935', dark: '#B71C1C', light: '#EF5350', name: 'Red',    text: '#fff' },
+  blue:   { fill: '#1E88E5', dark: '#0D47A1', light: '#42A5F5', name: 'Blue',   text: '#fff' },
+  green:  { fill: '#43A047', dark: '#1B5E20', light: '#66BB6A', name: 'Green',  text: '#fff' },
+  yellow: { fill: '#FDD835', dark: '#F57F17', light: '#FFEE58', name: 'Yellow', text: '#5a3e00' },
+  wild:   { fill: '#212121', dark: '#111111', light: '#424242', name: 'Wild',   text: '#fff' },
 };
 
 const CardTypeDisplay = {

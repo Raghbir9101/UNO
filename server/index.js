@@ -35,6 +35,9 @@ function broadcastRoomUpdate(roomCode) {
   const room = roomManager.getRoom(roomCode);
   if (!room) return;
 
+  // Monotonically-increasing sequence number — clients use this to reject stale events
+  room.updateSeq = (room.updateSeq || 0) + 1;
+
   const players = room.players.map(p => ({
     id: p.id,
     nickname: p.nickname,
@@ -42,11 +45,13 @@ function broadcastRoomUpdate(roomCode) {
   }));
 
   io.to(roomCode).emit('room_updated', {
+    seq: room.updateSeq,
     players,
     hostId: room.hostId,
     settings: room.settings,
   });
 }
+
 
 function broadcastGameState(roomCode) {
   const room = roomManager.getRoom(roomCode);
@@ -54,7 +59,113 @@ function broadcastGameState(roomCode) {
 
   const publicState = gameLogic.getPublicState(room.gameState);
   io.to(roomCode).emit('game_state', publicState);
+
+  // Reset the 30-second auto-play timer for the current player
+  resetAutoPlayTimer(roomCode);
 }
+
+// ─── Auto-play: play for idle player after 30 seconds ────────────────────────
+const _autoPlayTimers = {};  // roomCode → timeout handle
+
+function resetAutoPlayTimer(roomCode) {
+  clearTimeout(_autoPlayTimers[roomCode]);
+
+  const room = roomManager.getRoom(roomCode);
+  if (!room || !room.gameState || room.gameState.winner) return;
+
+  const currentId = gameLogic.getCurrentPlayerId(room.gameState);
+  if (!currentId) return;
+
+  _autoPlayTimers[roomCode] = setTimeout(() => {
+    const r = roomManager.getRoom(roomCode);
+    if (!r || !r.gameState || r.gameState.winner) return;
+    if (gameLogic.getCurrentPlayerId(r.gameState) !== currentId) return;
+
+    const gs = r.gameState;
+    const hand = gs.hands[currentId] || [];
+    const nickname = r.players.find(p => p.id === currentId)?.nickname || 'A player';
+
+    console.log(`[auto-play] Acting for idle player ${currentId} (${nickname}) in ${roomCode}`);
+
+    // Notify all clients this is an AFK move
+    io.to(roomCode).emit('afk_action', { playerId: currentId, nickname });
+
+    // ── Case 1: Player has a pending forced draw (draw2/wild4/wild8 stack) ──
+    if (gs.pendingDraw > 0) {
+      const result = gameLogic.playerDrawCard(gs, currentId);
+      if (!result.error) {
+        // Send updated hand to the player
+        const p = r.players.find(pl => pl.id === currentId);
+        if (p && p.socketId) {
+          const sock = getSocketById(p.socketId);
+          if (sock) sendHandToPlayer(sock, currentId, gs);
+        }
+        io.to(roomCode).emit('player_drew', { playerId: currentId, count: result.drawn?.length || 1 });
+        // playerDrawCard with pendingDraw already calls advanceTurn internally
+        broadcastGameState(roomCode);
+      }
+      return;
+    }
+
+    // ── Case 2: Find a card playable under current game rules ──
+    // Use the same isPlayable logic: match color, type, or value
+    const playable = hand.filter(card => {
+      if (gs.pendingDraw > 0 && gs.settings.stacking) {
+        return card.type === gs.pendingDrawType;
+      }
+      if (card.color === 'wild') return gs.pendingDraw === 0 || !gs.settings.stacking;
+      if (card.color === gs.activeColor) return true;
+      const top = gs.discardPile[gs.discardPile.length - 1];
+      if (top && card.type === 'number' && top.type === 'number' && card.value === top.value) return true;
+      if (top && card.type !== 'number' && card.type === top.type) return true;
+      return false;
+    });
+
+    if (playable.length > 0) {
+      // Prefer non-wild cards to conserve wilds
+      const card = playable.find(c => c.color !== 'wild') || playable[0];
+      const chosenColor = card.color === 'wild'
+        ? gameLogic.COLORS[Math.floor(Math.random() * 4)]
+        : undefined;
+      const result = gameLogic.playCard(gs, currentId, card.id, chosenColor);
+      if (!result.error) {
+        const p = r.players.find(pl => pl.id === currentId);
+        if (p && p.socketId) {
+          const sock = getSocketById(p.socketId);
+          if (sock) sendHandToPlayer(sock, currentId, gs);
+        }
+        for (const effect of result.effects) {
+          if (effect.type === 'draw' && effect.playerId) {
+            const tp = r.players.find(pl => pl.id === effect.playerId);
+            if (tp && tp.socketId) {
+              const ts = getSocketById(tp.socketId);
+              if (ts) sendHandToPlayer(ts, tp.id, gs);
+            }
+          }
+        }
+        io.to(roomCode).emit('card_effect', { cardType: card.type, chosenColor });
+        broadcastGameState(roomCode);
+      }
+      return;
+    }
+
+    // ── Case 3: No playable card — draw 1 then pass ──
+    const drawResult = gameLogic.playerDrawCard(gs, currentId);
+    if (!drawResult.error) {
+      const p = r.players.find(pl => pl.id === currentId);
+      if (p && p.socketId) {
+        const sock = getSocketById(p.socketId);
+        if (sock) sendHandToPlayer(sock, currentId, gs);
+      }
+      io.to(roomCode).emit('player_drew', { playerId: currentId, count: drawResult.drawn?.length || 1 });
+
+      // Must explicitly pass turn after drawing (turn doesn't auto-advance for normal draw)
+      gameLogic.passTurn(gs, currentId);
+      broadcastGameState(roomCode);
+    }
+  }, 30000); // 30 seconds
+}
+
 
 function sendHandToPlayer(socket, playerId, gameState) {
   const hand = gameState.hands[playerId] || [];
@@ -87,7 +198,7 @@ io.on('connection', (socket) => {
   });
 
   // ── Join Room ──
-  socket.on('join_room', ({ roomCode, nickname }, callback) => {
+  socket.on('join_room', ({ roomCode, nickname, playerId: existingPlayerId }, callback) => {
     if (!nickname || nickname.trim().length === 0) {
       return callback({ error: 'Nickname is required' });
     }
@@ -96,7 +207,7 @@ io.on('connection', (socket) => {
     }
     const code = roomCode.trim().toUpperCase();
     const name = nickname.trim().substring(0, 16);
-    const result = roomManager.joinRoom(code, name);
+    const result = roomManager.joinRoom(code, name, existingPlayerId);
 
     if (result.error) {
       return callback({ error: result.error });
@@ -344,6 +455,7 @@ io.on('connection', (socket) => {
       return socket.emit('error', { message: 'Only host can restart' });
     }
 
+    clearTimeout(_autoPlayTimers[roomCode]);
     room.status = 'lobby';
     room.gameState = null;
 
@@ -358,8 +470,13 @@ io.on('connection', (socket) => {
     if (!info) return;
 
     const { roomCode, player } = info;
-    roomManager.removePlayer(roomCode, player.id);
+    // Mark as disconnected but keep in room (allows reconnection on refresh)
+    player.connected = false;
+    player.socketId  = null;
     broadcastRoomUpdate(roomCode);
+
+    // Schedule room cleanup after 2 minutes if no one reconnects
+    roomManager.scheduleRoomCleanup(roomCode, 120000);
   });
 });
 

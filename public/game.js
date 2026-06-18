@@ -13,10 +13,12 @@ const Game = (() => {
     unoHighlight: false,
     winner: null, winnerName: null,
     hasDrawnThisTurn: false,  // true after drawing → shows Pass button
+    turnTimer: null,          // { playerId, startTime, durationMs }
   };
 
-  let _flyingCardId  = null; // card hidden from canvas while it flies
-  let _dealAnimating = false; // true during initial deal → hand is hidden
+  let _flyingCardId    = null;  // card hidden from canvas while it flies
+  let _dealAnimating   = false; // true during initial deal → hand shows placeholders
+  let _dealCardsLanded = 0;     // increments as each deal card arrives
 
   let hitRegions = { cardRects: [], pileRects: {}, buttonRects: {}, colorRects: [], winRects: {} };
   let touchStartX = 0, scrollStartOffset = 0, isDragging = false, dragDist = 0;
@@ -59,11 +61,18 @@ const Game = (() => {
   }
 
   function resizeCanvas() {
-    const p = canvas.parentElement, maxW = 600;
-    const w = Math.min(p.clientWidth, maxW), h = p.clientHeight;
-    canvas.width = w * devicePixelRatio; canvas.height = h * devicePixelRatio;
-    canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-    canvas.style.marginLeft = w < maxW ? '0' : ((p.clientWidth - maxW) / 2) + 'px';
+    const vpW = window.innerWidth;
+    const vpH = window.innerHeight;
+
+    // Fill the full viewport — renderer scales content to fit inside
+    canvas.width  = Math.round(vpW * devicePixelRatio);
+    canvas.height = Math.round(vpH * devicePixelRatio);
+    canvas.style.width  = vpW + 'px';
+    canvas.style.height = vpH + 'px';
+    canvas.style.left   = '0px';
+    canvas.style.top    = '0px';
+    canvas.style.position = 'absolute';
+
     Renderer.updateScale(canvas);
   }
   function debResize() { clearTimeout(resizeTimeout); resizeTimeout = setTimeout(resizeCanvas, 150); }
@@ -101,22 +110,33 @@ const Game = (() => {
 
     // Buttons
     hitRegions.buttonRects = Renderer.drawActionButtons(ctx, {
-      isMyTurn, pendingDraw: state.pendingDraw, unoHighlight: state.unoHighlight
+      isMyTurn, pendingDraw: state.pendingDraw, unoHighlight: state.unoHighlight,
+      activeColor: state.activeColor, hasDrawnThisTurn: state.hasDrawnThisTurn,
     }, W, H);
 
-    // Hand — skip the card currently in-flight; hide everything during deal animation
+    // Hand — skip the card currently in-flight; during deal show card-back placeholders
     if (!_dealAnimating) {
       const hr = Renderer.drawPlayerHand(ctx, state.myHand, -1, state.scrollOffset, W, H, _flyingCardId);
       hitRegions.cardRects = hr.cardRects || [];
       _prevCardPositions = {};
       hr.cardRects.forEach(r => { _prevCardPositions[r.cardId] = { x: r.x, y: r.y, w: r.w, h: r.h }; });
     } else {
+      // Show card-back placeholders so the hand area isn't blank during deal
+      const placeholderCount = _dealCardsLanded;
+      if (placeholderCount > 0) {
+        Renderer.drawHandPlaceholders(ctx, placeholderCount, W, H);
+      }
       hitRegions.cardRects = [];
     }
 
     // Color picker overlay
     if (state.showColorPicker) {
       hitRegions.colorRects = Renderer.drawColorPicker(ctx, W, H);
+    }
+
+    // Turn countdown timer (drawn last so it's on top)
+    if (!state.winner) {
+      Renderer.drawTurnTimer(ctx, state.turnTimer, state.myId, W, H);
     }
   }
 
@@ -173,25 +193,43 @@ const Game = (() => {
 
     // UNO button
     if (hit(x, y, hitRegions.buttonRects?.uno)) {
-      if (state.myHand.length === 1 && state.unoState[state.myId] && !state.unoState[state.myId].called) {
-        Game.onCallUno?.();
-      } else {
-        for (const [pid, u] of Object.entries(state.unoState)) {
-          if (pid !== state.myId && !u.called) { Game.onCatchUno?.(pid); break; }
+      // Call UNO: player just got to 1 card — unoState may not have arrived yet,
+      // so only require hand length === 1 (server validates the rest)
+      if (state.myHand.length === 1) {
+        const myUno = state.unoState[state.myId];
+        if (!myUno || !myUno.called) {
+          Game.onCallUno?.();
+          return;
         }
+      }
+      // Catch UNO: someone else has 1 card and hasn't called
+      for (const [pid, u] of Object.entries(state.unoState)) {
+        if (pid !== state.myId && !u.called) { Game.onCatchUno?.(pid); break; }
       }
       return;
     }
 
-    // Draw/Pass or Pass (after drawing)
-    if (hit(x, y, hitRegions.buttonRects?.draw) || hit(x, y, hitRegions.pileRects?.draw)) {
+    // Clicking the draw pile itself → always draw (never pass)
+    // Animation is handled by the server's player_drew event — do NOT call
+    // flyCardFromDeck here or you'll get a duplicate animation.
+    if (hit(x, y, hitRegions.pileRects?.draw)) {
+      if (state.currentPlayer === state.myId && !state.hasDrawnThisTurn && state.pendingDraw === 0) {
+        Game.onDrawCard?.();
+      }
+      return;
+    }
+
+    // Clicking the diamond pass/draw button
+    if (hit(x, y, hitRegions.buttonRects?.draw)) {
       if (state.currentPlayer === state.myId) {
         if (state.hasDrawnThisTurn) {
-          // Already drew — this is the Pass button, just pass
+          // Already drew — pass turn
           Game.onPassTurn?.();
+        } else if (state.pendingDraw > 0) {
+          // Forced draw from +2/+4/+8 — must draw
+          Game.onDrawCard?.();
         } else {
-          // Draw one card from deck with real card-back animation
-          flyCardFromDeck(0, 1, true);
+          // Normal draw — draw one card first, then player can pass
           Game.onDrawCard?.();
         }
       }
@@ -252,11 +290,26 @@ const Game = (() => {
     flyEl.style.pointerEvents = 'none';
     animOverlay.appendChild(flyEl);
 
-    // Discard pile center in screen coords (matches renderer: W/2 + gap, 38% H)
-    const targetCX = canvasRect.left + canvasRect.width  * 0.62;
-    const targetCY = canvasRect.top  + canvasRect.height * 0.38;
+    // Compute the discard pile center using the exact same formula as the renderer
+    // so the card always lands on the actual pile regardless of screen size.
+    const W = canvas.width, H = canvas.height;
+    const _SW  = W * 0.16, _TH = H * 0.26, _HH = H * 0.26;
+    const _CW  = W - 2 * _SW, _CH = H - _TH - _HH;
+    const _CX  = _SW + _CW / 2, _CY = _TH + _CH / 2;
+    const _cw  = Math.min(_CW * 0.17, _CH * 0.52, Renderer.vs(90));
+    const _ch  = _cw * 1.45;
+    const _gap = _cw * 0.28;
+    const _dcx = _CX + _gap;           // discard pile left edge (canvas px)
+    const _dy  = _CY - _ch / 2;        // discard pile top edge  (canvas px)
+
+    // Center of discard pile in canvas pixels → convert to screen pixels
+    const discardCX_canvas = _dcx + _cw / 2;
+    const discardCY_canvas = _dy  + _ch / 2;
+    const targetCX = canvasRect.left + discardCX_canvas * scaleX;
+    const targetCY = canvasRect.top  + discardCY_canvas * scaleY;
     const endX     = targetCX - screenW / 2;
     const endY     = targetCY - screenH / 2;
+
     const randomAngle = (Math.random() * 14 - 7);
     const TOTAL_MS  = 420; // total flight time
     const LIFT_MS   = 90;  // phase 1: lift
@@ -310,9 +363,32 @@ const Game = (() => {
     }, LIFT_MS);
   }
 
+  // Client-side playability check (mirrors server isPlayable in gameLogic.js)
+  function clientIsPlayable(card) {
+    if (state.pendingDraw > 0) {
+      // Stacking rules enforced server-side; client just blocks obviously wrong cards
+      // Allow wild cards and matching draw type to pass through
+      return card.color === 'wild' || card.type === state.pendingDrawType;
+    }
+    if (card.color === 'wild') return true;
+    if (card.color === state.activeColor) return true;
+    const top = state.discardTop;
+    if (!top) return true;
+    if (card.type === 'number' && top.type === 'number' && card.value === top.value) return true;
+    if (card.type !== 'number' && card.type === top.type) return true;
+    return false;
+  }
+
   function tryPlayCard(idx) {
     const card = state.myHand[idx]; if (!card) return;
     if (state.currentPlayer !== state.myId) { Game.onShowToast?.('Not your turn', true); return; }
+
+    // Client-side validation — skip animation and show toast for invalid cards
+    if (!clientIsPlayable(card)) {
+      Game.onShowToast?.('Cannot play that card', true);
+      return;
+    }
+
     if (card.type === 'wild' || card.type === 'wild4' || card.type === 'wild8') {
       state.showColorPicker = true; state.pendingWildCardId = card.id; return;
     }
@@ -418,48 +494,48 @@ const Game = (() => {
     if (animOverlay) animOverlay.innerHTML = '';
   }
 
-  // ── Directional Card-Fly from Deck ──────────────────────────────────────────
   // toSelf=true  → card flies DOWN toward player's hand (bottom of screen)
-  // toSelf=false → card flies UP toward opponent area  (top of screen)
-  function flyCardFromDeck(offsetIndex, total, toSelf) {
+  // toSelf=false → card flies UP/SIDE toward opponent area
+  // targetSide: 'top' | 'left' | 'right' (default 'top' when toSelf=false)
+  function flyCardFromDeck(offsetIndex, total, toSelf, targetSide) {
     if (!animOverlay || !canvas) return;
 
     const cRect   = canvas.getBoundingClientRect();
     const scaleX  = cRect.width  / canvas.width;
     const scaleY  = cRect.height / canvas.height;
 
-    // Card size matching the deck pile card in the renderer
-    // renderer: cw = Math.min(W * 0.22, vs(85)), ch = cw * 1.45
-    const cw_c = Math.min(canvas.width * 0.22, Renderer.vs(85));  // canvas pixels
+    const cw_c = Math.min(canvas.width * 0.22, Renderer.vs(85));
     const ch_c = cw_c * 1.45;
     const screenW = cw_c * scaleX;
     const screenH = ch_c * scaleY;
 
-    // Render a real UNO card back on an offscreen canvas
     const snap = document.createElement('canvas');
     snap.width  = Math.round(cw_c);
     snap.height = Math.round(ch_c);
-    const snapCtx = snap.getContext('2d');
-    Renderer.drawCard(snapCtx, null, 0, 0, snap.width, snap.height, { faceUp: false });
+    Renderer.drawCard(snap.getContext('2d'), null, 0, 0, snap.width, snap.height, { faceUp: false });
 
-    // Deck center in screen coords (renderer: W/2 - cw - gap, centred at 38% H)
-    const deckCX = cRect.left + cRect.width  * 0.36;  // ≈ left pile center
+    const deckCX = cRect.left + cRect.width  * 0.36;
     const deckCY = cRect.top  + cRect.height * 0.38;
     const startL = deckCX - screenW / 2;
     const startT = deckCY - screenH / 2;
 
-    // Spread cards horizontally so they don't all land at the same spot
     const spread = (offsetIndex - (total - 1) / 2) * Math.min(screenW * 0.35, 20);
     let targetL, targetT;
     if (toSelf) {
       targetL = cRect.left + cRect.width * 0.5 + spread - screenW / 2;
-      targetT = cRect.top  + cRect.height * 0.86 - screenH / 2;
+      targetT = cRect.top  + cRect.height * 0.90 - screenH / 2;
+    } else if (targetSide === 'left') {
+      targetL = cRect.left + cRect.width * 0.06 - screenW / 2;
+      targetT = cRect.top  + cRect.height * 0.45 + spread - screenH / 2;
+    } else if (targetSide === 'right') {
+      targetL = cRect.left + cRect.width * 0.94 - screenW / 2;
+      targetT = cRect.top  + cRect.height * 0.45 + spread - screenH / 2;
     } else {
+      // top
       targetL = cRect.left + cRect.width * 0.5 + spread - screenW / 2;
       targetT = cRect.top  + cRect.height * 0.10 - screenH / 2;
     }
 
-    // Style the canvas element as an absolutely-positioned overlay
     snap.className = 'anim-el';
     snap.style.position      = 'absolute';
     snap.style.left          = startL + 'px';
@@ -469,7 +545,7 @@ const Game = (() => {
     snap.style.borderRadius  = (snap.width * 0.12 * scaleX) + 'px';
     snap.style.transform     = 'translate(0,0) scale(1)';
     snap.style.opacity       = '1';
-    snap.style.zIndex        = '610';
+    snap.style.zIndex        = '590';
     snap.style.willChange    = 'transform, opacity';
     snap.style.pointerEvents = 'none';
     animOverlay.appendChild(snap);
@@ -504,7 +580,90 @@ const Game = (() => {
     requestAnimationFrame(arcFrame);
   }
 
-  // ── Feature 5: Discard Pile Stack effect ──
+  // Animate a card-back flying FROM an opponent's zone TO the discard pile.
+  // side: 'top' | 'left' | 'right'
+  function flyCardFromOpponentToDiscard(side) {
+    if (!animOverlay || !canvas) return;
+
+    const cRect  = canvas.getBoundingClientRect();
+    const scaleX = cRect.width  / canvas.width;
+    const scaleY = cRect.height / canvas.height;
+
+    // Card size (same as deck card)
+    const W = canvas.width, H = canvas.height;
+    const cw_c = Math.min(W * 0.22, Renderer.vs(85));
+    const ch_c = cw_c * 1.45;
+    const screenW = cw_c * scaleX;
+    const screenH = ch_c * scaleY;
+
+    // Source: opponent zone center
+    let srcCX, srcCY;
+    if (side === 'left') {
+      srcCX = cRect.left + cRect.width * 0.08;
+      srcCY = cRect.top  + cRect.height * 0.45;
+    } else if (side === 'right') {
+      srcCX = cRect.left + cRect.width * 0.92;
+      srcCY = cRect.top  + cRect.height * 0.45;
+    } else {
+      // top
+      srcCX = cRect.left + cRect.width * 0.50;
+      srcCY = cRect.top  + cRect.height * 0.10;
+    }
+    const startL = srcCX - screenW / 2;
+    const startT = srcCY - screenH / 2;
+
+    // Target: discard pile center (same formula as flyCardToDiscard)
+    const _SW  = W * 0.16, _TH = H * 0.26, _HH = H * 0.26;
+    const _CW  = W - 2 * _SW, _CH = H - _TH - _HH;
+    const _CX  = _SW + _CW / 2, _CY = _TH + _CH / 2;
+    const _cw  = Math.min(_CW * 0.17, _CH * 0.52, Renderer.vs(90));
+    const _ch2 = _cw * 1.45;
+    const _gap = _cw * 0.28;
+    const _dcx = _CX + _gap;
+    const _dy  = _CY - _ch2 / 2;
+    const tgtCX = cRect.left + (_dcx + _cw / 2) * scaleX;
+    const tgtCY = cRect.top  + (_dy  + _ch2/ 2) * scaleY;
+    const endL  = tgtCX - screenW / 2;
+    const endT  = tgtCY - screenH / 2;
+
+    // Draw a card-back onto an offscreen canvas
+    const snap = document.createElement('canvas');
+    snap.width  = Math.round(cw_c);
+    snap.height = Math.round(ch_c);
+    Renderer.drawCard(snap.getContext('2d'), null, 0, 0, snap.width, snap.height, { faceUp: false });
+
+    snap.className = 'anim-el';
+    snap.style.cssText = `position:absolute;left:${startL}px;top:${startT}px;` +
+      `width:${screenW}px;height:${screenH}px;` +
+      `border-radius:${snap.width * 0.12 * scaleX}px;` +
+      `transform:translate(0,0) scale(1);opacity:1;z-index:615;` +
+      `will-change:transform,opacity;pointer-events:none;`;
+    animOverlay.appendChild(snap);
+
+    const duration  = 450;
+    const startTime = performance.now();
+    const randomAngle = (Math.random() * 10 - 5);
+
+    function arcFrame(now) {
+      const t    = Math.min(now - startTime, duration);
+      const p    = t / duration;
+      const ease = p < 0.5 ? 2*p*p : -1+(4-2*p)*p;
+      const arcY = Math.sin(p * Math.PI) * -60;
+      const x    = (endL - startL) * ease;
+      const y    = (endT - startT) * ease + arcY;
+      const sc   = 1 - 0.15 * ease;
+      const op   = p > 0.75 ? 1 - (p - 0.75) / 0.25 : 1;
+      snap.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) rotate(${(randomAngle*ease).toFixed(1)}deg) scale(${sc.toFixed(3)})`;
+      snap.style.opacity   = op.toFixed(3);
+      if (t < duration) {
+        requestAnimationFrame(arcFrame);
+      } else {
+        if (snap.parentNode) snap.parentNode.removeChild(snap);
+      }
+    }
+    requestAnimationFrame(arcFrame);
+  }
+
   // Managed by Renderer.drawPiles — we track discardStack with rotations/offsets
   const discardStack = []; // Array of { rot, ox, oy }
   function addDiscardEntry() {
@@ -587,23 +746,34 @@ const Game = (() => {
       const col = (data && data.color) || null;
       triggerColorChangeAnim(col);
     }
-    // fly_card: directional single-card fly from deck
+    // fly_card: directional single-card fly from deck (for draw animations)
     if (type === 'fly_card') {
-      const idx    = (data && data.index)  !== undefined ? data.index  : 0;
-      const total  = (data && data.total)  !== undefined ? data.total  : 1;
-      const toSelf = (data && data.toSelf) !== undefined ? data.toSelf : true;
-      flyCardFromDeck(idx, total, toSelf);
+      const idx      = (data && data.index)    !== undefined ? data.index    : 0;
+      const total    = (data && data.total)    !== undefined ? data.total    : 1;
+      const toSelf   = (data && data.toSelf)  !== undefined ? data.toSelf   : true;
+      const side     = (data && data.side)    || null;
+      flyCardFromDeck(idx, total, toSelf, side);
     }
-    // deal: initial 7-card deal animation — hides hand canvas until all cards land
+    // fly_opponent_card: opponent played a card — animate it to the discard pile
+    if (type === 'fly_opponent_card') {
+      const side = (data && data.side) || 'top';
+      flyCardFromOpponentToDiscard(side);
+    }
+    // deal: initial 7-card deal animation
     if (type === 'deal') {
       const count  = (data && data.count) || 7;
       const lastCardLands = (count - 1) * 180 + 520; // stagger + flight
-      _dealAnimating = true;
+      _dealAnimating   = true;
+      _dealCardsLanded = 0;
       for (let i = 0; i < count; i++) {
-        setTimeout(() => flyCardFromDeck(i, count, true), i * 180);
+        setTimeout(() => {
+          flyCardFromDeck(i, count, true);
+        }, i * 180);
+        // Card lands ~480ms after it starts flying
+        setTimeout(() => { _dealCardsLanded++; }, i * 180 + 480);
       }
       // After the last card lands, reveal the real hand
-      setTimeout(() => { _dealAnimating = false; }, lastCardLands);
+      setTimeout(() => { _dealAnimating = false; _dealCardsLanded = 0; }, lastCardLands + 60);
     }
     if (type === 'winner') {
       triggerWinnerConfetti();
@@ -613,9 +783,23 @@ const Game = (() => {
     }
   }
 
+  function setTurnTimer(playerId, durationMs) {
+    // Reset timer on every state update for that player
+    if (!state.turnTimer || state.turnTimer.playerId !== playerId) {
+      state.turnTimer = { playerId, startTime: Date.now(), durationMs };
+    }
+    // If same player, don't reset startTime (let it count down)
+  }
+
+  function setDealMode(active) {
+    _dealAnimating   = active;
+    _dealCardsLanded = active ? 0 : 0;
+  }
+
   return {
     init, destroy, state, setPlayers, setHand, updateGameState,
     setWinner, resetGame, triggerAnimation, resizeCanvas, discardStack, showDomAnim,
+    setTurnTimer, setDealMode,
     onPlayCard: null, onDrawCard: null, onPassTurn: null, onCallUno: null,
     onCatchUno: null, onRestartGame: null, onShowToast: null,
   };

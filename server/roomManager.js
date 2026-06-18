@@ -33,13 +33,7 @@ function generatePlayerId() {
   return crypto.randomBytes(8).toString('hex');
 }
 
-function uniqueNickname(nickname, players) {
-  const existing = players.map(p => p.nickname);
-  if (!existing.includes(nickname)) return nickname;
-  let n = 2;
-  while (existing.includes(`${nickname}#${n}`)) n++;
-  return `${nickname}#${n}`;
-}
+// Nicknames are allowed to be duplicated — no uniqueness enforcement.
 
 // ─── Room CRUD ────────────────────────────────────────────────────────────────
 
@@ -69,14 +63,16 @@ function createRoom(nickname) {
   return { roomCode, playerId, player };
 }
 
-function joinRoom(roomCode, nickname) {
+function joinRoom(roomCode, nickname, existingPlayerId) {
   const room = rooms.get(roomCode);
   if (!room) return { error: 'Room not found' };
 
-  // Check if this is a reconnect (same nickname in the room, disconnected)
-  const disconnected = room.players.find(
-    p => p.nickname === nickname && !p.connected
-  );
+  // Check if this is a reconnect — match by stored playerId first, then fall
+  // back to a disconnected slot with the same nickname (legacy path).
+  let disconnected = existingPlayerId
+    ? room.players.find(p => p.id === existingPlayerId && !p.connected)
+    : room.players.find(p => p.nickname === nickname && !p.connected);
+
   if (disconnected) {
     disconnected.connected = true;
     // Clear reconnect timer
@@ -91,11 +87,11 @@ function joinRoom(roomCode, nickname) {
   if (room.status === 'playing') return { error: 'Game already in progress' };
   if (room.players.length >= MAX_PLAYERS) return { error: 'Room is full (max 20 players)' };
 
-  const safeName = uniqueNickname(nickname, room.players);
+  // Allow duplicate nicknames — use the name exactly as provided.
   const playerId = generatePlayerId();
   const player = {
     id: playerId,
-    nickname: safeName,
+    nickname,
     connected: true,
     socketId: null,
   };
@@ -154,14 +150,17 @@ function removePlayer(roomCode, playerId) {
   return { room };
 }
 
-function scheduleRoomCleanup(roomCode) {
-  if (roomCleanupTimers.has(roomCode)) return; // already scheduled
+function scheduleRoomCleanup(roomCode, delayMs) {
+  if (roomCleanupTimers.has(roomCode)) {
+    clearTimeout(roomCleanupTimers.get(roomCode));
+  }
   roomCleanupTimers.set(
     roomCode,
     setTimeout(() => {
       rooms.delete(roomCode);
       roomCleanupTimers.delete(roomCode);
-    }, ROOM_CLEANUP_MS)
+      console.log(`[room-cleanup] Room ${roomCode} deleted`);
+    }, delayMs != null ? delayMs : ROOM_CLEANUP_MS)
   );
 }
 
@@ -199,6 +198,7 @@ module.exports = {
   getRoom,
   setPlayerSocket,
   getPlayerBySocket,
+  scheduleRoomCleanup,
   cancelRoomCleanup,
   MAX_PLAYERS,
 };

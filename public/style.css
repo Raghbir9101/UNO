@@ -327,6 +327,7 @@ input[type="text"]:focus {
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-lg);
   padding: 20px;
+  min-height: 310px;   /* fits the 260px circle + heading + hint */
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
@@ -357,92 +358,203 @@ input[type="text"]:focus {
   font-weight: 800;
 }
 
+/* ── Player List ──────────────────────────────────────────────────────────── */
 #player-list {
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  padding: 0; margin: 0;
 }
-
 #player-list li {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255,255,255,0.03);
   border-radius: var(--radius-sm);
   font-size: 14px;
   font-weight: 600;
   transition: background 0.2s;
+  border: 1.5px solid transparent;
 }
-
 #player-list li .player-avatar {
-  width: 32px;
-  height: 32px;
+  width: 32px; height: 32px;
   border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  font-weight: 800;
-  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 800; color: #fff;
   flex-shrink: 0;
 }
-
 #player-list li .host-badge {
   margin-left: auto;
-  font-size: 11px;
-  color: var(--yellow);
+  font-size: 11px; color: var(--yellow);
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+}
+#player-list li .you-badge {
+  font-size: 11px; color: var(--green); font-weight: 700;
+}
+#player-list li .drag-handle {
+  cursor: grab;
+  font-size: 16px; color: rgba(255,255,255,0.2);
+  margin-right: 2px; flex-shrink: 0;
+  user-select: none; transition: color 0.15s;
+  line-height: 1; letter-spacing: -2px;
+}
+#player-list li:hover .drag-handle { color: rgba(255,255,255,0.45); }
+#player-list li.drag-over {
+  border-color: rgba(100,180,255,0.55);
+  background: rgba(30,136,229,0.1);
+}
+#player-list li.dragging { opacity: 0.4; }
+#player-list li .seq-num {
+  font-size: 11px; color: rgba(255,255,255,0.28);
+  font-weight: 700; min-width: 16px; text-align: center; flex-shrink: 0;
+}
+.reorder-hint {
+  font-size: 11px; color: rgba(255,255,255,0.28);
+  text-align: center; margin-top: 6px; letter-spacing: 0.3px;
+}
+
+
+
+/* wrapper div injected by JS */
+.player-circle {
+  position: relative;
+  width: 260px;
+  height: 260px;
+  margin: 0 auto;
+}
+
+/* central table disc */
+.circle-table {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(229,57,53,0.12) 0%, rgba(0,0,0,0.3) 100%);
+  border: 1.5px solid rgba(229,57,53,0.25);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+}
+.circle-table .ct-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: rgba(255,255,255,0.25);
+}
+.circle-table .ct-arrow {
+  font-size: 22px;
+  color: rgba(255,255,255,0.2);
+  line-height: 1;
+}
+
+/* individual seat */
+.circle-seat {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+  cursor: default;
+}
+
+.circle-seat .c-seq {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.3);
+  line-height: 1;
+}
+
+.circle-seat .c-avatar {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; font-weight: 800; color: #fff;
+  border: 2.5px solid transparent;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  transition: transform 0.2s, border-color 0.2s;
+}
+.circle-seat:hover .c-avatar {
+  transform: scale(1.08);
+}
+
+/* "You" seat is always gold-bordered */
+.circle-seat--me .c-avatar {
+  border-color: #FDD835;
+  box-shadow: 0 0 14px rgba(253,216,53,0.35), 0 2px 8px rgba(0,0,0,0.4);
+}
+
+.circle-seat .c-name {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.75);
+  white-space: nowrap;
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+.circle-seat--me .c-name {
+  color: #FDD835;
+}
+
+.circle-seat .c-badges {
+  display: flex; gap: 3px; justify-content: center;
+}
+.c-badge-host {
+  font-size: 8px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  color: var(--yellow);
+  background: rgba(253,216,53,0.1);
+  border: 1px solid rgba(253,216,53,0.3);
+  border-radius: 4px;
+  padding: 0 4px;
+  line-height: 16px;
 }
 
-#player-list li .you-badge {
+/* Reorder buttons — shown below avatar for host, only visible on hover */
+.circle-seat .c-reorder {
+  display: flex; gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  margin-top: 1px;
+}
+.circle-seat:hover .c-reorder {
+  opacity: 1;
+}
+.c-reorder-btn {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.8);
+  border-radius: 5px;
+  padding: 1px 5px;
   font-size: 11px;
-  color: var(--green);
-  font-weight: 700;
+  cursor: pointer;
+  line-height: 1.5;
+  transition: background 0.15s;
+}
+.c-reorder-btn:hover {
+  background: rgba(255,255,255,0.25);
+  color: #fff;
 }
 
-/* Drag-to-reorder (host only) */
-#player-list li .drag-handle {
-  cursor: grab;
-  font-size: 16px;
-  color: rgba(255,255,255,0.2);
-  margin-right: 2px;
-  flex-shrink: 0;
-  user-select: none;
-  transition: color 0.15s;
-  line-height: 1;
-  letter-spacing: -2px;
-}
-#player-list li:hover .drag-handle {
-  color: rgba(255,255,255,0.45);
-}
-#player-list li.drag-over {
-  border: 1.5px solid rgba(100,180,255,0.55);
-  background: rgba(30,136,229,0.1);
-}
-#player-list li.dragging {
-  opacity: 0.4;
-}
-/* Sequence number badge */
-#player-list li .seq-num {
-  font-size: 11px;
-  color: rgba(255,255,255,0.28);
-  font-weight: 700;
-  min-width: 16px;
+/* Hint below circle */
+.circle-hint {
   text-align: center;
-  flex-shrink: 0;
-}
-/* Hint for host */
-.reorder-hint {
-  font-size: 11px;
-  color: rgba(255,255,255,0.28);
-  text-align: center;
-  margin-top: 6px;
+  margin-top: 10px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.22);
   letter-spacing: 0.3px;
 }
+
 
 /* ── Settings Card ─────────────────────────────────────────────────────────── */
 .settings-card {
@@ -510,6 +622,11 @@ input[type="text"]:focus {
 /* ── Game Screen ───────────────────────────────────────────────────────────── */
 #game-screen {
   background: #0a0a14;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 #game-screen.active {
@@ -518,8 +635,8 @@ input[type="text"]:focus {
 
 #game-canvas {
   display: block;
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  top: 0;
   touch-action: none;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
@@ -857,6 +974,18 @@ body.landscape .btn-fullscreen:active {
 .toast.error {
   border-color: rgba(229, 57, 53, 0.4);
   color: #ff6b6b;
+}
+
+.toast.toast-afk {
+  background: linear-gradient(135deg, rgba(180, 100, 0, 0.92), rgba(120, 60, 0, 0.95));
+  border-color: rgba(255, 165, 0, 0.5);
+  color: #ffe0a0;
+  animation: toastIn 0.3s ease, toastOut 0.3s ease 3.7s forwards;
+  box-shadow: 0 0 18px rgba(255, 165, 0, 0.25);
+}
+
+.toast.toast-afk strong {
+  color: #ffd700;
 }
 
 @keyframes toastIn {

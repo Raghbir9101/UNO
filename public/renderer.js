@@ -1,8 +1,9 @@
 const Renderer = (() => {
-  const VW = 390, VH = 844;
+  const VW = 980, VH = 600;
   let s = 1;
   const font = "'Inter', sans-serif";
   function updateScale(c) { s = Math.min(c.width / VW, c.height / VH); }
+
   function vs(v) { return v * s; }
 
   function rr(ctx, x, y, w, h, r) {
@@ -14,14 +15,24 @@ const Renderer = (() => {
   }
 
   function drawBackground(ctx, W, H) {
-    const g = ctx.createRadialGradient(W / 2, H * 0.4, 0, W / 2, H * 0.4, W);
-    g.addColorStop(0, '#1a4a7a'); g.addColorStop(1, '#0a1e3d');
+    // Deep blue gradient
+    const g = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W,H)*0.7);
+    g.addColorStop(0, '#1a4a7a'); g.addColorStop(1, '#071428');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    // felt texture lines
-    ctx.save(); ctx.globalAlpha = 0.02; ctx.strokeStyle = '#fff';
-    for (let i = 0; i < W + H; i += vs(12)) {
-      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i - H, H); ctx.stroke();
+    // Felt lines
+    ctx.save(); ctx.globalAlpha = 0.018; ctx.strokeStyle = '#fff'; ctx.lineWidth = vs(1);
+    for (let i = 0; i < W + H; i += vs(14)) {
+      ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i-H,H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i+H,H); ctx.stroke();
     }
+    ctx.restore();
+    // Green table surface oval in center
+    ctx.save();
+    const tw = W * 0.52, th = H * 0.44;
+    ctx.beginPath();
+    ctx.ellipse(W/2, H*0.44, tw/2, th/2, 0, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(20,80,30,0.18)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = vs(1.5); ctx.stroke();
     ctx.restore();
   }
 
@@ -72,10 +83,11 @@ const Renderer = (() => {
     // Center text
     const txt = getCardDisplayText(card);
     const fs = card.type === 'number' ? w * 0.5 : w * 0.38;
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = ci.text || '#fff';
     ctx.font = `900 ${fs}px ${font}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = vs(4);
+    ctx.shadowColor = isWildCard(card) ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.25)';
+    ctx.shadowBlur = vs(4);
     ctx.fillText(txt, x + w / 2, y + h / 2);
     ctx.shadowBlur = 0;
 
@@ -83,6 +95,7 @@ const Renderer = (() => {
     const cs = w * 0.24;
     ctx.font = `800 ${cs}px ${font}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillStyle = ci.text || '#fff';
     ctx.fillText(txt, x + w * 0.22, y + h * 0.06);
     ctx.save();
     ctx.translate(x + w * 0.78, y + h * 0.94);
@@ -141,178 +154,260 @@ const Renderer = (() => {
 
   function drawPlayerHand(ctx, cards, selIdx, scrollOff, W, H, flyingCardId) {
     if (!cards || !cards.length) return { cardRects: [] };
-    const cw = Math.min(W * 0.16, vs(60));
+    const SIDE_W = W * 0.16;
+    const HAND_H = H * 0.26;
+    const handW  = W - 2*SIDE_W;
+    const cw = Math.min(handW * 0.13, HAND_H * 0.82, vs(72));
     const ch = cw * 1.45;
     const maxOv = cw * 0.72;
-    const ov = Math.min(maxOv, (W - vs(24) - cw) / Math.max(cards.length - 1, 1));
-    const tw = cw + (cards.length - 1) * ov;
-    const sx = Math.max(vs(12), (W - tw) / 2) + scrollOff;
-    const baseY = H - ch - vs(18);
+    const ov = Math.min(maxOv, (handW - vs(24) - cw) / Math.max(cards.length-1, 1));
+    const tw = cw + (cards.length-1)*ov;
+    const sx = SIDE_W + Math.max(vs(8), (handW-tw)/2) + scrollOff;
+    const baseY = H - ch - vs(16);
     const rects = [];
-    for (let i = 0; i < cards.length; i++) {
-      const cx = sx + i * ov;
-      const isFlying = flyingCardId && cards[i].id === flyingCardId;
+    for (let i=0; i<cards.length; i++) {
+      const cx2 = sx + i*ov;
+      const isFlying = flyingCardId && cards[i].id===flyingCardId;
       if (isFlying) {
-        // Draw a very faint placeholder so layout doesn't shift
-        ctx.save();
-        ctx.globalAlpha = 0.0; // fully invisible — DOM img is on top
-        drawCard(ctx, cards[i], cx, baseY, cw, ch, { selected: false, faceUp: true });
+        ctx.save(); ctx.globalAlpha=0.0;
+        drawCard(ctx, cards[i], cx2, baseY, cw, ch, {selected:false, faceUp:true});
         ctx.restore();
       } else {
-        drawCard(ctx, cards[i], cx, baseY, cw, ch, { selected: i === selIdx, faceUp: true });
+        drawCard(ctx, cards[i], cx2, baseY, cw, ch, {selected: i===selIdx, faceUp:true});
       }
-      rects.push({ x: cx, y: baseY, w: cw, h: ch, index: i, cardId: cards[i].id });
+      rects.push({ x:cx2, y:baseY, w:cw, h:ch, index:i, cardId:cards[i].id });
     }
-    return { cardRects: rects, handY: baseY, cardW: cw, cardH: ch };
+    return { cardRects:rects, handY:baseY, cardW:cw, cardH:ch };
+  }
+
+  // Draws N card-back placeholders in the hand area (used during deal animation)
+  function drawHandPlaceholders(ctx, count, W, H) {
+    if (count <= 0) return;
+    const SIDE_W = W * 0.16;
+    const HAND_H = H * 0.26;
+    const handW  = W - 2*SIDE_W;
+    const cw = Math.min(handW * 0.13, HAND_H * 0.82, vs(72));
+    const ch = cw * 1.45;
+    const maxOv = cw * 0.72;
+    const ov = Math.min(maxOv, (handW - vs(24) - cw) / Math.max(count-1, 1));
+    const tw = cw + (count-1)*ov;
+    const sx = SIDE_W + Math.max(vs(8), (handW-tw)/2);
+    const baseY = H - ch - vs(16);
+    for (let i=0; i<count; i++) {
+      ctx.save(); ctx.globalAlpha=0.55;
+      _cardBack(ctx, sx+i*ov, baseY, cw, ch);
+      ctx.restore();
+    }
   }
 
   function drawOpponents(ctx, players, myId, curPlayer, dir, W, H) {
-    const opps = players.filter(p => p.id !== myId);
+    if (!players.length) return;
+
+    // Rotate so opps[0] plays right after me
+    const myIdx = players.findIndex(p => p.id === myId);
+    const opps = [];
+    for (let i = 1; i < players.length; i++) opps.push(players[(myIdx+i)%players.length]);
     if (!opps.length) return;
-
-    const cw = Math.min(W * 0.08, vs(32));
-    const ch = cw * 1.45;
-
-    // All opponents go across the top area
     const n = opps.length;
-    const segW = (W - vs(40)) / n;
 
-    for (let i = 0; i < n; i++) {
-      const p = opps[i];
+    // ── Zone constants ────────────────────────────────────────────────────────
+    const SIDE_W  = W * 0.16;
+    const TOP_H   = H * 0.26;
+    const HAND_H  = H * 0.26;
+    const CX = SIDE_W, CY = TOP_H;
+    const CW = W - 2*SIDE_W, CH = H - TOP_H - HAND_H;
+
+    // ── Distribute opponents ──────────────────────────────────────────────────
+    let nTop, nLeft, nRight;
+    if      (n === 1) { nTop=1; nLeft=0; nRight=0; }
+    else if (n === 2) { nTop=2; nLeft=0; nRight=0; }
+    else if (n === 3) { nTop=1; nLeft=1; nRight=1; }
+    else if (n === 4) { nTop=2; nLeft=1; nRight=1; }
+    else if (n === 5) { nTop=3; nLeft=1; nRight=1; }
+    else if (n === 6) { nTop=2; nLeft=2; nRight=2; }
+    else if (n <= 9)  { nLeft=Math.floor(n/3); nRight=Math.floor(n/3); nTop=n-nLeft-nRight; }
+    else if (n <= 12) { nLeft=Math.ceil(n/3); nRight=Math.floor(n/3); nTop=n-nLeft-nRight; }
+    else              { nLeft=Math.round(n/3); nRight=Math.round(n/3); nTop=n-nLeft-nRight; }
+
+    const leftOps  = opps.slice(0, nLeft);
+    const rightOps = opps.slice(n - nRight);
+    const topOps   = opps.slice(nLeft, n - (nRight||0));
+
+    const COLORS = ['#E53935','#1E88E5','#43A047','#FB8C00','#8E24AA','#00ACC1','#D81B60','#F4511E','#7B1FA2','#00897B'];
+    function pColor(p) { return COLORS[players.findIndex(pl=>pl.id===p.id)%COLORS.length]; }
+
+    const pulse = (Math.sin(Date.now()/300)+1)/2;
+    function glowBox(x,y,w,h) {
+      ctx.save();
+      ctx.strokeStyle = `rgba(255,215,0,${0.5+pulse*0.4})`;
+      ctx.lineWidth = vs(2); ctx.shadowColor='#FFD700'; ctx.shadowBlur=vs(12);
+      rr(ctx,x,y,w,h,vs(5)); ctx.stroke();
+      ctx.restore();
+    }
+    function badge(bx,by,cc) {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(bx,by,vs(9),0,Math.PI*2);
+      ctx.fillStyle = cc===1?'#E53935':'rgba(8,20,50,0.9)'; ctx.fill();
+      ctx.strokeStyle = cc===1?'#ff6b6b':'rgba(255,255,255,0.3)';
+      ctx.lineWidth=vs(1.5); ctx.stroke();
+      ctx.fillStyle='#fff'; ctx.font=`800 ${vs(8)}px ${font}`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(cc,bx,by); ctx.restore();
+    }
+    function unoTag(x,y) {
+      const p2=(Math.sin(Date.now()/180)+1)/2;
+      ctx.save(); ctx.fillStyle=`rgba(229,57,53,${0.8+p2*0.2})`;
+      ctx.font=`900 ${vs(9)}px ${font}`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('UNO!',x,y); ctx.restore();
+    }
+
+    // ── TOP opponents ─────────────────────────────────────────────────────────
+    const tcw = Math.min(CW/(Math.max(nTop,1)*3.2), TOP_H*0.32, vs(32));
+    const tch = tcw * 1.45;
+    const topSlotW = nTop > 0 ? CW / nTop : CW;
+    const nameRowH = vs(28); // reserved height below cards for name row
+
+    topOps.forEach((p, i) => {
       const isCur = p.id === curPlayer;
       const cc = p.cardCount || 0;
-      const centerX = vs(20) + segW * i + segW / 2;
-      const topY = vs(20);
+      const ms = Math.min(cc, 8);
+      const ov = Math.min(tcw*0.55, (topSlotW*0.75-tcw)/Math.max(ms-1,1));
+      const fanW = tcw + Math.max(ms-1,0)*ov;
+      const slotCX = CX + topSlotW*i + topSlotW/2;
+      const fx = slotCX - fanW/2;
+      const fy = vs(8);
 
-      // Player name + card count
-      const name = p.nickname.length > 9 ? p.nickname.slice(0, 8) + '…' : p.nickname;
-      ctx.fillStyle = isCur ? '#FFD700' : 'rgba(255,255,255,0.7)';
+      if (isCur && ms>0) glowBox(fx-vs(3), fy-vs(3), fanW+vs(6), tch+vs(6));
+      for (let c=0; c<ms; c++) _cardBack(ctx, fx+c*ov, fy, tcw, tch);
+      if (ms===0) {
+        ctx.save(); ctx.globalAlpha=0.12;
+        rr(ctx, slotCX-tcw/2, fy, tcw, tch, vs(5));
+        ctx.strokeStyle='#fff'; ctx.lineWidth=vs(1); ctx.stroke(); ctx.restore();
+      }
+
+      // Name row below cards
+      const nameRowY = fy + tch + vs(5);
+      const avR = vs(9);
+      const avX = slotCX - vs(2);
+      // Avatar circle
+      ctx.save();
+      ctx.beginPath(); ctx.arc(avX - avR - vs(2), nameRowY + avR, avR, 0, Math.PI*2);
+      ctx.fillStyle = pColor(p); ctx.fill();
+      if (isCur) { ctx.strokeStyle='#FFD700'; ctx.lineWidth=vs(1.5); ctx.stroke(); }
+      ctx.restore();
+      // Name
+      const nm = p.nickname.length>12 ? p.nickname.slice(0,11)+'…' : p.nickname;
+      ctx.fillStyle = isCur ? '#FFD700' : '#fff';
+      ctx.font = `700 ${vs(12)}px ${font}`;
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.shadowColor='rgba(0,0,0,0.7)'; ctx.shadowBlur=vs(4);
+      ctx.fillText(nm, avX - vs(2) + vs(2), nameRowY + avR);
+      ctx.shadowBlur=0;
+
+      badge(fx+fanW+vs(5), fy+vs(4), cc);
+      if (cc===1) unoTag(slotCX, fy+tch+nameRowH+vs(4));
+    });
+
+    // ── SIDE helper ───────────────────────────────────────────────────────────
+    const scw = Math.min(SIDE_W*0.52, CH/(Math.max(nLeft,nRight,1)*2.8), vs(28));
+    const sch = scw * 1.45;
+    const sideAvailH = CH;
+
+    function drawSide(p, isLeft, slotIdx, nSlots) {
+      const isCur = p.id === curPlayer;
+      const cc = p.cardCount || 0;
+      const ms = Math.min(cc, 7);
+      const ov = Math.min(sch*0.35, vs(5));
+      const fanH = sch + Math.max(ms-1,0)*ov;
+      const slotH = sideAvailH / nSlots;
+      const cy2 = CY + slotH*slotIdx + slotH/2;
+      const fx = isLeft ? SIDE_W/2 - scw/2 : W - SIDE_W/2 - scw/2;
+      const fy = cy2 - fanH/2;
+
+      if (isCur && ms>0) glowBox(fx-vs(3), fy-vs(3), scw+vs(6), fanH+vs(6));
+
+      for (let c=0; c<ms; c++) {
+        _cardBack(ctx, fx, fy + c*ov, scw, sch);
+      }
+      if (ms===0) {
+        ctx.save(); ctx.globalAlpha=0.12;
+        rr(ctx, fx, cy2-sch/2, scw, sch, vs(5));
+        ctx.strokeStyle='#fff'; ctx.lineWidth=vs(1); ctx.stroke(); ctx.restore();
+      }
+
+      // Name pill below cards
+      const pileCX = fx + scw/2;
+      const nameY = fy + fanH + vs(6);
+      const avR = vs(8);
+
+      // Avatar
+      ctx.save();
+      ctx.beginPath(); ctx.arc(pileCX, nameY + avR, avR, 0, Math.PI*2);
+      ctx.fillStyle = pColor(p); ctx.fill();
+      if (isCur) { ctx.strokeStyle='#FFD700'; ctx.lineWidth=vs(1.5); ctx.stroke(); }
+      ctx.restore();
+
+      // Name below avatar
+      const nm = p.nickname.length>8 ? p.nickname.slice(0,7)+'…' : p.nickname;
+      ctx.fillStyle = isCur ? '#FFD700' : '#fff';
       ctx.font = `700 ${vs(11)}px ${font}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillText(name, centerX, topY);
+      ctx.shadowColor='rgba(0,0,0,0.8)'; ctx.shadowBlur=vs(4);
+      ctx.fillText(nm, pileCX, nameY + avR*2 + vs(2));
+      ctx.shadowBlur=0;
 
-      // Card fan
-      const maxShow = Math.min(cc, 10);
-      const spread = Math.min(cw * 0.45, (segW - cw - vs(8)) / Math.max(maxShow - 1, 1));
-      const fanW = cw + (maxShow - 1) * spread;
-      const fanX = centerX - fanW / 2;
-      const cardY = topY + vs(16);
-
-      for (let c = 0; c < maxShow; c++) {
-        _cardBack(ctx, fanX + c * spread, cardY, cw, ch);
-      }
-
-      // Card count badge
-      ctx.save();
-      const bx = centerX + fanW / 2 - vs(4);
-      const by = cardY - vs(4);
-      ctx.beginPath(); ctx.arc(bx, by, vs(10), 0, Math.PI * 2);
-      ctx.fillStyle = cc === 1 ? '#E53935' : '#0a1e3d';
-      ctx.fill();
-      ctx.strokeStyle = cc === 1 ? '#ff6b6b' : 'rgba(255,255,255,0.3)';
-      ctx.lineWidth = vs(1.5); ctx.stroke();
-      ctx.fillStyle = '#fff'; ctx.font = `800 ${vs(9)}px ${font}`;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(cc, bx, by);
-      ctx.restore();
-
-      // Current player glow
-      if (isCur) {
-        const pulse = (Math.sin(Date.now() / 300) + 1) / 2;
-        ctx.save();
-        ctx.strokeStyle = `rgba(255,215,0,${0.4 + pulse * 0.4})`;
-        ctx.lineWidth = vs(2);
-        ctx.shadowColor = '#FFD700'; ctx.shadowBlur = vs(8 + pulse * 6);
-        rr(ctx, fanX - vs(6), cardY - vs(6), fanW + vs(12), ch + vs(12), vs(6));
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      // UNO warning
-      if (cc === 1) {
-        const pulse = (Math.sin(Date.now() / 200) + 1) / 2;
-        ctx.save();
-        ctx.fillStyle = `rgba(229,57,53,${0.6 + pulse * 0.4})`;
-        ctx.font = `900 ${vs(10)}px ${font}`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-        ctx.fillText('UNO!', centerX, cardY + ch + vs(4));
-        ctx.restore();
-      }
+      badge(isLeft ? fx+scw+vs(10) : fx-vs(10), cy2+fanH/2+vs(4), cc);
+      if (cc===1) unoTag(pileCX, fy-vs(12));
     }
+
+    leftOps.forEach((p,i)  => drawSide(p, true,  i, nLeft));
+    rightOps.forEach((p,i) => drawSide(p, false, i, nRight));
   }
 
+
   function drawPiles(ctx, discardTop, activeColor, drawCount, W, H) {
-    const cw = Math.min(W * 0.22, vs(85));
-    const ch = cw * 1.45;
-    const centerY = H * 0.38 - ch / 2;
-    const gap = vs(16);
+    const _SW = W * 0.16, _TH = H * 0.26, _HH = H * 0.26;
+    const _CW = W - 2*_SW, _CH = H - _TH - _HH;
+    const _CX = _SW + _CW/2, _CY = _TH + _CH/2;
+    const _cw = Math.min(_CW*0.17, _CH*0.52, vs(90));
+    const _ch = _cw * 1.45;
+    const _gap = _cw * 0.28;
+    const _dx = _CX - _cw - _gap;   // deck left edge
+    const _dcx = _CX + _gap;         // discard left edge
+    const _dy = _CY - _ch/2;         // card top edge
+
     const rects = {};
 
-    // Draw pile (left)
-    const dx = W / 2 - cw - gap;
-    // Stacked cards effect
-    for (let i = 2; i >= 0; i--) {
-      _cardBack(ctx, dx + i * vs(1.5), centerY - i * vs(1.5), cw, ch);
-    }
-    // Count label
-    ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = `700 ${vs(11)}px ${font}`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillText(drawCount, dx + cw / 2, centerY + ch + vs(6));
-    rects.draw = { x: dx, y: centerY, w: cw, h: ch };
+    // Deck (left)
+    for (let i=2; i>=0; i--) _cardBack(ctx, _dx+i*vs(1.5), _dy-i*vs(1.5), _cw, _ch);
+    ctx.fillStyle='rgba(255,255,255,0.55)'; ctx.font=`700 ${vs(11)}px ${font}`;
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText(drawCount, _dx+_cw/2, _dy+_ch+vs(5));
+    rects.draw = { x:_dx, y:_dy, w:_cw, h:_ch };
 
-    // Discard pile (right) — stacked history with subtle rotations
-    const dcx = W / 2 + gap;
+    // Discard (right)
     if (discardTop) {
-      const stack = (typeof Game !== 'undefined' && Game.discardStack) ? Game.discardStack : [];
-      const showDepth = Math.min(stack.length, 4);
-      // Draw older cards as slightly rotated ghosts beneath the top card
-      for (let si = 0; si < showDepth - 1; si++) {
-        const entry = stack[si];
-        ctx.save();
-        ctx.translate(dcx + cw / 2, centerY + ch / 2);
-        ctx.rotate((entry.rot || 0) * Math.PI / 180);
-        _cardBack(ctx, -cw / 2, -ch / 2, cw, ch);
-        ctx.restore();
+      const stack = (typeof Game!=='undefined'&&Game.discardStack) ? Game.discardStack : [];
+      const depth = Math.min(stack.length, 4);
+      for (let si=0; si<depth-1; si++) {
+        const e=stack[si];
+        ctx.save(); ctx.translate(_dcx+_cw/2, _dy+_ch/2);
+        ctx.rotate((e.rot||0)*Math.PI/180);
+        _cardBack(ctx,-_cw/2,-_ch/2,_cw,_ch); ctx.restore();
       }
-      // Draw top card — always upright (0 rotation), no offset
-      ctx.save();
-      ctx.translate(dcx + cw / 2, centerY + ch / 2);
-      drawCard(ctx, discardTop, -cw / 2, -ch / 2, cw, ch, { faceUp: true });
+      ctx.save(); ctx.translate(_dcx+_cw/2, _dy+_ch/2);
+      drawCard(ctx, discardTop, -_cw/2,-_ch/2, _cw, _ch, {faceUp:true});
       ctx.restore();
     }
-    rects.discard = { x: dcx, y: centerY, w: cw, h: ch };
+    rects.discard = { x:_dcx, y:_dy, w:_cw, h:_ch };
 
-    // Active color indicator — drawn BELOW both piles so it's never hidden
-    if (activeColor && activeColor !== 'wild') {
-      const ci = CardColors[activeColor];
-      // Center it between the two piles, below them
-      const ix = W / 2;
-      const iy = centerY + ch + vs(18);
-      const sz = vs(10);
-      ctx.save();
-      ctx.shadowColor = ci.fill; ctx.shadowBlur = vs(10);
-      ctx.beginPath();
-      ctx.moveTo(ix, iy - sz); ctx.lineTo(ix + sz, iy);
-      ctx.lineTo(ix, iy + sz); ctx.lineTo(ix - sz, iy);
-      ctx.closePath();
-      ctx.fillStyle = ci.fill; ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = vs(1.5); ctx.stroke();
-      // Label
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
-      ctx.font = `600 ${vs(8)}px ${font}`;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.fillText(activeColor.toUpperCase(), ix, iy + sz + vs(3));
-      ctx.restore();
-    }
-
-    // Direction arrow — centered between piles, above them
-    const ax = W / 2, ay = centerY - vs(18);
-    const pulse = (Math.sin(Date.now() / 500) + 1) / 2;
-    ctx.save(); ctx.globalAlpha = 0.4 + pulse * 0.2;
-    ctx.fillStyle = '#fff'; ctx.font = `400 ${vs(14)}px ${font}`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.fillText(dir_global === 1 ? '↻' : '↺', ax, ay);
+    // Direction arrow above piles (center between them)
+    const _pulse=(Math.sin(Date.now()/500)+1)/2;
+    ctx.save(); ctx.globalAlpha=0.45+_pulse*0.25;
+    ctx.fillStyle='#fff'; ctx.font=`400 ${vs(20)}px ${font}`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(dir_global===1?'↻':'↺', _CX, _dy - vs(18));
     ctx.restore();
 
     return rects;
@@ -323,89 +418,171 @@ const Renderer = (() => {
   function drawDirectionArrow(ctx, dir) { dir_global = dir; }
 
   function drawActionButtons(ctx, state, W, H) {
+    const _SW = W * 0.16, _TH = H * 0.26, _HH = H * 0.26;
+    const _CW = W - 2*_SW, _CH = H - _TH - _HH;
+    const _CX = _SW + _CW/2, _CY = _TH + _CH/2;
+    const _cw = Math.min(_CW*0.17, _CH*0.52, vs(90));
+    const _ch = _cw * 1.45;
+    const _gap = _cw * 0.28;
+    const _dx = _CX - _cw - _gap;   // deck left edge
+    const _dcx = _CX + _gap;         // discard left edge
+    const _dy = _CY - _ch/2;         // card top edge
+
     const rects = {};
-    const bh = vs(42), br = vs(12);
-    const by = H * 0.73;
-    const totalW = vs(200);
-    const startX = (W - totalW) / 2;
-
-    // Draw / Pass — or "Pass Turn" after player has already drawn
-    const dbw = vs(110);
-    const dbx = startX;
     const hasDrawn = state.hasDrawnThisTurn || false;
-    ctx.save();
-    rr(ctx, dbx, by, dbw, bh, br);
-    const dg = ctx.createLinearGradient(dbx, by, dbx, by + bh);
-    if (state.isMyTurn && hasDrawn) {
-      // Pass Turn: green
-      dg.addColorStop(0, 'rgba(67,160,71,0.7)'); dg.addColorStop(1, 'rgba(46,125,50,0.7)');
-    } else if (state.isMyTurn) {
-      dg.addColorStop(0, 'rgba(30,136,229,0.6)'); dg.addColorStop(1, 'rgba(20,100,180,0.6)');
-    } else {
-      dg.addColorStop(0, 'rgba(255,255,255,0.06)'); dg.addColorStop(1, 'rgba(255,255,255,0.03)');
-    }
-    ctx.fillStyle = dg; ctx.fill();
-    rr(ctx, dbx, by, dbw, bh, br);
-    ctx.strokeStyle = state.isMyTurn
-      ? (hasDrawn ? 'rgba(100,220,100,0.5)' : 'rgba(100,180,255,0.5)')
-      : 'rgba(255,255,255,0.1)';
-    ctx.lineWidth = vs(1.5); ctx.stroke();
-    ctx.fillStyle = state.isMyTurn ? '#fff' : 'rgba(255,255,255,0.3)';
-    ctx.font = `700 ${vs(13)}px ${font}`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const drawLabel = state.pendingDraw > 0
-      ? `Draw ${state.pendingDraw}`
-      : (hasDrawn ? 'Pass Turn' : 'Draw / Pass');
-    ctx.fillText(drawLabel, dbx + dbw / 2, by + bh / 2);
-    ctx.restore();
-    rects.draw = { x: dbx, y: by, w: dbw, h: bh };
+    const pulse3=(Math.sin(Date.now()/180)+1)/2;
 
-    // UNO button
-    const ubw = vs(80);
-    const ubx = startX + dbw + vs(10);
-    const pulse = (Math.sin(Date.now() / 180) + 1) / 2;
+    // ── Positions: buttons flanking the piles ────────────────────────────────
+    const btnY = _CY;
+    const BSZ  = _cw * 0.62;   // smaller diamond buttons
+    const unoCX  = _dx - BSZ*0.72;
+    const passCX = _dcx + _cw + BSZ*0.72;
+
+    // ── UNO Diamond Button (left) ──────────────────────────────────────────
     ctx.save();
-    rr(ctx, ubx, by, ubw, bh, br);
-    const ug = ctx.createLinearGradient(ubx, by, ubx, by + bh);
+    ctx.translate(unoCX, btnY);
+    ctx.rotate(Math.PI/4);
+    const unoSide = BSZ * 0.72;
+    const ug = ctx.createLinearGradient(-unoSide/2,-unoSide/2,unoSide/2,unoSide/2);
     if (state.unoHighlight) {
-      ctx.shadowColor = '#E53935'; ctx.shadowBlur = vs(10 + pulse * 12);
-      ug.addColorStop(0, `rgba(229,57,53,${0.7 + pulse * 0.3})`);
-      ug.addColorStop(1, `rgba(183,28,28,${0.7 + pulse * 0.3})`);
+      ctx.shadowColor='#E53935'; ctx.shadowBlur=vs(14+pulse3*10);
+      ug.addColorStop(0,`rgba(229,57,53,${0.8+pulse3*0.2})`);
+      ug.addColorStop(1,`rgba(180,0,0,${0.8+pulse3*0.2})`);
     } else {
-      ug.addColorStop(0, 'rgba(229,57,53,0.2)'); ug.addColorStop(1, 'rgba(183,28,28,0.2)');
+      ug.addColorStop(0,'rgba(229,57,53,0.35)');
+      ug.addColorStop(1,'rgba(150,0,0,0.35)');
     }
-    ctx.fillStyle = ug; ctx.fill();
-    rr(ctx, ubx, by, ubw, bh, br);
-    ctx.strokeStyle = state.unoHighlight ? 'rgba(255,100,100,0.6)' : 'rgba(229,57,53,0.3)';
-    ctx.lineWidth = vs(1.5); ctx.stroke();
-    ctx.fillStyle = '#fff';
-    ctx.font = `900 ${vs(15)}px ${font}`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0,0,0,0.3)'; ctx.shadowBlur = vs(2);
-    ctx.fillText('UNO!', ubx + ubw / 2, by + bh / 2);
+    ctx.fillStyle=ug;
+    ctx.fillRect(-unoSide/2,-unoSide/2,unoSide,unoSide);
+    ctx.strokeStyle=state.unoHighlight?'rgba(255,120,120,0.7)':'rgba(229,57,53,0.4)';
+    ctx.lineWidth=vs(1.5); ctx.strokeRect(-unoSide/2,-unoSide/2,unoSide,unoSide);
     ctx.restore();
-    rects.uno = { x: ubx, y: by, w: ubw, h: bh };
+    // UNO text
+    ctx.save();
+    ctx.fillStyle='#fff'; ctx.font=`900 ${vs(11)}px ${font}`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=vs(3);
+    ctx.fillText('UNO!', unoCX, btnY);
+    ctx.restore();
+    rects.uno = { x:unoCX-BSZ/2, y:btnY-BSZ/2, w:BSZ, h:BSZ };
+
+    // ── Color indicator (above pass button) ───────────────────────────────
+    if (state.activeColor && state.activeColor!=='wild') {
+      const ci = CardColors[state.activeColor];
+      const cix = passCX, ciy = _dy - vs(4);
+      const csz = vs(12);
+      ctx.save(); ctx.shadowColor=ci.fill; ctx.shadowBlur=vs(12);
+      ctx.beginPath();
+      ctx.moveTo(cix,ciy-csz); ctx.lineTo(cix+csz,ciy);
+      ctx.lineTo(cix,ciy+csz); ctx.lineTo(cix-csz,ciy);
+      ctx.closePath(); ctx.fillStyle=ci.fill; ctx.fill();
+      ctx.strokeStyle='rgba(255,255,255,0.6)'; ctx.lineWidth=vs(1.5); ctx.stroke();
+      ctx.fillStyle='rgba(255,255,255,0.7)'; ctx.font=`600 ${vs(7)}px ${font}`;
+      ctx.textAlign='center'; ctx.textBaseline='top'; ctx.shadowBlur=0;
+      ctx.fillText(state.activeColor.toUpperCase(), cix, ciy+csz+vs(3));
+      ctx.restore();
+    }
+
+    // ── Pass/Draw Arrow Button (right of discard) ──────────────────────────
+    ctx.save();
+    ctx.translate(passCX, btnY);
+    ctx.rotate(Math.PI/4);
+    const pSide = BSZ * 0.72;
+    const pg = ctx.createLinearGradient(-pSide/2,-pSide/2,pSide/2,pSide/2);
+    if (state.isMyTurn && hasDrawn) {
+      ctx.shadowColor='#43A047'; ctx.shadowBlur=vs(12);
+      pg.addColorStop(0,'rgba(67,160,71,0.85)');
+      pg.addColorStop(1,'rgba(30,100,30,0.85)');
+    } else if (state.isMyTurn && state.pendingDraw>0) {
+      ctx.shadowColor='#E53935'; ctx.shadowBlur=vs(12+pulse3*8);
+      pg.addColorStop(0,`rgba(229,57,53,${0.7+pulse3*0.25})`);
+      pg.addColorStop(1,`rgba(150,10,10,${0.7+pulse3*0.25})`);
+    } else if (state.isMyTurn) {
+      ctx.shadowColor='#5c6bc0'; ctx.shadowBlur=vs(12);
+      pg.addColorStop(0,'rgba(92,107,192,0.85)');
+      pg.addColorStop(1,'rgba(50,60,140,0.85)');
+    } else {
+      pg.addColorStop(0,'rgba(255,255,255,0.08)');
+      pg.addColorStop(1,'rgba(255,255,255,0.04)');
+    }
+    ctx.fillStyle=pg;
+    ctx.fillRect(-pSide/2,-pSide/2,pSide,pSide);
+    ctx.strokeStyle=state.isMyTurn?'rgba(255,255,255,0.4)':'rgba(255,255,255,0.1)';
+    ctx.lineWidth=vs(1.5); ctx.strokeRect(-pSide/2,-pSide/2,pSide,pSide);
+    ctx.restore();
+    // Pass arrow text
+    ctx.save();
+    ctx.fillStyle=state.isMyTurn?'#fff':'rgba(255,255,255,0.25)';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=vs(3);
+    if (state.pendingDraw>0 && state.isMyTurn) {
+      ctx.font=`700 ${vs(10)}px ${font}`;
+      ctx.fillText(`+${state.pendingDraw}`, passCX, btnY);
+    } else {
+      ctx.font=`400 ${vs(18)}px ${font}`;
+      ctx.fillText('›', passCX+vs(1), btnY+vs(1));
+    }
+    ctx.restore();
+    rects.draw = { x:passCX-BSZ/2, y:btnY-BSZ/2, w:BSZ, h:BSZ };
 
     return rects;
   }
 
   function drawTurnIndicator(ctx, isMyTurn, W, H) {
     if (!isMyTurn) return;
-    const p = (Math.sin(Date.now() / 350) + 1) / 2;
-    // Glow bar
-    const gy = H * 0.71;
-    const g = ctx.createLinearGradient(W * 0.2, gy, W * 0.8, gy);
-    g.addColorStop(0, 'transparent');
-    g.addColorStop(0.5, `rgba(253,216,53,${0.15 + p * 0.15})`);
-    g.addColorStop(1, 'transparent');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, gy, W, vs(4));
-    // Text
-    ctx.fillStyle = `rgba(253,216,53,${0.6 + p * 0.3})`;
-    ctx.font = `700 ${vs(11)}px ${font}`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.fillText('— YOUR TURN —', W / 2, gy - vs(2));
+    const pulse = (Math.sin(Date.now() / 350) + 1) / 2; // 0..1 oscillates
+    const HAND_H = H * 0.26;
+    const handTopY = H - HAND_H - vs(4);
+
+    // ── Glowing border along the bottom (hand area top edge) ──
+    const glow = ctx.createLinearGradient(W * 0.1, 0, W * 0.9, 0);
+    glow.addColorStop(0, 'transparent');
+    glow.addColorStop(0.5, `rgba(253,216,53,${0.55 + pulse * 0.35})`);
+    glow.addColorStop(1, 'transparent');
+    ctx.save();
+    ctx.shadowColor = `rgba(253,216,53,${0.6 + pulse * 0.4})`;
+    ctx.shadowBlur  = vs(12 + pulse * 8);
+    ctx.fillStyle   = glow;
+    ctx.fillRect(0, handTopY, W, vs(3));
+    ctx.restore();
+
+    // ── "YOUR TURN" pill badge centered above the hand ──
+    const label = 'YOUR TURN';
+    ctx.save();
+    ctx.font = `800 ${vs(13)}px ${font}`;
+    const tw = ctx.measureText(label).width;
+    const ph = vs(22), pw = tw + vs(24);
+    const px = W / 2 - pw / 2;
+    const py = handTopY - ph - vs(10);
+
+    // Pill background (pulsing opacity)
+    const alpha = 0.72 + pulse * 0.28;
+    const bg = ctx.createLinearGradient(px, py, px + pw, py + ph);
+    bg.addColorStop(0, `rgba(253,180,20,${alpha})`);
+    bg.addColorStop(1, `rgba(229,57,53,${alpha})`);
+    ctx.shadowColor = `rgba(253,216,53,${0.7 + pulse * 0.3})`;
+    ctx.shadowBlur  = vs(10 + pulse * 8);
+    rr(ctx, px, py, pw, ph, vs(11));
+    ctx.fillStyle = bg;
+    ctx.fill();
+
+    // Pill border
+    ctx.shadowBlur = 0;
+    rr(ctx, px, py, pw, ph, vs(11));
+    ctx.strokeStyle = `rgba(255,255,255,${0.35 + pulse * 0.25})`;
+    ctx.lineWidth = vs(1.5);
+    ctx.stroke();
+
+    // Label text
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur  = vs(3);
+    ctx.fillText(label, W / 2, py + ph / 2);
+    ctx.restore();
   }
+
 
   function drawColorPicker(ctx, W, H) {
     ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0, 0, W, H);
@@ -491,9 +668,66 @@ const Renderer = (() => {
     return {};
   }
 
+  function drawTurnTimer(ctx, turnTimer, myId, W, H) {
+    if (!turnTimer) return;
+    const { playerId, startTime, durationMs } = turnTimer;
+    const elapsed   = Date.now() - startTime;
+    const remaining = Math.max(0, durationMs - elapsed);
+    const fraction  = remaining / durationMs;
+    const secs      = Math.ceil(remaining / 1000);
+
+    const _SW = W * 0.16, _TH = H * 0.26, _HH = H * 0.26;
+    const _CW = W - 2*_SW, _CH = H - _TH - _HH;
+    const _CX = _SW + _CW/2, _CY = _TH + _CH/2;
+    const _cw = Math.min(_CW*0.17, _CH*0.52, vs(90));
+    const _ch = _cw * 1.45;
+    const _gap = _cw * 0.28;
+    const _dx = _CX - _cw - _gap;   // deck left edge
+    const _dcx = _CX + _gap;         // discard left edge
+    const _dy = _CY - _ch/2;         // card top edge
+
+    const isMe   = playerId === myId;
+    const DANGER = fraction < 0.33;
+    const color  = DANGER
+      ? ('rgba(229,57,53,'+(0.75+Math.sin(Date.now()/150)*0.25)+')')
+      : 'rgba(255,215,0,0.9)';
+
+    // Position: center-left of table, above UNO button
+    const BSZ  = _cw * 0.95;
+    const timerX = _dx - BSZ*0.85;
+    const timerY = _dy + vs(4);
+    const r = vs(16);
+    const startAngle = -Math.PI/2;
+    const endAngle   = startAngle + 2*Math.PI*fraction;
+
+    ctx.save();
+    // Track
+    ctx.beginPath(); ctx.arc(timerX, timerY, r, 0, Math.PI*2);
+    ctx.strokeStyle='rgba(255,255,255,0.1)'; ctx.lineWidth=vs(3); ctx.stroke();
+    // Arc
+    ctx.beginPath(); ctx.arc(timerX, timerY, r, startAngle, endAngle);
+    ctx.strokeStyle=color; ctx.shadowColor=color; ctx.shadowBlur=vs(10);
+    ctx.lineWidth=vs(3); ctx.lineCap='round'; ctx.stroke();
+    // Secs
+    ctx.fillStyle=DANGER?color:'rgba(255,255,255,0.85)';
+    ctx.font=`700 ${vs(10)}px ${font}`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.shadowBlur=0;
+    ctx.fillText(secs+'s', timerX, timerY);
+    // Label below arc
+    if (isMe) {
+      ctx.fillStyle=DANGER?color:'rgba(255,215,0,0.85)';
+      ctx.font=`600 ${vs(7)}px ${font}`;
+      ctx.textBaseline='top';
+      ctx.fillText('YOUR TURN', timerX, timerY+r+vs(4));
+    }
+    ctx.restore();
+  }
+
   return {
     font, updateScale, drawBackground, drawCard, drawCardBack: _cardBack,
-    drawPlayerHand, drawOpponents, drawPiles, drawDirectionArrow,
-    drawActionButtons, drawColorPicker, drawWinScreen, drawTurnIndicator, vs
+    drawPlayerHand, drawHandPlaceholders, drawOpponents, drawPiles, drawDirectionArrow,
+    drawActionButtons, drawColorPicker, drawWinScreen, drawTurnIndicator, drawTurnTimer, vs
   };
 })();
+
