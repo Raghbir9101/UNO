@@ -21,30 +21,30 @@
   // ── Draw animation sync ────────────────────────────────────────────────────
   // When a multi-card draw happens, we reveal cards one-by-one in sync with
   // the fly animation instead of applying the full hand/count instantly.
-  const CARD_FLY_MS  = 480; // ms a single card takes to fly
+  const CARD_FLY_MS = 480; // ms a single card takes to fly
   const CARD_STAGGER = 120; // ms between staggered cards
-  let _bufferedHand  = null;          // full hand stored while incremental reveal runs
+  let _bufferedHand = null;          // full hand stored while incremental reveal runs
   let _handAnimating = false;         // true while self draw animation is in progress
   const _drawAnimPlayers = new Set(); // playerIds currently mid draw-animation (for others)
 
   // ── Deal animation ──────────────────────────────────────────────────────
-  let _dealInProgress    = false;  // true during initial round-robin deal
-  let _bufferedDealHand  = null;   // hand received during deal — revealed card-by-card
+  let _dealInProgress = false;  // true during initial round-robin deal
+  let _bufferedDealHand = null;   // hand received during deal — revealed card-by-card
 
   // Shared helper: map opponent index → screen side
   // oppIdx is 0-based among opponents (0 = next player clockwise)
   // oppCount = total number of opponents
   function computeSide(oppIdx, oppCount) {
     let nLeft = 0, nRight = 0;
-    if      (oppCount <= 2)  { nLeft = 0; nRight = 0; }
+    if (oppCount <= 2) { nLeft = 0; nRight = 0; }
     else if (oppCount === 3) { nLeft = 1; nRight = 1; }
-    else if (oppCount <= 5)  { nLeft = 1; nRight = 1; }
+    else if (oppCount <= 5) { nLeft = 1; nRight = 1; }
     else if (oppCount === 6) { nLeft = 2; nRight = 2; }
-    else if (oppCount <= 9)  { nLeft = Math.floor(oppCount / 3); nRight = Math.floor(oppCount / 3); }
-    else if (oppCount <= 12) { nLeft = Math.ceil(oppCount / 3);  nRight = Math.floor(oppCount / 3); }
-    else                     { nLeft = Math.round(oppCount / 3); nRight = Math.round(oppCount / 3); }
-    if (oppIdx < nLeft)                   return 'left';
-    if (oppIdx >= oppCount - nRight)      return 'right';
+    else if (oppCount <= 9) { nLeft = Math.floor(oppCount / 3); nRight = Math.floor(oppCount / 3); }
+    else if (oppCount <= 12) { nLeft = Math.ceil(oppCount / 3); nRight = Math.floor(oppCount / 3); }
+    else { nLeft = Math.round(oppCount / 3); nRight = Math.round(oppCount / 3); }
+    if (oppIdx < nLeft) return 'left';
+    if (oppIdx >= oppCount - nRight) return 'right';
     return 'top';
   }
 
@@ -72,15 +72,28 @@
   if (_savedNick) $nickname.value = _savedNick;
 
   // ── Invite Link: pre-fill room code if ?room=CODE in URL ──────────────────
-  const _urlParams  = new URLSearchParams(window.location.search);
+  const _urlParams = new URLSearchParams(window.location.search);
   const _inviteCode = (_urlParams.get('room') || '').toUpperCase().trim();
+  const _urlPlayerId = _urlParams.get('playerId');
+  const _urlNickname = _urlParams.get('nickname');
+
+  if (_inviteCode && _urlPlayerId && _urlNickname) {
+    sessionStorage.setItem('uno_session', JSON.stringify({
+      roomCode: _inviteCode,
+      playerId: _urlPlayerId,
+      nickname: _urlNickname
+    }));
+  }
+
   if (_inviteCode) {
     $createSection.style.display = 'none';          // hide Create Room + divider
     $roomCode.value = _inviteCode;
     $roomCode.setAttribute('readonly', 'readonly'); // code is fixed from link
     $nickname.placeholder = 'Enter your nickname to join';
     if (!_savedNick) $nickname.focus();
-    history.replaceState({}, '', window.location.pathname); // clean the URL
+    if (!_urlPlayerId || !_urlNickname) {
+      history.replaceState({}, '', window.location.pathname); // clean the URL
+    }
   }
   const $btnFullscreen = document.getElementById('btn-fullscreen');
 
@@ -88,7 +101,7 @@
   let _landscapeMode = false;
   $btnFullscreen.addEventListener('click', () => {
     const supportsFS = document.documentElement.requestFullscreen ||
-                       document.documentElement.webkitRequestFullscreen;
+      document.documentElement.webkitRequestFullscreen;
     if (supportsFS && !_landscapeMode) {
       // Try native fullscreen first
       const el = document.documentElement;
@@ -96,7 +109,7 @@
       req.call(el).then(() => {
         // Also try screen orientation lock to landscape
         if (screen.orientation && screen.orientation.lock) {
-          screen.orientation.lock('landscape').catch(() => {});
+          screen.orientation.lock('landscape').catch(() => { });
         }
         _landscapeMode = true;
         $btnFullscreen.textContent = '×';
@@ -110,7 +123,7 @@
       // Exit
       if (document.fullscreenElement || document.webkitFullscreenElement) {
         const exit = document.exitFullscreen || document.webkitExitFullscreen;
-        exit.call(document).catch(() => {});
+        exit.call(document).catch(() => { });
       }
       document.body.classList.remove('landscape');
       _landscapeMode = false;
@@ -230,6 +243,46 @@
           ids.splice(i, 0, moved);
           socket.emit('reorder_players', { roomCode: currentRoomCode, order: ids });
         });
+
+        // Touch events for mobile
+        handle.addEventListener('touchstart', (e) => {
+          e.preventDefault(); // Prevent page scroll
+          _dragSrcIndex = i;
+          li.classList.add('dragging');
+        }, { passive: false });
+
+        handle.addEventListener('touchmove', (e) => {
+          if (_dragSrcIndex !== i) return;
+          e.preventDefault();
+          const touch = e.touches[0];
+          const target = document.elementFromPoint(touch.clientX, touch.clientY);
+          const targetLi = target ? target.closest('li[data-player-id]') : null;
+
+          document.querySelectorAll('#player-list li').forEach(el => el.classList.remove('drag-over'));
+          if (targetLi && targetLi !== li) {
+            targetLi.classList.add('drag-over');
+          }
+        }, { passive: false });
+
+        handle.addEventListener('touchend', (e) => {
+          if (_dragSrcIndex !== i) return;
+          li.classList.remove('dragging');
+
+          const targetLi = document.querySelector('#player-list li.drag-over');
+          document.querySelectorAll('#player-list li').forEach(el => el.classList.remove('drag-over'));
+          _dragSrcIndex = null;
+
+          if (targetLi) {
+            const destId = targetLi.dataset.playerId;
+            const destIndex = players.findIndex(p => p.id === destId);
+            if (destIndex !== -1 && destIndex !== i) {
+              const ids = players.map(pl => pl.id);
+              const moved = ids.splice(i, 1)[0];
+              ids.splice(destIndex, 0, moved);
+              socket.emit('reorder_players', { roomCode: currentRoomCode, order: ids });
+            }
+          }
+        });
       }
 
       // Avatar
@@ -323,7 +376,7 @@
 
       $displayCode.textContent = res.roomCode;
       // Push invite link into address bar so host can copy it easily
-      history.replaceState({}, '', `?room=${res.roomCode}`);
+      history.replaceState({}, '', `?room=${res.roomCode}&playerId=${res.playerId}&nickname=${encodeURIComponent(res.nickname)}`);
       showScreen($waitingRoom);
     });
   });
@@ -347,22 +400,14 @@
 
 
   // ── Lobby: Join Room ───────────────────────────────────────────────────────
-  $btnJoin.addEventListener('click', () => {
-    const nick = $nickname.value.trim();
-    const code = $roomCode.value.trim().toUpperCase();
-
-    if (!nick) { showToast('Please enter a nickname', true); return; }
-    if (!code) { showToast('Please enter a room code', true); return; }
-
-    $btnJoin.disabled = true;
-    socket.emit('join_room', { roomCode: code, nickname: nick, playerId: null }, (res) => {
-      $btnJoin.disabled = false;
-      if (res.error) return showToast(res.error, true);
-
+  function handleJoinSuccess(res, code) {
       myPlayerId = res.playerId;
       myNickname = res.nickname;
       currentRoomCode = code;
       hostId = res.hostId;
+      Game.isSpectator = res.isSpectator;
+      Game.isGodMode = res.isGodMode;
+
       // Only apply callback players if no room_updated has arrived yet
       if (_lastServerSeq === 0) players = res.players;
 
@@ -375,18 +420,50 @@
       // Remember name for next visit
       localStorage.setItem('uno_nickname', res.nickname);
 
+      history.replaceState({}, '', `?room=${code}&playerId=${res.playerId}&nickname=${encodeURIComponent(res.nickname)}`);
+
       $displayCode.textContent = code;
       $stackingToggle.checked = res.settings?.stacking || false;
       stackingEnabled = res.settings?.stacking || false;
       renderPlayerList();
 
-      if (res.gameInProgress && res.reconnected) {
-        // Reconnecting to an in-progress game
-        showToast('Reconnected!');
+      if (res.gameInProgress && (res.reconnected || res.isSpectator)) {
+        showToast(res.isSpectator ? (res.isGodMode ? 'Joined God Mode Spectator' : 'Joined as Spectator') : 'Reconnected!');
         startGameUI();
+        
+        // Populate game players for spectators/reconnects using the guaranteed res.players from server
+        const playerOrder = (res.players || players).map(p => ({ id: p.id, nickname: p.nickname, cardCount: p.cardCount || 7 }));
+        Game.setPlayers(playerOrder);
       } else {
         showScreen($waitingRoom);
       }
+  }
+
+  $btnJoin.addEventListener('click', () => {
+    const nick = $nickname.value.trim();
+    const code = $roomCode.value.trim().toUpperCase();
+
+    if (!nick) { showToast('Please enter a nickname', true); return; }
+    if (!code) { showToast('Please enter a room code', true); return; }
+
+    $btnJoin.disabled = true;
+    socket.emit('join_room', { roomCode: code, nickname: nick, playerId: null }, (res) => {
+      $btnJoin.disabled = false;
+      if (res.error) {
+          if (res.canSpectate) {
+              const pass = prompt("Game is in progress! Enter password for God Mode spectator, or leave blank for normal spectator. Click Cancel to abort.");
+              if (pass === null) return;
+              $btnJoin.disabled = true;
+              socket.emit('join_room', { roomCode: code, nickname: nick, playerId: null, spectator: true, godPassword: pass }, (spectateRes) => {
+                  $btnJoin.disabled = false;
+                  if (spectateRes.error) return showToast(spectateRes.error, true);
+                  handleJoinSuccess(spectateRes, code);
+              });
+              return;
+          }
+          return showToast(res.error, true);
+      }
+      handleJoinSuccess(res, code);
     });
   });
 
@@ -399,6 +476,7 @@
     players = [];
     _lastServerSeq = 0;
     sessionStorage.removeItem('uno_session');  // clear so next visit starts fresh
+    history.replaceState({}, '', window.location.pathname); // clean the URL
     showScreen($lobby);
   });
 
@@ -446,10 +524,10 @@
         sessionStorage.removeItem('uno_session');
         return; // Room gone — just show lobby
       }
-      myPlayerId   = res.playerId;
-      myNickname   = res.nickname;
+      myPlayerId = res.playerId;
+      myNickname = res.nickname;
       currentRoomCode = saved.roomCode;
-      hostId       = res.hostId;
+      hostId = res.hostId;
       if (_lastServerSeq === 0) players = res.players;
 
       sessionStorage.setItem('uno_session', JSON.stringify({
@@ -458,9 +536,11 @@
         nickname: res.nickname,
       }));
 
+      history.replaceState({}, '', `?room=${saved.roomCode}&playerId=${res.playerId}&nickname=${encodeURIComponent(res.nickname)}`);
+
       $displayCode.textContent = saved.roomCode;
-      $stackingToggle.checked  = res.settings?.stacking || false;
-      stackingEnabled          = res.settings?.stacking || false;
+      $stackingToggle.checked = res.settings?.stacking || false;
+      stackingEnabled = res.settings?.stacking || false;
 
       if (res.gameInProgress && res.reconnected) {
         showToast('Reconnected to game!');
@@ -506,6 +586,7 @@
     hostId = null;
     isHost = false;
     players = [];
+    history.replaceState({}, '', window.location.pathname); // clean the URL
     showScreen($lobby);
   });
 
@@ -529,22 +610,22 @@
     // ── Round-robin deal animation ─────────────────────────────
     // Deal cards one at a time: local player first, then clockwise.
     // Each player's card count ticks up as each card lands.
-    const CARDS_EACH  = 7;
-    const DEAL_GAP    = 160; // ms between each individual card deal
+    const CARDS_EACH = 7;
+    const DEAL_GAP = 160; // ms between each individual card deal
 
     // Build deal order starting from local player
     const myIdx = playerOrder.findIndex(p => p.id === myPlayerId);
     const N = playerOrder.length;
     const dealOrder = []; // [{ id, toSelf, side }]
     for (let i = 0; i < N; i++) {
-      const pi   = (myIdx + i) % N;
-      const p    = playerOrder[pi];
+      const pi = (myIdx + i) % N;
+      const p = playerOrder[pi];
       const toSelf = i === 0;
-      const side   = toSelf ? null : computeSide(i - 1, N - 1);
+      const side = toSelf ? null : computeSide(i - 1, N - 1);
       dealOrder.push({ id: p.id, toSelf, side });
     }
 
-    _dealInProgress   = true;
+    _dealInProgress = true;
     // Do NOT reset _bufferedDealHand here — hand_updated arrives BEFORE game_started
     // and already stored the cards there. Clearing it would lose them.
     // _bufferedDealHand is only nulled at the end of the deal loop.
@@ -593,9 +674,9 @@
       return;
     }
 
-    const prevLen  = Game.state.myHand.length;
+    const prevLen = Game.state.myHand.length;
     const newCards = data.cards;
-    const added    = newCards.length - prevLen;
+    const added = newCards.length - prevLen;
 
     // Single card or removal — apply immediately
     if (added <= 1) {
@@ -605,7 +686,7 @@
 
     // Multi-card draw: reveal one card per animation frame
     _handAnimating = true;
-    _bufferedHand  = newCards;
+    _bufferedHand = newCards;
 
     for (let i = 0; i < added; i++) {
       const delay = i * CARD_STAGGER + CARD_FLY_MS; // wait for each card to land
@@ -617,7 +698,7 @@
           // Final card: do a proper setHand so scroll/selection is recalculated
           Game.setHand(_bufferedHand);
           _handAnimating = false;
-          _bufferedHand  = null;
+          _bufferedHand = null;
         }
       }, delay);
     }
@@ -671,7 +752,7 @@
 
     // If another player played this card, animate it flying from their zone to the discard pile
     if (playedBy && playedBy !== myPlayerId) {
-      const myIdx  = players.findIndex(pl => pl.id === myPlayerId);
+      const myIdx = players.findIndex(pl => pl.id === myPlayerId);
       const oppIdx = players.findIndex(pl => pl.id === playedBy);
       if (myIdx !== -1 && oppIdx !== -1) {
         const n = players.length;
@@ -681,13 +762,13 @@
         const tgtOpp = opps.find(o => o.id === playedBy);
         if (tgtOpp) {
           let nLeft = 0, nRight = 0;
-          if      (oppCount === 3) { nLeft = 1; nRight = 1; }
+          if (oppCount === 3) { nLeft = 1; nRight = 1; }
           else if (oppCount === 4) { nLeft = 1; nRight = 1; }
           else if (oppCount === 5) { nLeft = 1; nRight = 1; }
           else if (oppCount === 6) { nLeft = 2; nRight = 2; }
-          else if (oppCount <= 9)  { nLeft = Math.floor(oppCount / 3); nRight = Math.floor(oppCount / 3); }
-          else if (oppCount <= 12) { nLeft = Math.ceil(oppCount / 3);  nRight = Math.floor(oppCount / 3); }
-          else                     { nLeft = Math.round(oppCount / 3); nRight = Math.round(oppCount / 3); }
+          else if (oppCount <= 9) { nLeft = Math.floor(oppCount / 3); nRight = Math.floor(oppCount / 3); }
+          else if (oppCount <= 12) { nLeft = Math.ceil(oppCount / 3); nRight = Math.floor(oppCount / 3); }
+          else { nLeft = Math.round(oppCount / 3); nRight = Math.round(oppCount / 3); }
           const oi = tgtOpp.oppIdx;
           const side = oi < nLeft ? 'left' : (oi >= oppCount - nRight ? 'right' : 'top');
           Game.triggerAnimation('fly_opponent_card', { side });
@@ -735,7 +816,7 @@
     if (!toSelf) {
       const myIdx = players.findIndex(pl => pl.id === myPlayerId);
       if (myIdx !== -1) {
-        const n    = players.length;
+        const n = players.length;
         const opps = [];
         for (let i = 1; i < n; i++) opps.push({ id: players[(myIdx + i) % n].id, oppIdx: i - 1 });
         const tgtOpp = opps.find(o => o.id === data.playerId);
@@ -777,6 +858,13 @@
     }
   });
 
+  socket.on('god_hands', (hands) => {
+      Game.godHands = hands;
+      if (!Game.spectatingPlayerId && players.length > 0) {
+          Game.spectatingPlayerId = players[0].id;
+      }
+      Game.render();
+  });
 
   socket.on('turn_skipped', (data) => {
     const p = players.find(pl => pl.id === data.playerId);
@@ -836,16 +924,18 @@
   // Mid-session reconnect (socket temporarily dropped)
   socket.on('connect', () => {
     if (!currentRoomCode || !myNickname) return; // handled by sessionStorage handler above
-    socket.emit('join_room', { roomCode: currentRoomCode, nickname: myNickname, playerId: myPlayerId }, (res) => {
+    socket.emit('join_room', { roomCode: currentRoomCode, nickname: myNickname, playerId: myPlayerId, spectator: Game.isSpectator, godPassword: Game.isGodMode ? 'admin' : '' }, (res) => {
       if (res?.error) {
         showScreen($lobby);
         showToast('Could not reconnect: ' + res.error, true);
-      } else if (res?.reconnected && res?.gameInProgress) {
+      } else if (res?.reconnected || res?.isSpectator) {
         myPlayerId = res.playerId;
-        hostId     = res.hostId;
-        players    = res.players;
+        hostId = res.hostId;
+        players = res.players;
+        Game.isSpectator = res.isSpectator;
+        Game.isGodMode = res.isGodMode;
         const playerOrder = players.map(p => ({ id: p.id, nickname: p.nickname, cardCount: 7 }));
-        showToast('Reconnected!');
+        showToast(res.isSpectator ? 'Reconnected as Spectator!' : 'Reconnected!');
         startGameUI();
         Game.setPlayers(playerOrder);
       } else if (res?.success && !res?.gameInProgress) {

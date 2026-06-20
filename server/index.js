@@ -60,6 +60,15 @@ function broadcastGameState(roomCode) {
   const publicState = gameLogic.getPublicState(room.gameState);
   io.to(roomCode).emit('game_state', publicState);
 
+  if (room.spectators) {
+      for (const spec of room.spectators) {
+          if (spec.connected && spec.socketId && spec.isGodMode) {
+              const sock = getSocketById(spec.socketId);
+              if (sock) sock.emit('god_hands', room.gameState.hands);
+          }
+      }
+  }
+
   // Reset the 30-second auto-play timer for the current player
   resetAutoPlayTimer(roomCode);
 }
@@ -198,7 +207,7 @@ io.on('connection', (socket) => {
   });
 
   // ── Join Room ──
-  socket.on('join_room', ({ roomCode, nickname, playerId: existingPlayerId }, callback) => {
+  socket.on('join_room', ({ roomCode, nickname, playerId: existingPlayerId, spectator, godPassword }, callback) => {
     if (!nickname || nickname.trim().length === 0) {
       return callback({ error: 'Nickname is required' });
     }
@@ -207,10 +216,10 @@ io.on('connection', (socket) => {
     }
     const code = roomCode.trim().toUpperCase();
     const name = nickname.trim().substring(0, 16);
-    const result = roomManager.joinRoom(code, name, existingPlayerId);
+    const result = roomManager.joinRoom(code, name, existingPlayerId, { spectator, godPassword });
 
     if (result.error) {
-      return callback({ error: result.error });
+      return callback({ error: result.error, canSpectate: result.canSpectate });
     }
 
     const { playerId, player, room, reconnected } = result;
@@ -235,14 +244,20 @@ io.on('connection', (socket) => {
       hostId: room.hostId,
       reconnected: !!reconnected,
       gameInProgress: room.status === 'playing',
+      isSpectator: !!player.isSpectator,
+      isGodMode: !!player.isGodMode,
     });
 
     broadcastRoomUpdate(code);
 
-    // If reconnecting to an in-progress game, send game state + hand
-    if (reconnected && room.status === 'playing' && room.gameState) {
-      sendHandToPlayer(socket, playerId, room.gameState);
+    // If reconnecting/spectating an in-progress game, send game state + hand
+    if ((reconnected || player.isSpectator) && room.status === 'playing' && room.gameState) {
       socket.emit('game_state', gameLogic.getPublicState(room.gameState));
+      if (!player.isSpectator) {
+         sendHandToPlayer(socket, playerId, room.gameState);
+      } else if (player.isGodMode) {
+         socket.emit('god_hands', room.gameState.hands);
+      }
     }
   });
 

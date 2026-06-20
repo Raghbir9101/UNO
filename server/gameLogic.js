@@ -407,9 +407,16 @@ function catchUno(state, catcherId, targetId) {
     return { error: 'Player already called UNO' };
   }
 
-  // Check timing — within 2 seconds + current turn
   const elapsed = Date.now() - unoEntry.timestamp;
-  if (elapsed > 5000) {
+
+  // Grace period: allow the player 2.5 seconds to press their own UNO button
+  // before anyone else is allowed to catch them.
+  if (catcherId !== targetId && elapsed < 1000) {
+    return { error: 'Grace period active' };
+  }
+
+  // Check timing — within 6 seconds total
+  if (elapsed > 6000) {
     return { error: 'Too late to catch' };
   }
 

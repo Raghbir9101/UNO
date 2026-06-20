@@ -112,6 +112,8 @@ const Game = (() => {
     hitRegions.buttonRects = Renderer.drawActionButtons(ctx, {
       isMyTurn, pendingDraw: state.pendingDraw, unoHighlight: state.unoHighlight,
       activeColor: state.activeColor, hasDrawnThisTurn: state.hasDrawnThisTurn,
+      isSpectator: Game.isSpectator, isGodMode: Game.isGodMode,
+      spectatingPlayerName: state.spectatingPlayerName, players: state.players
     }, W, H);
 
     // Hand — skip the card currently in-flight; during deal show card-back placeholders
@@ -189,7 +191,31 @@ const Game = (() => {
     }
 
     // Win screen
-    if (state.winner && hit(x, y, hitRegions.winRects?.playAgain)) { Game.onRestartGame?.(); return; }
+    if (state.winner && hit(x, y, hitRegions.winRects?.playAgain) && !Game.isSpectator) { Game.onRestartGame?.(); return; }
+
+    // God mode controls
+    if (Game.isGodMode && hitRegions.buttonRects) {
+       if (hit(x, y, hitRegions.buttonRects.godLeft)) {
+           const idx = state.players.findIndex(p => p.id === Game.spectatingPlayerId);
+           if (idx !== -1 && state.players.length > 0) {
+               const prevIdx = (idx - 1 + state.players.length) % state.players.length;
+               Game.spectatingPlayerId = state.players[prevIdx].id;
+               updateGameState(state);
+               return;
+           }
+       }
+       if (hit(x, y, hitRegions.buttonRects.godRight)) {
+           const idx = state.players.findIndex(p => p.id === Game.spectatingPlayerId);
+           if (idx !== -1 && state.players.length > 0) {
+               const nextIdx = (idx + 1) % state.players.length;
+               Game.spectatingPlayerId = state.players[nextIdx].id;
+               updateGameState(state);
+               return;
+           }
+       }
+    }
+
+    if (Game.isSpectator) return; // Spectators cannot interact with the game itself
 
     // UNO button
     if (hit(x, y, hitRegions.buttonRects?.uno)) {
@@ -480,6 +506,18 @@ const Game = (() => {
     if (gs.cardCounts) for (const p of state.players) {
       if (gs.cardCounts[p.id] !== undefined) p.cardCount = gs.cardCounts[p.id];
     }
+    
+    state.isSpectator = Game.isSpectator;
+    state.isGodMode = Game.isGodMode;
+    if (Game.isGodMode && Game.godHands && Game.spectatingPlayerId) {
+        state.myHand = Game.godHands[Game.spectatingPlayerId] || [];
+        state.myId = Game.spectatingPlayerId; // spoof myId so the hand is drawn
+        const p = state.players.find(pl => pl.id === Game.spectatingPlayerId);
+        state.spectatingPlayerName = p ? p.nickname : 'Unknown';
+    } else if (Game.isSpectator && !Game.isGodMode) {
+        state.myHand = [];
+    }
+
     if (discardChanged) showDomAnim('anim-card-played', '', 500);
   }
 

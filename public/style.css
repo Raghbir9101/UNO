@@ -71,9 +71,9 @@ body {
 }
 
 .screen.active {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
+  overflow-y: auto;
+  overflow-x: hidden;
   animation: fadeIn 0.4s ease;
 }
 
@@ -86,13 +86,14 @@ body {
 .lobby-container {
   width: 100%;
   max-width: 420px;
-  padding: 24px 20px;
+  min-height: 100%;
+  padding: 40px 20px; /* Increased top/bottom padding to ensure visual breathing room when scrolled */
+  margin: 0 auto; /* Horizontally centers the container */
   display: flex;
   flex-direction: column;
+  justify-content: center; /* Vertically centers the content when the container is at least 100% height */
   align-items: center;
   gap: 20px;
-  overflow-y: auto;
-  max-height: 100vh;
 }
 
 /* ── Logo ──────────────────────────────────────────────────────────────────── */

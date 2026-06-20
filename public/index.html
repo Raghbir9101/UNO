@@ -1,17 +1,76 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="description" content="Play UNO online with friends — real-time multiplayer card game for 2-20 players" />
   <meta name="theme-color" content="#0f0f1a" />
+  <meta name="color-scheme" content="dark" />
+
+  <!-- Nicer link previews when a room invite link gets pasted into chat apps -->
+  <meta property="og:title" content="UNO — Multiplayer Card Game" />
+  <meta property="og:description"
+    content="Play UNO online with friends — real-time multiplayer card game for 2-20 players" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary" />
+
   <title>UNO — Multiplayer Card Game</title>
+
+  <!-- Stops the browser firing a wasted, blocking favicon.ico 404 request -->
+  <link rel="icon" href="data:," />
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+    rel="stylesheet" />
   <link rel="stylesheet" href="style.css?v=18" />
+
+  <!--
+    Game scripts: moved to <head> with `defer` instead of the old runtime loader
+    that appended <script> tags one-by-one in a body inline-script.
+
+    Why this is faster AND still correct:
+    - `defer` scripts download in parallel as soon as they're discovered (here,
+      immediately on parse, instead of waiting for the parser to reach the
+      bottom of <body>), but still execute in this exact document order,
+      after the DOM is parsed and before DOMContentLoaded. That gives the
+      same "guaranteed order" the old code was manually trying to achieve,
+      for free, without a sequential download waterfall.
+    - The old cache-bust used `Date.now()`, which changes on every single
+      page load — meaning the browser could NEVER cache these files, even
+      across reloads seconds apart. Swapped to a fixed `?v=` you bump on
+      deploy, matching the pattern already used for style.css above.
+  -->
+  <script defer src="/socket.io/socket.io.js"></script>
+  <script defer src="assets/cards.js?v=18"></script>
+  <script defer src="renderer.js?v=18"></script>
+  <script defer src="game.js?v=18"></script>
+  <script defer src="main.js?v=18"></script>
+
+  <style>
+    /* Visually hides labels for sighted users while keeping them for screen readers */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+  </style>
 </head>
+
 <body>
+  <noscript>
+    <div style="padding:2rem;text-align:center;font-family:sans-serif;color:#fff;background:#0f0f1a;">
+      UNO needs JavaScript enabled to play. Please enable it in your browser settings and reload.
+    </div>
+  </noscript>
+
   <!-- ── Screen 1: Lobby ── -->
   <div id="lobby" class="screen active">
     <div class="lobby-container">
@@ -23,7 +82,10 @@
       </div>
 
       <div class="form-card">
-        <input type="text" id="nickname" placeholder="Your nickname" maxlength="16" autocomplete="off" />
+        <label for="nickname" class="sr-only">Your nickname</label>
+        <input type="text" id="nickname" placeholder="Your nickname" maxlength="16" autocomplete="off"
+          aria-label="Your nickname" />
+
         <!-- #create-section hidden when user arrives via invite link -->
         <div id="create-section">
           <button id="btn-create" class="btn btn-primary">
@@ -31,7 +93,10 @@
           </button>
           <div class="divider"><span>or join a friend</span></div>
         </div>
-        <input type="text" id="room-code" placeholder="Room code (e.g. UNO-4X9K)" maxlength="8" autocomplete="off" />
+
+        <label for="room-code" class="sr-only">Room code</label>
+        <input type="text" id="room-code" placeholder="Room code (e.g. UNO-4X9K)" maxlength="8" autocomplete="off"
+          autocapitalize="characters" autocorrect="off" spellcheck="false" aria-label="Room code" />
         <button id="btn-join" class="btn btn-secondary">Join Room</button>
       </div>
     </div>
@@ -44,14 +109,15 @@
         <h2>Room</h2>
         <div class="room-code-display" id="display-code"></div>
         <p class="share-text">Share this code with friends!</p>
-        <button id="btn-copy-link" class="btn btn-ghost btn-share" title="Copy invite link">
+        <button id="btn-copy-link" class="btn btn-ghost btn-share" title="Copy invite link"
+          aria-label="Copy invite link">
           🔗 Copy Invite Link
         </button>
       </div>
 
       <div class="players-card">
-        <h3>Players <span id="player-count" class="badge">0</span></h3>
-        <ul id="player-list"></ul>
+        <h3>Players <span id="player-count" class="badge" aria-live="polite">0</span></h3>
+        <ul id="player-list" aria-live="polite"></ul>
       </div>
 
       <div class="settings-card" id="host-settings" style="display:none;">
@@ -74,28 +140,36 @@
 
   <!-- ── Screen 3: Game Canvas ── -->
   <div id="game-screen" class="screen">
-    <canvas id="game-canvas"></canvas>
+    <canvas id="game-canvas" role="img" aria-label="UNO game board">
+      Your browser doesn't support the canvas element needed to play UNO. Please update your browser.
+    </canvas>
     <div id="anim-overlay"></div>
-    <div id="toast-container"></div>
-    <button id="btn-fullscreen" class="btn-fullscreen" title="Fullscreen / Landscape">⛶</button>
+    <div id="toast-container" aria-live="polite" role="status"></div>
+    <button id="btn-fullscreen" class="btn-fullscreen" title="Fullscreen / Landscape"
+      aria-label="Toggle fullscreen">⛶</button>
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
+  <!-- Fallback shown only if a game script fails to load (e.g. dropped connection) -->
+  <div id="boot-error" role="alert"
+    style="display:none;position:fixed;inset:0;z-index:9999;background:#0f0f1a;color:#fff;align-items:center;justify-content:center;text-align:center;padding:2rem;font-family:sans-serif;">
+    Couldn't load the game. Check your connection and refresh the page.
+  </div>
+
   <script>
-    // Sequential load with timestamp cache-bust — guarantees correct execution order
-    (function () {
-      const _t = Date.now();
-      const srcs = ['assets/cards.js', 'renderer.js', 'game.js', 'main.js'];
-      let idx = 0;
-      function loadNext() {
-        if (idx >= srcs.length) return;
-        const s = document.createElement('script');
-        s.src = srcs[idx++] + '?t=' + _t;
-        s.onload = loadNext;
-        document.body.appendChild(s);
-      }
-      loadNext();
-    })();
+    // Resource load errors (script/link/img) fire on window with no bubbling,
+    // so they must be caught in the capture phase. Previously a failed script
+    // load (e.g. flaky network) failed completely silently with no feedback.
+    window.addEventListener(
+      'error',
+      function (e) {
+        if (e.target && e.target.tagName === 'SCRIPT') {
+          var el = document.getElementById('boot-error');
+          if (el) el.style.display = 'flex';
+        }
+      },
+      true
+    );
   </script>
 </body>
+
 </html>

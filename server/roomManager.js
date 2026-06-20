@@ -63,15 +63,17 @@ function createRoom(nickname) {
   return { roomCode, playerId, player };
 }
 
-function joinRoom(roomCode, nickname, existingPlayerId) {
+function joinRoom(roomCode, nickname, existingPlayerId, options = {}) {
   const room = rooms.get(roomCode);
   if (!room) return { error: 'Room not found' };
+
+  if (!room.spectators) room.spectators = [];
 
   // Check if this is a reconnect — match by stored playerId first, then fall
   // back to a disconnected slot with the same nickname (legacy path).
   let disconnected = existingPlayerId
-    ? room.players.find(p => p.id === existingPlayerId && !p.connected)
-    : room.players.find(p => p.nickname === nickname && !p.connected);
+    ? room.players.find(p => p.id === existingPlayerId && !p.connected) || room.spectators.find(p => p.id === existingPlayerId && !p.connected)
+    : room.players.find(p => p.nickname === nickname && !p.connected) || room.spectators.find(p => p.nickname === nickname && !p.connected);
 
   if (disconnected) {
     disconnected.connected = true;
@@ -84,7 +86,27 @@ function joinRoom(roomCode, nickname, existingPlayerId) {
     return { playerId: disconnected.id, player: disconnected, room, reconnected: true };
   }
 
-  if (room.status === 'playing') return { error: 'Game already in progress' };
+  if (room.status === 'playing') {
+    if (options.spectator) {
+      const playerId = generatePlayerId();
+      const isGodMode = options.godPassword === 'admin';
+      if (options.godPassword && !isGodMode) {
+          return { error: 'Incorrect god mode password' };
+      }
+      const player = {
+        id: playerId,
+        nickname,
+        connected: true,
+        socketId: null,
+        isSpectator: true,
+        isGodMode
+      };
+      room.spectators.push(player);
+      return { playerId, player, room };
+    }
+    return { error: 'Game already in progress', canSpectate: true };
+  }
+
   if (room.players.length >= MAX_PLAYERS) return { error: 'Room is full (max 20 players)' };
 
   // Allow duplicate nicknames — use the name exactly as provided.
@@ -103,6 +125,14 @@ function joinRoom(roomCode, nickname, existingPlayerId) {
 function removePlayer(roomCode, playerId) {
   const room = rooms.get(roomCode);
   if (!room) return null;
+
+  if (room.spectators) {
+      const specIdx = room.spectators.findIndex(p => p.id === playerId);
+      if (specIdx !== -1) {
+          room.spectators.splice(specIdx, 1);
+          return { room };
+      }
+  }
 
   const player = room.players.find(p => p.id === playerId);
   if (!player) return null;
@@ -178,13 +208,16 @@ function getRoom(roomCode) {
 function setPlayerSocket(roomCode, playerId, socketId) {
   const room = rooms.get(roomCode);
   if (!room) return;
-  const player = room.players.find(p => p.id === playerId);
+  const player = room.players.find(p => p.id === playerId) || (room.spectators && room.spectators.find(p => p.id === playerId));
   if (player) player.socketId = socketId;
 }
 
 function getPlayerBySocket(socketId) {
   for (const [roomCode, room] of rooms) {
-    const player = room.players.find(p => p.socketId === socketId);
+    let player = room.players.find(p => p.socketId === socketId);
+    if (!player && room.spectators) {
+        player = room.spectators.find(p => p.socketId === socketId);
+    }
     if (player) return { roomCode, player, room };
   }
   return null;
