@@ -401,42 +401,42 @@
 
   // ── Lobby: Join Room ───────────────────────────────────────────────────────
   function handleJoinSuccess(res, code) {
-      myPlayerId = res.playerId;
-      myNickname = res.nickname;
-      currentRoomCode = code;
-      hostId = res.hostId;
-      Game.isSpectator = res.isSpectator;
-      Game.isGodMode = res.isGodMode;
+    myPlayerId = res.playerId;
+    myNickname = res.nickname;
+    currentRoomCode = code;
+    hostId = res.hostId;
+    Game.isSpectator = res.isSpectator;
+    Game.isGodMode = res.isGodMode;
 
-      // Only apply callback players if no room_updated has arrived yet
-      if (_lastServerSeq === 0) players = res.players;
+    // Only apply callback players if no room_updated has arrived yet
+    if (_lastServerSeq === 0) players = res.players;
 
-      // Persist session so refresh reconnects automatically
-      sessionStorage.setItem('uno_session', JSON.stringify({
-        roomCode: code,
-        playerId: res.playerId,
-        nickname: res.nickname,
-      }));
-      // Remember name for next visit
-      localStorage.setItem('uno_nickname', res.nickname);
+    // Persist session so refresh reconnects automatically
+    sessionStorage.setItem('uno_session', JSON.stringify({
+      roomCode: code,
+      playerId: res.playerId,
+      nickname: res.nickname,
+    }));
+    // Remember name for next visit
+    localStorage.setItem('uno_nickname', res.nickname);
 
-      history.replaceState({}, '', `?room=${code}&playerId=${res.playerId}&nickname=${encodeURIComponent(res.nickname)}`);
+    history.replaceState({}, '', `?room=${code}&playerId=${res.playerId}&nickname=${encodeURIComponent(res.nickname)}`);
 
-      $displayCode.textContent = code;
-      $stackingToggle.checked = res.settings?.stacking || false;
-      stackingEnabled = res.settings?.stacking || false;
-      renderPlayerList();
+    $displayCode.textContent = code;
+    $stackingToggle.checked = res.settings?.stacking || false;
+    stackingEnabled = res.settings?.stacking || false;
+    renderPlayerList();
 
-      if (res.gameInProgress && (res.reconnected || res.isSpectator)) {
-        showToast(res.isSpectator ? (res.isGodMode ? 'Joined God Mode Spectator' : 'Joined as Spectator') : 'Reconnected!');
-        startGameUI();
-        
-        // Populate game players for spectators/reconnects using the guaranteed res.players from server
-        const playerOrder = (res.players || players).map(p => ({ id: p.id, nickname: p.nickname, cardCount: p.cardCount || 7 }));
-        Game.setPlayers(playerOrder);
-      } else {
-        showScreen($waitingRoom);
-      }
+    if (res.gameInProgress && (res.reconnected || res.isSpectator)) {
+      showToast(res.isSpectator ? (res.isGodMode ? 'Joined God Mode Spectator' : 'Joined as Spectator') : 'Reconnected!');
+      startGameUI();
+
+      // Populate game players for spectators/reconnects using the guaranteed res.players from server
+      const playerOrder = (res.players || players).map(p => ({ id: p.id, nickname: p.nickname, cardCount: p.cardCount || 7 }));
+      Game.setPlayers(playerOrder);
+    } else {
+      showScreen($waitingRoom);
+    }
   }
 
   $btnJoin.addEventListener('click', () => {
@@ -450,18 +450,18 @@
     socket.emit('join_room', { roomCode: code, nickname: nick, playerId: null }, (res) => {
       $btnJoin.disabled = false;
       if (res.error) {
-          if (res.canSpectate) {
-              const pass = prompt("Game is in progress! Enter password for God Mode spectator, or leave blank for normal spectator. Click Cancel to abort.");
-              if (pass === null) return;
-              $btnJoin.disabled = true;
-              socket.emit('join_room', { roomCode: code, nickname: nick, playerId: null, spectator: true, godPassword: pass }, (spectateRes) => {
-                  $btnJoin.disabled = false;
-                  if (spectateRes.error) return showToast(spectateRes.error, true);
-                  handleJoinSuccess(spectateRes, code);
-              });
-              return;
-          }
-          return showToast(res.error, true);
+        if (res.canSpectate) {
+          const pass = prompt("Game is in progress! Enter password for God Mode spectator, or leave blank for normal spectator. Click Cancel to abort.");
+          if (pass === null) return;
+          $btnJoin.disabled = true;
+          socket.emit('join_room', { roomCode: code, nickname: nick, playerId: null, spectator: true, godPassword: pass }, (spectateRes) => {
+            $btnJoin.disabled = false;
+            if (spectateRes.error) return showToast(spectateRes.error, true);
+            handleJoinSuccess(spectateRes, code);
+          });
+          return;
+        }
+        return showToast(res.error, true);
       }
       handleJoinSuccess(res, code);
     });
@@ -859,11 +859,11 @@
   });
 
   socket.on('god_hands', (hands) => {
-      Game.godHands = hands;
-      if (!Game.spectatingPlayerId && players.length > 0) {
-          Game.spectatingPlayerId = players[0].id;
-      }
-      Game.render();
+    Game.godHands = hands;
+    if (!Game.spectatingPlayerId && players.length > 0) {
+      Game.spectatingPlayerId = players[0].id;
+    }
+    Game.render();
   });
 
   socket.on('turn_skipped', (data) => {

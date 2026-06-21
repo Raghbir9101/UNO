@@ -73,6 +73,22 @@ function broadcastGameState(roomCode) {
   resetAutoPlayTimer(roomCode);
 }
 
+// ─── Per-room action lock ────────────────────────────────────────────────────
+// Prevents two near-simultaneous socket events (e.g. double-tap on mobile) from
+// both mutating game state. The lock is released immediately after the action
+// completes — it only blocks truly concurrent events, not sequential ones.
+const _roomLocks = {};  // roomCode → boolean
+
+function acquireRoomLock(roomCode) {
+  if (_roomLocks[roomCode]) return false;  // already locked
+  _roomLocks[roomCode] = true;
+  return true;
+}
+
+function releaseRoomLock(roomCode) {
+  delete _roomLocks[roomCode];
+}
+
 // ─── Auto-play: play for idle player after 30 seconds ────────────────────────
 const _autoPlayTimers = {};  // roomCode → timeout handle
 
@@ -371,7 +387,10 @@ io.on('connection', (socket) => {
     if (!room || !room.gameState) return socket.emit('error', { message: 'No active game' });
 
     const playerId = socket.data?.playerId;
+
+    if (!acquireRoomLock(roomCode)) return;
     const result = gameLogic.playCard(room.gameState, playerId, cardId, chosenColor);
+    releaseRoomLock(roomCode);
 
     if (result.error) {
       return socket.emit('error', { message: result.error });
@@ -435,7 +454,12 @@ io.on('connection', (socket) => {
     if (!room || !room.gameState) return socket.emit('error', { message: 'No active game' });
 
     const playerId = socket.data?.playerId;
+
+    // Serialize concurrent events — silently drop duplicate actions
+    if (!acquireRoomLock(roomCode)) return;
+
     const result = gameLogic.playerDrawCard(room.gameState, playerId);
+    releaseRoomLock(roomCode);
 
     if (result.error) {
       return socket.emit('error', { message: result.error });
@@ -459,7 +483,10 @@ io.on('connection', (socket) => {
     if (!room || !room.gameState) return socket.emit('error', { message: 'No active game' });
 
     const playerId = socket.data?.playerId;
+
+    if (!acquireRoomLock(roomCode)) return;
     const result = gameLogic.passTurn(room.gameState, playerId);
+    releaseRoomLock(roomCode);
 
     if (result.error) {
       return socket.emit('error', { message: result.error });
@@ -515,6 +542,7 @@ io.on('connection', (socket) => {
     }
 
     clearTimeout(_autoPlayTimers[roomCode]);
+    releaseRoomLock(roomCode); // clear any stale lock from previous round
     room.status = 'lobby';
     room.gameState = null;
 

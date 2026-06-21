@@ -1,6 +1,30 @@
 const Game = (() => {
   let canvas, ctx, animFrameId = null, resizeTimeout = null;
 
+  // ── Action in-flight guard ──────────────────────────────────────────────────
+  // Prevents rapid taps on mobile (slow network) from firing duplicate actions.
+  // Set to true when any game action is sent; cleared when server confirms via
+  // game_state or a short safety timeout elapses.
+  let _actionInFlight = false;
+  let _actionTimeout  = null;
+
+  function lockAction() {
+    _actionInFlight = true;
+    clearTimeout(_actionTimeout);
+    // Safety valve: auto-unlock after 3s in case server never responds
+    _actionTimeout = setTimeout(() => { _actionInFlight = false; }, 3000);
+  }
+
+  function unlockAction() {
+    _actionInFlight = false;
+    clearTimeout(_actionTimeout);
+  }
+
+  // ── UNO call guard ─────────────────────────────────────────────────────────
+  // Separate from _actionInFlight: calling UNO doesn't block draws/plays,
+  // but we still can't let it fire multiple times per hand.
+  let _unoCalled = false;  // true once the player has tapped "UNO" this hand
+
   const state = {
     active: false, myId: null, hostId: null,
     players: [], myHand: [],
@@ -182,7 +206,10 @@ const Game = (() => {
       for (const cr of hitRegions.colorRects) {
         if (hit(x, y, cr)) {
           state.showColorPicker = false;
-          Game.onPlayCard?.(state.pendingWildCardId, cr.color);
+          if (!_actionInFlight) {
+            lockAction();
+            Game.onPlayCard?.(state.pendingWildCardId, cr.color);
+          }
           state.pendingWildCardId = null; state.selectedCardIndex = -1;
           return;
         }
@@ -220,18 +247,24 @@ const Game = (() => {
     // UNO button
     if (hit(x, y, hitRegions.buttonRects?.uno)) {
       state.unoClickTime = Date.now();
-      // Call UNO: player just got to 1 card — unoState may not have arrived yet,
-      // so only require hand length === 1 (server validates the rest)
-      if (state.myHand.length === 1) {
+
+      // ── Call UNO (self): player just got to 1 card ──
+      // Guard with _unoCalled so fast taps only emit once.
+      // unoState may not have arrived yet (network lag), so we check hand length.
+      if (state.myHand.length === 1 && !_unoCalled) {
         const myUno = state.unoState[state.myId];
         if (!myUno || !myUno.called) {
+          _unoCalled = true; // optimistic lock — cleared by server confirmation
           Game.onCallUno?.();
           return;
         }
       }
-      // Catch UNO: someone else has 1 card and hasn't called
-      for (const [pid, u] of Object.entries(state.unoState)) {
-        if (pid !== state.myId && !u.called) { Game.onCatchUno?.(pid); break; }
+
+      // ── Catch UNO (another player): debounced via _actionInFlight ──
+      if (!_actionInFlight) {
+        for (const [pid, u] of Object.entries(state.unoState)) {
+          if (pid !== state.myId && !u.called) { lockAction(); Game.onCatchUno?.(pid); break; }
+        }
       }
       return;
     }
@@ -240,7 +273,9 @@ const Game = (() => {
     // Animation is handled by the server's player_drew event — do NOT call
     // flyCardFromDeck here or you'll get a duplicate animation.
     if (hit(x, y, hitRegions.pileRects?.draw)) {
-      if (state.currentPlayer === state.myId && !state.hasDrawnThisTurn && state.pendingDraw === 0) {
+      if (state.currentPlayer === state.myId && !state.hasDrawnThisTurn && state.pendingDraw === 0 && !_actionInFlight) {
+        state.hasDrawnThisTurn = true; // optimistic lock — prevents second tap before server responds
+        lockAction();
         Game.onDrawCard?.();
       }
       return;
@@ -248,15 +283,20 @@ const Game = (() => {
 
     // Clicking the diamond pass/draw button
     if (hit(x, y, hitRegions.buttonRects?.draw)) {
-      if (state.currentPlayer === state.myId) {
+      if (state.currentPlayer === state.myId && !_actionInFlight) {
         if (state.hasDrawnThisTurn) {
           // Already drew — pass turn
+          lockAction();
           Game.onPassTurn?.();
         } else if (state.pendingDraw > 0) {
           // Forced draw from +2/+4/+8 — must draw
+          state.hasDrawnThisTurn = true; // optimistic lock
+          lockAction();
           Game.onDrawCard?.();
         } else {
           // Normal draw — draw one card first, then player can pass
+          state.hasDrawnThisTurn = true; // optimistic lock
+          lockAction();
           Game.onDrawCard?.();
         }
       }
@@ -409,6 +449,7 @@ const Game = (() => {
   function tryPlayCard(idx) {
     const card = state.myHand[idx]; if (!card) return;
     if (state.currentPlayer !== state.myId) { Game.onShowToast?.('Not your turn', true); return; }
+    if (_actionInFlight) return; // debounce: discard rapid duplicate taps
 
     // Client-side validation — skip animation and show toast for invalid cards
     if (!clientIsPlayable(card)) {
@@ -422,6 +463,7 @@ const Game = (() => {
     // Snapshot + fly the real card — must happen BEFORE hand state changes
     const cr = hitRegions.cardRects.find(r => r.index === idx);
     if (cr) flyCardToDiscard(cr, card);
+    lockAction();
     Game.onPlayCard?.(card.id, null);
   }
 
@@ -502,7 +544,15 @@ const Game = (() => {
     state.pendingDrawType = gs.pendingDrawType || null;
     state.unoState = gs.unoState || {};
     // When the turn moves on, the new player hasn't drawn yet
-    if (playerChanged) state.hasDrawnThisTurn = false;
+    if (playerChanged) {
+      state.hasDrawnThisTurn = false;
+      _unoCalled = false; // new turn — reset UNO call guard
+    }
+    // If server confirms our UNO was registered, also clear the guard
+    const myUnoEntry = (gs.unoState || {})[state.myId];
+    if (myUnoEntry && myUnoEntry.called) _unoCalled = false;
+    // Server confirmed state — safe to unlock the action guard
+    unlockAction();
     if (gs.cardCounts) for (const p of state.players) {
       if (gs.cardCounts[p.id] !== undefined) p.cardCount = gs.cardCounts[p.id];
     }
@@ -530,6 +580,8 @@ const Game = (() => {
     });
     _dealAnimating = false;
     _prevCardPositions = {};
+    unlockAction();  // clear any stale lock from the previous round
+    _unoCalled = false; // clear UNO call guard for next game
     if (animOverlay) animOverlay.innerHTML = '';
   }
 
