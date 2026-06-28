@@ -31,8 +31,8 @@
   // ── Draw animation sync ────────────────────────────────────────────────────
   // When a multi-card draw happens, we reveal cards one-by-one in sync with
   // the fly animation instead of applying the full hand/count instantly.
-  const CARD_FLY_MS = 480; // ms a single card takes to fly
-  const CARD_STAGGER = 120; // ms between staggered cards
+  const CARD_FLY_MS = 180; // ms a single card takes to fly (Four Colors style)
+  const CARD_STAGGER = 55; // ms between staggered cards (rapid dealing)
   let _bufferedHand = null;          // full hand stored while incremental reveal runs
   let _handAnimating = false;         // true while self draw animation is in progress
   const _drawAnimPlayers = new Set(); // playerIds currently mid draw-animation (for others)
@@ -887,61 +887,59 @@
     Game.updateGameState({ ...data, cardCounts: null });
 
 
-    // ── Round-robin deal animation ─────────────────────────────
-    // Deal cards one at a time: local player first, then clockwise.
-    // Each player's card count ticks up as each card lands.
+    // ── Round-robin deal animation (Four Colors style) ─────────
+    // Deal cards one at a time: P1→P2→P3→P4→P1→P2→...
+    // Each card uses flyCardToPlayer with an onLand callback that
+    // increments the count and reveals the hand card on arrival.
     const CARDS_EACH = 7;
-    const DEAL_GAP = 160; // ms between each individual card deal
+    const DEAL_STAGGER = 55; // ms between consecutive card launches
 
     // Build deal order starting from local player
     const myIdx = playerOrder.findIndex(p => p.id === myPlayerId);
     const N = playerOrder.length;
-    const dealOrder = []; // [{ id, toSelf, side }]
+    const dealOrder = []; // [{ id, toSelf }]
     for (let i = 0; i < N; i++) {
       const pi = (myIdx + i) % N;
       const p = playerOrder[pi];
-      const toSelf = i === 0;
-      const side = toSelf ? null : computeSide(i - 1, N - 1);
-      dealOrder.push({ id: p.id, toSelf, side });
+      dealOrder.push({ id: p.id, toSelf: i === 0 });
     }
 
     _dealInProgress = true;
-    // Do NOT reset _bufferedDealHand here — hand_updated arrives BEFORE game_started
-    // and already stored the cards there. Clearing it would lose them.
-    // _bufferedDealHand is only nulled at the end of the deal loop.
-    // Do NOT call setDealMode(true) — that blanks the hand canvas.
-    // Cards are revealed incrementally via Game.state.myHand direct mutation.
+    // hand_updated arrives BEFORE game_started — _bufferedDealHand already has cards
 
     const totalCards = CARDS_EACH * N;
     for (let seq = 0; seq < totalCards; seq++) {
       const playerSlot = seq % N;
       const dp = dealOrder[playerSlot];
+      const isLastCard = seq === totalCards - 1;
 
-      // Launch fly animation
+      // Launch fly animation with stagger
       setTimeout(() => {
-        Game.triggerAnimation('fly_card', { index: 0, total: 1, toSelf: dp.toSelf, side: dp.side });
-      }, seq * DEAL_GAP);
+        Game.flyCardToPlayer({
+          toSelf: dp.toSelf,
+          targetPlayerId: dp.toSelf ? null : dp.id,
+          onLand: () => {
+            // Card has visually arrived — sync state NOW
+            const pl = Game.state.players.find(x => x.id === dp.id);
+            if (pl) pl.cardCount++;
 
-      // When card lands: increment that player's count + reveal hand card if self
-      setTimeout(() => {
-        const pl = Game.state.players.find(x => x.id === dp.id);
-        if (pl) pl.cardCount++;
+            // Reveal one hand card in sync when dealt to local player
+            if (dp.toSelf && _bufferedDealHand) {
+              const selfCount = Game.state.players.find(x => x.id === myPlayerId)?.cardCount || 0;
+              Game.state.myHand = _bufferedDealHand.slice(0, selfCount);
+            }
 
-        // Reveal one hand card in sync when dealt to local player
-        if (dp.toSelf && _bufferedDealHand) {
-          const selfCount = Game.state.players.find(x => x.id === myPlayerId)?.cardCount || 0;
-          Game.state.myHand = _bufferedDealHand.slice(0, selfCount);
-        }
-
-        // Last card of the whole deal
-        if (seq === totalCards - 1) {
-          if (_bufferedDealHand) {
-            Game.setHand(_bufferedDealHand); // final proper setHand
-            _bufferedDealHand = null;
-          }
-          _dealInProgress = false;
-        }
-      }, seq * DEAL_GAP + CARD_FLY_MS);
+            // Last card of the whole deal
+            if (isLastCard) {
+              if (_bufferedDealHand) {
+                Game.setHand(_bufferedDealHand); // final proper setHand
+                _bufferedDealHand = null;
+              }
+              _dealInProgress = false;
+            }
+          },
+        });
+      }, seq * DEAL_STAGGER);
     }
   });
 
@@ -1033,24 +1031,13 @@
     // If another player played this card, animate it flying from their zone to the discard pile
     if (playedBy && playedBy !== myPlayerId) {
       const myIdx = players.findIndex(pl => pl.id === myPlayerId);
-      const oppIdx = players.findIndex(pl => pl.id === playedBy);
-      if (myIdx !== -1 && oppIdx !== -1) {
+      if (myIdx !== -1) {
         const n = players.length;
         const opps = [];
         for (let i = 1; i < n; i++) opps.push({ id: players[(myIdx + i) % n].id, oppIdx: i - 1 });
-        const oppCount = opps.length;
         const tgtOpp = opps.find(o => o.id === playedBy);
         if (tgtOpp) {
-          let nLeft = 0, nRight = 0;
-          if (oppCount === 3) { nLeft = 1; nRight = 1; }
-          else if (oppCount === 4) { nLeft = 1; nRight = 1; }
-          else if (oppCount === 5) { nLeft = 1; nRight = 1; }
-          else if (oppCount === 6) { nLeft = 2; nRight = 2; }
-          else if (oppCount <= 9) { nLeft = Math.floor(oppCount / 3); nRight = Math.floor(oppCount / 3); }
-          else if (oppCount <= 12) { nLeft = Math.ceil(oppCount / 3); nRight = Math.floor(oppCount / 3); }
-          else { nLeft = Math.round(oppCount / 3); nRight = Math.round(oppCount / 3); }
-          const oi = tgtOpp.oppIdx;
-          const side = oi < nLeft ? 'left' : (oi >= oppCount - nRight ? 'right' : 'top');
+          const side = computeSide(tgtOpp.oppIdx, opps.length);
           Game.triggerAnimation('fly_opponent_card', { side });
         }
       }
@@ -1090,42 +1077,34 @@
     }
 
     const toSelf = data.playerId === myPlayerId;
+    const pid = data.playerId;
 
-    // Work out which screen zone the target player occupies
-    let side = null;
-    if (!toSelf) {
-      const myIdx = players.findIndex(pl => pl.id === myPlayerId);
-      if (myIdx !== -1) {
-        const n = players.length;
-        const opps = [];
-        for (let i = 1; i < n; i++) opps.push({ id: players[(myIdx + i) % n].id, oppIdx: i - 1 });
-        const tgtOpp = opps.find(o => o.id === data.playerId);
-        if (tgtOpp) side = computeSide(tgtOpp.oppIdx, opps.length);
-      }
-    }
-
-    // Trigger fly animations staggered per card
-    for (let i = 0; i < data.count; i++) {
-      setTimeout(() => {
-        Game.triggerAnimation('fly_card', { index: i, total: data.count, toSelf, side });
-      }, i * CARD_STAGGER);
-    }
-
-    // For opponents: protect their card count in game_state updates and
-    // increment it one-by-one in sync with each card landing.
+    // For opponents: protect their card count during animation
     if (!toSelf && data.count > 1) {
-      const pid = data.playerId;
       _drawAnimPlayers.add(pid);
-      const startCount = Game.state.players.find(pl => pl.id === pid)?.cardCount ?? 0;
-      for (let i = 0; i < data.count; i++) {
-        setTimeout(() => {
-          const pl = Game.state.players.find(x => x.id === pid);
-          if (pl) pl.cardCount = startCount + i + 1;
-          if (i === data.count - 1) {
-            _drawAnimPlayers.delete(pid); // unprotect so next game_state can sync
-          }
-        }, i * CARD_STAGGER + CARD_FLY_MS); // offset to match when card lands
-      }
+    }
+
+    // Trigger fly animations staggered per card, with onLand callbacks
+    for (let i = 0; i < data.count; i++) {
+      const isLast = i === data.count - 1;
+
+      setTimeout(() => {
+        Game.flyCardToPlayer({
+          toSelf,
+          targetPlayerId: toSelf ? null : pid,
+          onLand: () => {
+            if (!toSelf) {
+              // Opponent: increment card count on each landing
+              const pl = Game.state.players.find(x => x.id === pid);
+              if (pl) pl.cardCount++;
+              if (isLast) {
+                _drawAnimPlayers.delete(pid); // unprotect so next game_state can sync
+              }
+            }
+            // Self: hand reveal is driven by hand_updated handler
+          },
+        });
+      }, i * CARD_STAGGER);
     }
 
     // If this was MY normal draw (not forced), show Pass Turn button

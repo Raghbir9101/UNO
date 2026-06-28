@@ -41,8 +41,6 @@ const Game = (() => {
   };
 
   let _flyingCardId    = null;  // card hidden from canvas while it flies
-  let _dealAnimating   = false; // true during initial deal → hand shows placeholders
-  let _dealCardsLanded = 0;     // increments as each deal card arrives
 
   let hitRegions = { cardRects: [], pileRects: {}, buttonRects: {}, colorRects: [], winRects: {} };
   let touchStartX = 0, scrollStartOffset = 0, isDragging = false, dragDist = 0;
@@ -140,20 +138,11 @@ const Game = (() => {
       spectatingPlayerName: state.spectatingPlayerName, players: state.players
     }, W, H);
 
-    // Hand — skip the card currently in-flight; during deal show card-back placeholders
-    if (!_dealAnimating) {
-      const hr = Renderer.drawPlayerHand(ctx, state.myHand, -1, state.scrollOffset, W, H, _flyingCardId);
-      hitRegions.cardRects = hr.cardRects || [];
-      _prevCardPositions = {};
-      hr.cardRects.forEach(r => { _prevCardPositions[r.cardId] = { x: r.x, y: r.y, w: r.w, h: r.h }; });
-    } else {
-      // Show card-back placeholders so the hand area isn't blank during deal
-      const placeholderCount = _dealCardsLanded;
-      if (placeholderCount > 0) {
-        Renderer.drawHandPlaceholders(ctx, placeholderCount, W, H);
-      }
-      hitRegions.cardRects = [];
-    }
+    // Hand — skip the card currently in-flight
+    const hr = Renderer.drawPlayerHand(ctx, state.myHand, -1, state.scrollOffset, W, H, _flyingCardId);
+    hitRegions.cardRects = hr.cardRects || [];
+    _prevCardPositions = {};
+    hr.cardRects.forEach(r => { _prevCardPositions[r.cardId] = { x: r.x, y: r.y, w: r.w, h: r.h }; });
 
     // Color picker overlay
     if (state.showColorPicker) {
@@ -525,12 +514,12 @@ const Game = (() => {
 
       // PLAY: animate from FIRST back to LAST (dx,dy → 0,0)
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        ghost.style.transition = 'transform 250ms ease-out, opacity 250ms ease-out';
+        ghost.style.transition = 'transform 150ms ease-out, opacity 150ms ease-out';
         ghost.style.transform  = 'translate(0, 0)';
         ghost.style.opacity    = '0';
       }));
 
-      setTimeout(() => { if (ghost.parentNode) ghost.parentNode.removeChild(ghost); }, 380);
+      setTimeout(() => { if (ghost.parentNode) ghost.parentNode.removeChild(ghost); }, 280);
     }
   }
 
@@ -578,97 +567,104 @@ const Game = (() => {
       scrollOffset: 0, showColorPicker: false, pendingDraw: 0, unoState: {},
       hasDrawnThisTurn: false,
     });
-    _dealAnimating = false;
     _prevCardPositions = {};
     unlockAction();  // clear any stale lock from the previous round
     _unoCalled = false; // clear UNO call guard for next game
     if (animOverlay) animOverlay.innerHTML = '';
   }
 
-  // toSelf=true  → card flies DOWN toward player's hand (bottom of screen)
-  // toSelf=false → card flies UP/SIDE toward opponent area
-  // targetSide: 'top' | 'left' | 'right' (default 'top' when toSelf=false)
-  function flyCardFromDeck(offsetIndex, total, toSelf, targetSide) {
-    if (!animOverlay || !canvas) return;
+  // ── Unified card flight: deck → any player ───────────────────────────────────
+  // Uses Renderer layout helpers for pixel-perfect source/target positions.
+  // opts: { toSelf, targetPlayerId, onLand }
+  //   toSelf        — true = fly to local hand, false = fly to opponent
+  //   targetPlayerId — required when !toSelf, used to find the exact opponent slot
+  //   onLand        — callback fired the instant the card reaches its destination
+  function flyCardToPlayer(opts = {}) {
+    if (!animOverlay || !canvas) { opts.onLand?.(); return; }
+    const { toSelf = true, targetPlayerId = null, onLand = null } = opts;
 
-    const cRect   = canvas.getBoundingClientRect();
-    const scaleX  = cRect.width  / canvas.width;
-    const scaleY  = cRect.height / canvas.height;
+    const W = canvas.width, H = canvas.height;
+    const cRect  = canvas.getBoundingClientRect();
+    const scaleX = cRect.width  / W;
+    const scaleY = cRect.height / H;
 
-    const cw_c = Math.min(canvas.width * 0.22, Renderer.vs(85));
-    const ch_c = cw_c * 1.45;
-    const screenW = cw_c * scaleX;
-    const screenH = ch_c * scaleY;
+    // ── Source: exact deck center ──
+    const deck = Renderer.getDeckPosition(W, H);
+    const startL = cRect.left + (deck.cx - deck.w / 2) * scaleX;
+    const startT = cRect.top  + (deck.cy - deck.h / 2) * scaleY;
+    const screenW = deck.w * scaleX;
+    const screenH = deck.h * scaleY;
 
-    const snap = document.createElement('canvas');
-    snap.width  = Math.round(cw_c);
-    snap.height = Math.round(ch_c);
-    Renderer.drawCard(snap.getContext('2d'), null, 0, 0, snap.width, snap.height, { faceUp: false });
-
-    const deckCX = cRect.left + cRect.width  * 0.36;
-    const deckCY = cRect.top  + cRect.height * 0.38;
-    const startL = deckCX - screenW / 2;
-    const startT = deckCY - screenH / 2;
-
-    const spread = (offsetIndex - (total - 1) / 2) * Math.min(screenW * 0.35, 20);
-    let targetL, targetT;
+    // ── Target: exact player position ──
+    let targetCX, targetCY, targetRot;
     if (toSelf) {
-      targetL = cRect.left + cRect.width * 0.5 + spread - screenW / 2;
-      targetT = cRect.top  + cRect.height * 0.90 - screenH / 2;
-    } else if (targetSide === 'left') {
-      targetL = cRect.left + cRect.width * 0.06 - screenW / 2;
-      targetT = cRect.top  + cRect.height * 0.45 + spread - screenH / 2;
-    } else if (targetSide === 'right') {
-      targetL = cRect.left + cRect.width * 0.94 - screenW / 2;
-      targetT = cRect.top  + cRect.height * 0.45 + spread - screenH / 2;
+      const hand = Renderer.getHandTarget(W, H);
+      targetCX = cRect.left + hand.cx * scaleX;
+      targetCY = cRect.top  + hand.cy * scaleY;
+      targetRot = 0;
     } else {
-      // top
-      targetL = cRect.left + cRect.width * 0.5 + spread - screenW / 2;
-      targetT = cRect.top  + cRect.height * 0.10 - screenH / 2;
-    }
-
-    snap.className = 'anim-el';
-    snap.style.position      = 'absolute';
-    snap.style.left          = startL + 'px';
-    snap.style.top           = startT + 'px';
-    snap.style.width         = screenW + 'px';
-    snap.style.height        = screenH + 'px';
-    snap.style.borderRadius  = (snap.width * 0.12 * scaleX) + 'px';
-    snap.style.transform     = 'translate(0,0) scale(1)';
-    snap.style.opacity       = '1';
-    snap.style.zIndex        = '590';
-    snap.style.willChange    = 'transform, opacity';
-    snap.style.pointerEvents = 'none';
-    animOverlay.appendChild(snap);
-
-    const duration  = 480;
-    const startTime = performance.now();
-
-    function arcFrame(now) {
-      const t        = Math.min(now - startTime, duration);
-      const progress = t / duration;
-      const ease     = progress < 0.5
-        ? 2 * progress * progress
-        : -1 + (4 - 2 * progress) * progress;
-
-      const dx   = targetL - startL;
-      const arcH = toSelf ? -65 : 65;
-      const x    = dx * ease;
-      const y    = (targetT - startT) * ease + Math.sin(progress * Math.PI) * arcH;
-      const sc   = 1 - 0.2 * ease;
-      const op   = progress > 0.7 ? 1 - (progress - 0.7) / 0.3 : 1;
-
-      snap.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) scale(${sc.toFixed(3)})`;
-      snap.style.opacity   = op.toFixed(3);
-
-      if (t < duration) {
-        requestAnimationFrame(arcFrame);
+      // Find opponent slot
+      const oppPositions = Renderer.getOpponentPositions(state.players, state.myId, W, H);
+      const slot = oppPositions.find(o => o.id === targetPlayerId);
+      if (slot) {
+        targetCX  = cRect.left + slot.cx * scaleX;
+        targetCY  = cRect.top  + slot.cy * scaleY;
+        targetRot = slot.rotation;
       } else {
-        if (snap.parentNode) snap.parentNode.removeChild(snap);
+        // Fallback: top center
+        targetCX = cRect.left + cRect.width * 0.5;
+        targetCY = cRect.top  + cRect.height * 0.1;
+        targetRot = 180;
       }
     }
+    const targetL = targetCX - screenW / 2;
+    const targetT = targetCY - screenH / 2;
 
-    requestAnimationFrame(arcFrame);
+    // ── Render card-back onto offscreen canvas ──
+    const snap = document.createElement('canvas');
+    snap.width  = Math.round(deck.w);
+    snap.height = Math.round(deck.h);
+    Renderer.drawCard(snap.getContext('2d'), null, 0, 0, snap.width, snap.height, { faceUp: false });
+
+    snap.className = 'anim-el';
+    snap.style.cssText = `position:absolute;left:${startL}px;top:${startT}px;` +
+      `width:${screenW}px;height:${screenH}px;` +
+      `border-radius:${snap.width * 0.12 * scaleX}px;` +
+      `transform:translate(0,0) scale(0.95) rotate(0deg);opacity:1;z-index:900;` +
+      `will-change:transform;pointer-events:none;`;
+    animOverlay.appendChild(snap);
+
+    // ── Animation: 180ms easeOutCubic, no fade, subtle arc, smooth rotation ──
+    const FLIGHT_MS = 180;
+    const startTime = performance.now();
+    const dx = targetL - startL;
+    const dy = targetT - startT;
+    // Very subtle arc: 15px upward for self, 15px downward for opponents
+    const arcH = toSelf ? -15 : -15;
+
+    function frame(now) {
+      const t = Math.min(now - startTime, FLIGHT_MS);
+      const p = t / FLIGHT_MS;
+      // easeOutCubic
+      const ease = 1 - Math.pow(1 - p, 3);
+
+      const x   = dx * ease;
+      const y   = dy * ease + Math.sin(p * Math.PI) * arcH;
+      const sc  = 0.95 + 0.05 * ease;  // 0.95 → 1.0
+      const rot = targetRot * ease;     // 0° → target orientation
+
+      snap.style.transform =
+        `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) scale(${sc.toFixed(3)}) rotate(${rot.toFixed(1)}deg)`;
+
+      if (t < FLIGHT_MS) {
+        requestAnimationFrame(frame);
+      } else {
+        // Card has landed — remove the flying element
+        if (snap.parentNode) snap.parentNode.removeChild(snap);
+        onLand?.();
+      }
+    }
+    requestAnimationFrame(frame);
   }
 
   // Animate a card-back flying FROM an opponent's zone TO the discard pile.
@@ -837,34 +833,17 @@ const Game = (() => {
       const col = (data && data.color) || null;
       triggerColorChangeAnim(col);
     }
-    // fly_card: directional single-card fly from deck (for draw animations)
+    // fly_card: card fly from deck using new unified system
     if (type === 'fly_card') {
-      const idx      = (data && data.index)    !== undefined ? data.index    : 0;
-      const total    = (data && data.total)    !== undefined ? data.total    : 1;
-      const toSelf   = (data && data.toSelf)  !== undefined ? data.toSelf   : true;
-      const side     = (data && data.side)    || null;
-      flyCardFromDeck(idx, total, toSelf, side);
+      const toSelf          = data?.toSelf !== undefined ? data.toSelf : true;
+      const targetPlayerId  = data?.targetPlayerId || null;
+      const onLand          = data?.onLand || null;
+      flyCardToPlayer({ toSelf, targetPlayerId, onLand });
     }
     // fly_opponent_card: opponent played a card — animate it to the discard pile
     if (type === 'fly_opponent_card') {
       const side = (data && data.side) || 'top';
       flyCardFromOpponentToDiscard(side);
-    }
-    // deal: initial 7-card deal animation
-    if (type === 'deal') {
-      const count  = (data && data.count) || 7;
-      const lastCardLands = (count - 1) * 180 + 520; // stagger + flight
-      _dealAnimating   = true;
-      _dealCardsLanded = 0;
-      for (let i = 0; i < count; i++) {
-        setTimeout(() => {
-          flyCardFromDeck(i, count, true);
-        }, i * 180);
-        // Card lands ~480ms after it starts flying
-        setTimeout(() => { _dealCardsLanded++; }, i * 180 + 480);
-      }
-      // After the last card lands, reveal the real hand
-      setTimeout(() => { _dealAnimating = false; _dealCardsLanded = 0; }, lastCardLands + 60);
     }
     if (type === 'winner') {
       triggerWinnerConfetti();
@@ -879,15 +858,10 @@ const Game = (() => {
     state.turnTimer = { playerId, startTime: Date.now(), durationMs };
   }
 
-  function setDealMode(active) {
-    _dealAnimating   = active;
-    _dealCardsLanded = active ? 0 : 0;
-  }
-
   return {
     init, destroy, state, setPlayers, setHand, updateGameState,
     setWinner, resetGame, triggerAnimation, resizeCanvas, discardStack, showDomAnim,
-    setTurnTimer, setDealMode,
+    setTurnTimer, flyCardToPlayer,
     onPlayCard: null, onDrawCard: null, onPassTurn: null, onCallUno: null,
     onCatchUno: null, onRestartGame: null, onShowToast: null,
   };

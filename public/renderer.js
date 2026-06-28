@@ -865,10 +865,123 @@ const Renderer = (() => {
     ctx.restore();
   }
 
+  // ── Layout helpers for animation system ──────────────────────────────────────
+  // Pure computation — no drawing. These use the EXACT same formulas as the
+  // drawing functions so flying cards always start/end at correct positions.
+
+  /** Returns the deck (draw pile) center and card dimensions in canvas pixels. */
+  function getDeckPosition(W, H) {
+    const _SW = W * 0.16, _TH = H * 0.26, _HH = H * 0.26;
+    const _CW = W - 2 * _SW, _CH = H - _TH - _HH;
+    const _CX = _SW + _CW / 2, _CY = _TH + _CH / 2;
+    const _cw = Math.min(_CW * 0.17, _CH * 0.52, vs(90));
+    const _ch = _cw * 1.45;
+    const _gap = Math.max(_cw * 0.15, vs(12));
+    const _dx = _CX - _cw - _gap; // deck left edge
+    return {
+      cx: _dx + _cw / 2,
+      cy: _CY,
+      w: _cw,
+      h: _ch,
+    };
+  }
+
+  /** Returns the local player's hand area center and card dimensions. */
+  function getHandTarget(W, H) {
+    const SIDE_W = W * 0.16;
+    const HAND_H = H * 0.26;
+    const handW = W - 2 * SIDE_W;
+    const cw = Math.min(handW * 0.13, HAND_H * 0.82, vs(72));
+    const ch = cw * 1.45;
+    return {
+      cx: W / 2,
+      cy: H - ch / 2 - vs(16),
+      w: cw,
+      h: ch,
+      rotation: 0,
+    };
+  }
+
+  /**
+   * Returns an array of opponent position descriptors.
+   * Each entry: { id, side: 'top'|'left'|'right', cx, cy, rotation }
+   * Uses the exact same nLeft/nRight/nTop distribution as drawOpponents().
+   */
+  function getOpponentPositions(players, myId, W, H) {
+    if (!players || !players.length) return [];
+    const myIdx = players.findIndex(p => p.id === myId);
+    let opps = [];
+    if (myIdx === -1) {
+      opps = [...players];
+    } else {
+      for (let i = 1; i < players.length; i++) opps.push(players[(myIdx + i) % players.length]);
+    }
+    if (!opps.length) return [];
+    const n = opps.length;
+
+    // Zone constants (same as drawOpponents)
+    const SIDE_W = W * 0.16;
+    const TOP_H = H * 0.26;
+    const HAND_H = H * 0.26;
+    const CX = SIDE_W, CY = TOP_H;
+    const CW = W - 2 * SIDE_W, CH = H - TOP_H - HAND_H;
+
+    // Distribution (same as drawOpponents)
+    let nTop, nLeft, nRight;
+    if (n === 1) { nTop = 1; nLeft = 0; nRight = 0; }
+    else if (n === 2) { nTop = 2; nLeft = 0; nRight = 0; }
+    else if (n === 3) { nTop = 1; nLeft = 1; nRight = 1; }
+    else if (n === 4) { nTop = 2; nLeft = 1; nRight = 1; }
+    else if (n === 5) { nTop = 3; nLeft = 1; nRight = 1; }
+    else if (n === 6) { nTop = 2; nLeft = 2; nRight = 2; }
+    else if (n <= 9) { nLeft = Math.floor(n / 3); nRight = Math.floor(n / 3); nTop = n - nLeft - nRight; }
+    else if (n <= 12) { nLeft = Math.ceil(n / 3); nRight = Math.floor(n / 3); nTop = n - nLeft - nRight; }
+    else { nLeft = Math.round(n / 3); nRight = Math.round(n / 3); nTop = n - nLeft - nRight; }
+
+    const leftOps = opps.slice(0, nLeft);
+    const rightOps = opps.slice(n - nRight);
+    const topOps = opps.slice(nLeft, n - (nRight || 0));
+
+    const results = [];
+
+    // Card sizes (same as drawOpponents)
+    const tcw = Math.min(CW / (Math.max(nTop, 1) * 3.2), TOP_H * 0.32, vs(32));
+    const tch = tcw * 1.45;
+    const scw = Math.min(SIDE_W * 0.52, CH / (Math.max(nLeft, nRight, 1) * 2.8), vs(28));
+    const sch = scw * 1.45;
+    const topSlotW = nTop > 0 ? CW / nTop : CW;
+    const sideAvailH = CH;
+
+    // Top opponents
+    topOps.forEach((p, i) => {
+      const slotCX = CX + topSlotW * i + topSlotW / 2;
+      results.push({ id: p.id, side: 'top', cx: slotCX, cy: vs(8) + tch / 2, rotation: 180 });
+    });
+
+    // Left opponents
+    leftOps.forEach((p, i) => {
+      const slotH = sideAvailH / nLeft;
+      const cy = CY + slotH * i + slotH / 2;
+      const fx = SIDE_W / 2;
+      results.push({ id: p.id, side: 'left', cx: fx, cy, rotation: -90 });
+    });
+
+    // Right opponents
+    rightOps.forEach((p, i) => {
+      const slotH = sideAvailH / nRight;
+      const cy = CY + slotH * i + slotH / 2;
+      const fx = W - SIDE_W / 2;
+      results.push({ id: p.id, side: 'right', cx: fx, cy, rotation: 90 });
+    });
+
+    return results;
+  }
+
   return {
     font, updateScale, drawBackground, drawCard, drawCardBack: _cardBack,
     drawPlayerHand, drawHandPlaceholders, drawOpponents, drawPiles, drawDirectionArrow,
-    drawActionButtons, drawColorPicker, drawWinScreen, drawTurnIndicator, drawTurnTimer, vs
+    drawActionButtons, drawColorPicker, drawWinScreen, drawTurnIndicator, drawTurnTimer, vs,
+    getDeckPosition, getOpponentPositions, getHandTarget,
   };
 })();
 
