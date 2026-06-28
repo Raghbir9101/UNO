@@ -449,6 +449,50 @@ function getPublicState(state) {
   };
 }
 
+// ─── Remove Player Mid-Game ───────────────────────────────────────────────────
+// Called when a player is kicked during an active game.
+// Removes them from playerIds, hands, adjusts currentPlayerIndex, and
+// returns { winner } if only one player is left standing.
+
+function removePlayerFromGame(state, kickedPlayerId) {
+  const kickedIdx = state.playerIds.indexOf(kickedPlayerId);
+  if (kickedIdx === -1) return { notInGame: true };
+
+  // Remove from playerIds and discard their hand back into discard pile
+  state.playerIds.splice(kickedIdx, 1);
+  state.playerCount = state.playerIds.length;
+  // Return kicked player's cards to draw pile (reshuffled)
+  const kickedHand = state.hands[kickedPlayerId] || [];
+  state.drawPile.push(...kickedHand);
+  shuffle(state.drawPile);
+  delete state.hands[kickedPlayerId];
+  delete state.unoState[kickedPlayerId];
+
+  // Only one player left → that player wins
+  if (state.playerCount === 1) {
+    const winnerId = state.playerIds[0];
+    state.winner = winnerId;
+    return { winner: winnerId };
+  }
+
+  // Fix currentPlayerIndex:
+  // - If we removed an entry before (or at) the current index, shift back
+  // - Clamp to valid range just in case
+  if (kickedIdx < state.currentPlayerIndex) {
+    state.currentPlayerIndex -= 1;
+  } else if (kickedIdx === state.currentPlayerIndex) {
+    // It was this player's turn — wrap to the now-current slot
+    // (after the splice, index N points to the next player already)
+    state.currentPlayerIndex = state.currentPlayerIndex % state.playerCount;
+    state.turnTimestamp = Date.now();
+  }
+  // Clamp
+  state.currentPlayerIndex =
+    ((state.currentPlayerIndex % state.playerCount) + state.playerCount) % state.playerCount;
+
+  return { winner: null };
+}
+
 module.exports = {
   initGame,
   playCard,
@@ -458,5 +502,6 @@ module.exports = {
   catchUno,
   getPublicState,
   getCurrentPlayerId,
+  removePlayerFromGame,
   COLORS,
 };

@@ -37,7 +37,7 @@ function generatePlayerId() {
 
 // ─── Room CRUD ────────────────────────────────────────────────────────────────
 
-function createRoom(nickname) {
+function createRoom(nickname, options = {}) {
   let roomCode;
   do {
     roomCode = generateRoomCode();
@@ -58,6 +58,8 @@ function createRoom(nickname) {
     settings: { stacking: false },
     players: [player],
     gameState: null,
+    isPrivate: options.isPrivate || false,
+    createdAt: Date.now(),
   });
 
   return { roomCode, playerId, player };
@@ -82,6 +84,7 @@ function joinRoom(roomCode, nickname, existingPlayerId, options = {}) {
     if (disconnectTimers.has(timerKey)) {
       clearTimeout(disconnectTimers.get(timerKey));
       disconnectTimers.delete(timerKey);
+      console.log(`[reconnect] Cleared disconnect timer for ${disconnected.id} in ${roomCode}`);
     }
     return { playerId: disconnected.id, player: disconnected, room, reconnected: true };
   }
@@ -180,6 +183,50 @@ function removePlayer(roomCode, playerId) {
   return { room };
 }
 
+// Force-remove a player immediately (used for kicked players).
+// Unlike removePlayer(), this skips the reconnect-window timer — a kicked
+// player's slot is freed instantly and they cannot rejoin by reconnecting.
+function forceRemovePlayer(roomCode, playerId) {
+  const room = rooms.get(roomCode);
+  if (!room) return null;
+
+  // Cancel any pending reconnect timer for this player
+  const timerKey = `${roomCode}:${playerId}`;
+  if (disconnectTimers.has(timerKey)) {
+    clearTimeout(disconnectTimers.get(timerKey));
+    disconnectTimers.delete(timerKey);
+  }
+
+  // Remove from spectators if present
+  if (room.spectators) {
+    const specIdx = room.spectators.findIndex(p => p.id === playerId);
+    if (specIdx !== -1) {
+      room.spectators.splice(specIdx, 1);
+      return { room };
+    }
+  }
+
+  const player = room.players.find(p => p.id === playerId);
+  if (!player) return null;
+
+  // Permanently remove the player regardless of game status
+  room.players = room.players.filter(p => p.id !== playerId);
+
+  // Host migration
+  if (room.hostId === playerId) {
+    const nextHost = room.players.find(p => p.connected);
+    if (nextHost) room.hostId = nextHost.id;
+  }
+
+  // If room is now empty, clean it up
+  if (room.players.length === 0) {
+    rooms.delete(roomCode);
+    return { roomDestroyed: true };
+  }
+
+  return { room };
+}
+
 function scheduleRoomCleanup(roomCode, delayMs) {
   if (roomCleanupTimers.has(roomCode)) {
     clearTimeout(roomCleanupTimers.get(roomCode));
@@ -223,15 +270,35 @@ function getPlayerBySocket(socketId) {
   return null;
 }
 
+function getPublicRooms() {
+  const publicRooms = [];
+  for (const [roomCode, room] of rooms) {
+    if (!room.isPrivate) {
+      publicRooms.push({
+        code: roomCode,
+        hostNickname: room.players[0]?.nickname || 'Unknown',
+        playerCount: room.players.filter(p => p.connected).length,
+        maxPlayers: MAX_PLAYERS,
+        status: room.status,
+        createdAt: room.createdAt,
+      });
+    }
+  }
+  // Sort by creation time (newest first)
+  return publicRooms.sort((a, b) => b.createdAt - a.createdAt);
+}
+
 module.exports = {
   rooms,
   createRoom,
   joinRoom,
   removePlayer,
+  forceRemovePlayer,
   getRoom,
   setPlayerSocket,
   getPlayerBySocket,
   scheduleRoomCleanup,
   cancelRoomCleanup,
+  getPublicRooms,
   MAX_PLAYERS,
 };

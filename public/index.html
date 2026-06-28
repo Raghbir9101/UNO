@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
     rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=18" />
+  <link rel="stylesheet" href="style.css?v=25" />
 
   <!--
     Game scripts: moved to <head> with `defer` instead of the old runtime loader
@@ -43,10 +43,10 @@
       deploy, matching the pattern already used for style.css above.
   -->
   <script defer src="/socket.io/socket.io.js"></script>
-  <script defer src="assets/cards.js?v=18"></script>
-  <script defer src="renderer.js?v=18"></script>
-  <script defer src="game.js?v=18"></script>
-  <script defer src="main.js?v=18"></script>
+  <script defer src="assets/cards.js?v=25"></script>
+  <script defer src="renderer.js?v=25"></script>
+  <script defer src="game.js?v=25"></script>
+  <script defer src="main.js?v=25"></script>
 
   <style>
     /* Visually hides labels for sighted users while keeping them for screen readers */
@@ -82,22 +82,95 @@
       </div>
 
       <div class="form-card">
-        <label for="nickname" class="sr-only">Your nickname</label>
-        <input type="text" id="nickname" placeholder="Your nickname" maxlength="16" autocomplete="off"
-          aria-label="Your nickname" />
-
-        <!-- #create-section hidden when user arrives via invite link -->
-        <div id="create-section">
-          <button id="btn-create" class="btn btn-primary">
-            <span class="btn-icon">✦</span> Create Room
-          </button>
-          <div class="divider"><span>or join a friend</span></div>
+        <div class="input-group">
+          <label for="nickname" class="input-label">Your Nickname</label>
+          <input type="text" id="nickname" placeholder="Enter your nickname" maxlength="16" autocomplete="off"
+            aria-label="Your nickname" />
         </div>
 
-        <label for="room-code" class="sr-only">Room code</label>
-        <input type="text" id="room-code" placeholder="Room code (e.g. UNO-4X9K)" maxlength="8" autocomplete="off"
-          autocapitalize="characters" autocorrect="off" spellcheck="false" aria-label="Room code" />
-        <button id="btn-join" class="btn btn-secondary">Join Room</button>
+        <!-- Tab switcher -->
+        <div id="create-section" class="lobby-tabs">
+          <div class="tab-bar" role="tablist">
+            <button class="tab-btn tab-btn--active" id="tab-create" role="tab" aria-selected="true" aria-controls="panel-create">
+              ✦ Create Room
+            </button>
+            <button class="tab-btn" id="tab-join" role="tab" aria-selected="false" aria-controls="panel-join">
+              → Join Room
+            </button>
+          </div>
+
+          <!-- Create Room Panel -->
+          <div class="tab-panel" id="panel-create" role="tabpanel">
+            <label class="private-toggle-row" for="private-room-toggle">
+              <div class="private-toggle-info">
+                <span class="private-toggle-icon">🔒</span>
+                <div>
+                  <span class="private-toggle-title">Private Room</span>
+                  <span class="private-toggle-desc">Only joinable via invite link</span>
+                </div>
+              </div>
+              <div class="pill-switch">
+                <input type="checkbox" id="private-room-toggle" />
+                <span class="pill-track"><span class="pill-thumb"></span></span>
+              </div>
+            </label>
+            <button id="btn-create" class="btn btn-primary btn-large">
+              <span class="btn-icon">+</span> Create New Room
+            </button>
+          </div>
+
+          <!-- Join Room Panel -->
+          <div class="tab-panel tab-panel--hidden" id="panel-join" role="tabpanel">
+            <div class="input-group" style="margin-bottom:0">
+              <label for="room-code" class="input-label">Room Code</label>
+              <input type="text" id="room-code" placeholder="UNO-XXXX" maxlength="8" autocomplete="off"
+                autocapitalize="characters" autocorrect="off" spellcheck="false" aria-label="Room code" />
+            </div>
+            <button id="btn-join" class="btn btn-secondary btn-large">
+              <span class="btn-icon">→</span> Join Room
+            </button>
+          </div>
+        </div>
+
+        <div class="button-group">
+          <button id="btn-browse" class="btn btn-outline btn-large">
+            <span class="btn-icon">🔍</span> Browse Public Rooms
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Browse Rooms Screen ── -->
+  <div id="browse-screen" class="screen">
+    <div class="lobby-container">
+      <div class="logo-section">
+        <div class="uno-logo">
+          <span class="logo-u">U</span><span class="logo-n">N</span><span class="logo-o">O</span>
+        </div>
+        <p class="tagline">Find a room and jump in</p>
+      </div>
+
+      <div class="form-card browse-card">
+        <!-- Header row: title + action buttons -->
+        <div class="browse-top-row">
+          <h2 class="browse-title">Public Rooms</h2>
+          <div class="browse-top-actions">
+            <button id="btn-refresh-rooms" class="btn btn-icon-pill" title="Refresh room list" aria-label="Refresh">
+              🔄
+            </button>
+          </div>
+        </div>
+
+        <!-- Room list -->
+        <div id="rooms-list" class="rooms-list">
+          <p class="loading-text">Loading rooms...</p>
+        </div>
+
+        <!-- Back button at bottom -->
+        <button id="btn-back-to-lobby" class="btn btn-outline btn-large">
+          ← Back to Lobby
+        </button>
       </div>
     </div>
   </div>
@@ -145,8 +218,33 @@
     </canvas>
     <div id="anim-overlay"></div>
     <div id="toast-container" aria-live="polite" role="status"></div>
+    <div id="ping-indicator" class="ping-indicator" aria-live="polite">
+      <span class="ping-dot"></span>
+      <span class="ping-ms">-- ms</span>
+    </div>
+    <button id="btn-manage-players" class="btn-manage-players" style="display: none;" title="Manage Players">👥</button>
     <button id="btn-fullscreen" class="btn-fullscreen" title="Fullscreen / Landscape"
       aria-label="Toggle fullscreen">⛶</button>
+  </div>
+
+  <!-- Manage Players Modal -->
+  <div id="manage-players-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Manage Players</h3>
+        <button id="btn-close-manage" class="btn-close">✕</button>
+      </div>
+      <ul id="manage-player-list"></ul>
+    </div>
+  </div>
+
+  <!-- Reconnecting Overlay -->
+  <div id="reconnect-overlay" class="reconnect-overlay" style="display: none;">
+    <div class="reconnect-card">
+      <div class="spinner"></div>
+      <h3>Reconnecting...</h3>
+      <p id="reconnect-message">Attempting to reconnect to server</p>
+    </div>
   </div>
 
   <!-- Fallback shown only if a game script fails to load (e.g. dropped connection) -->

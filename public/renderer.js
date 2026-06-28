@@ -818,6 +818,8 @@ const Renderer = (() => {
   function drawTurnTimer(ctx, turnTimer, myId, W, H) {
     if (!turnTimer) return;
     const { playerId, startTime, durationMs } = turnTimer;
+    // Safeguard: validate startTime
+    if (!startTime || startTime > Date.now()) return;
     const elapsed = Date.now() - startTime;
     const remaining = Math.max(0, durationMs - elapsed);
     const fraction = remaining / durationMs;

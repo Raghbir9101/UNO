@@ -18,6 +18,16 @@
   let _autoDrawTimer = null;     // pending auto-draw timeout
   let _lastServerSeq = 0;        // last server-issued room_updated seq; rejects stale events
 
+  // ── Ping measurement ───────────────────────────────────────────────────────
+  let _pingLatency = null;
+  let _pingInterval = null;
+  let _pingTimestamp = null;
+
+  // ── Connection state ───────────────────────────────────────────────────────
+  let _connectionState = 'connected';
+  let _reconnectAttempts = 0;
+  let _lastSlowToast = 0;
+
   // ── Draw animation sync ────────────────────────────────────────────────────
   // When a multi-card draw happens, we reveal cards one-by-one in sync with
   // the fly animation instead of applying the full hand/count instantly.
@@ -34,15 +44,21 @@
   // Shared helper: map opponent index → screen side
   // oppIdx is 0-based among opponents (0 = next player clockwise)
   // oppCount = total number of opponents
+  // MUST stay in sync with the nLeft/nRight/nTop split in renderer.js drawOpponents()
   function computeSide(oppIdx, oppCount) {
     let nLeft = 0, nRight = 0;
-    if (oppCount <= 2) { nLeft = 0; nRight = 0; }
+    if      (oppCount === 1) { nLeft = 0; nRight = 0; }
+    else if (oppCount === 2) { nLeft = 0; nRight = 0; }
     else if (oppCount === 3) { nLeft = 1; nRight = 1; }
-    else if (oppCount <= 5) { nLeft = 1; nRight = 1; }
+    else if (oppCount === 4) { nLeft = 1; nRight = 1; }
+    else if (oppCount === 5) { nLeft = 1; nRight = 1; }
     else if (oppCount === 6) { nLeft = 2; nRight = 2; }
-    else if (oppCount <= 9) { nLeft = Math.floor(oppCount / 3); nRight = Math.floor(oppCount / 3); }
-    else if (oppCount <= 12) { nLeft = Math.ceil(oppCount / 3); nRight = Math.floor(oppCount / 3); }
-    else { nLeft = Math.round(oppCount / 3); nRight = Math.round(oppCount / 3); }
+    else if (oppCount <= 9)  { nLeft = Math.floor(oppCount / 3); nRight = Math.floor(oppCount / 3); }
+    else if (oppCount <= 12) { nLeft = Math.ceil(oppCount / 3);  nRight = Math.floor(oppCount / 3); }
+    else                     { nLeft = Math.round(oppCount / 3); nRight = Math.round(oppCount / 3); }
+    // leftOps  = opps.slice(0, nLeft)           → indices 0 .. nLeft-1
+    // topOps   = opps.slice(nLeft, n-nRight)    → indices nLeft .. n-nRight-1
+    // rightOps = opps.slice(n-nRight)           → indices n-nRight .. n-1
     if (oppIdx < nLeft) return 'left';
     if (oppIdx >= oppCount - nRight) return 'right';
     return 'top';
@@ -52,10 +68,16 @@
   const $lobby = document.getElementById('lobby');
   const $waitingRoom = document.getElementById('waiting-room');
   const $gameScreen = document.getElementById('game-screen');
+  const $browseScreen = document.getElementById('browse-screen');
   const $nickname = document.getElementById('nickname');
   const $roomCode = document.getElementById('room-code');
   const $btnCreate = document.getElementById('btn-create');
   const $btnJoin = document.getElementById('btn-join');
+  const $btnBrowse = document.getElementById('btn-browse');
+  const $btnBackToLobby = document.getElementById('btn-back-to-lobby');
+  const $btnRefreshRooms = document.getElementById('btn-refresh-rooms');
+  const $roomsList = document.getElementById('rooms-list');
+  const $privateRoomToggle = document.getElementById('private-room-toggle');
   const $btnStart = document.getElementById('btn-start');
   const $btnLeave = document.getElementById('btn-leave');
   const $displayCode = document.getElementById('display-code');
@@ -66,6 +88,10 @@
   const $canvas = document.getElementById('game-canvas');
   const $toastContainer = document.getElementById('toast-container');
   const $createSection = document.getElementById('create-section');
+  const $btnManagePlayers = document.getElementById('btn-manage-players');
+  const $manageModal = document.getElementById('manage-players-modal');
+  const $btnCloseManage = document.getElementById('btn-close-manage');
+  const $managePlayerList = document.getElementById('manage-player-list');
 
   // ── Pre-fill nickname from last session ───────────────────────────────────
   const _savedNick = localStorage.getItem('uno_nickname');
@@ -86,7 +112,16 @@
   }
 
   if (_inviteCode) {
-    $createSection.style.display = 'none';          // hide Create Room + divider
+    // With the new tab layout, hide just the tab switcher bar and force the
+    // Join panel visible — the room code and Join button must always show.
+    const $tabBar = document.querySelector('.tab-bar');
+    if ($tabBar) $tabBar.style.display = 'none';
+
+    const $panelCreate = document.getElementById('panel-create');
+    const $panelJoin   = document.getElementById('panel-join');
+    if ($panelCreate) $panelCreate.classList.add('tab-panel--hidden');
+    if ($panelJoin)   $panelJoin.classList.remove('tab-panel--hidden');
+
     $roomCode.value = _inviteCode;
     $roomCode.setAttribute('readonly', 'readonly'); // code is fixed from link
     $nickname.placeholder = 'Enter your nickname to join';
@@ -165,7 +200,7 @@
 
   // ── Screen Switching ───────────────────────────────────────────────────────
   function showScreen(screen) {
-    [$lobby, $waitingRoom, $gameScreen].forEach(s => s.classList.remove('active'));
+    [$lobby, $waitingRoom, $gameScreen, $browseScreen].forEach(s => s.classList.remove('active'));
     screen.classList.add('active');
     if (screen === $gameScreen) {
       setTimeout(() => Game.resizeCanvas(), 50);
@@ -356,8 +391,10 @@
       return;
     }
 
+    const isPrivate = $privateRoomToggle?.checked || false;
+
     $btnCreate.disabled = true;
-    socket.emit('create_room', { nickname: nick }, (res) => {
+    socket.emit('create_room', { nickname: nick, isPrivate }, (res) => {
       $btnCreate.disabled = false;
       if (res.error) return showToast(res.error, true);
 
@@ -469,15 +506,22 @@
 
   // ── Lobby: Leave Room ──────────────────────────────────────────────────────
   $btnLeave.addEventListener('click', () => {
-    socket.disconnect();
-    socket.connect();
-    currentRoomCode = null;
-    myPlayerId = null;
-    players = [];
-    _lastServerSeq = 0;
-    sessionStorage.removeItem('uno_session');  // clear so next visit starts fresh
-    history.replaceState({}, '', window.location.pathname); // clean the URL
-    showScreen($lobby);
+    if (!currentRoomCode) return;
+
+    socket.emit('leave_room', { roomCode: currentRoomCode }, (res) => {
+      if (res?.success) {
+        currentRoomCode = null;
+        myPlayerId = null;
+        players = [];
+        _lastServerSeq = 0;
+        sessionStorage.removeItem('uno_session');
+        history.replaceState({}, '', window.location.pathname);
+        showScreen($lobby);
+        showToast('Left the room');
+      } else {
+        showToast(res?.error || 'Could not leave room', true);
+      }
+    });
   });
 
   // ── Lobby: Start Game ──────────────────────────────────────────────────────
@@ -497,9 +541,135 @@
     });
   });
 
+  // ── Lobby Tabs ─────────────────────────────────────────────────────────────
+  const $tabCreate   = document.getElementById('tab-create');
+  const $tabJoin     = document.getElementById('tab-join');
+  const $panelCreate = document.getElementById('panel-create');
+  const $panelJoin   = document.getElementById('panel-join');
+
+  function switchTab(active) {
+    const isCreate = active === 'create';
+    $tabCreate.classList.toggle('tab-btn--active', isCreate);
+    $tabCreate.setAttribute('aria-selected', String(isCreate));
+    $tabJoin.classList.toggle('tab-btn--active', !isCreate);
+    $tabJoin.setAttribute('aria-selected', String(!isCreate));
+
+    if (isCreate) {
+      $panelCreate.classList.remove('tab-panel--hidden');
+      $panelJoin.classList.add('tab-panel--hidden');
+    } else {
+      $panelJoin.classList.remove('tab-panel--hidden');
+      $panelCreate.classList.add('tab-panel--hidden');
+      $roomCode.focus();
+    }
+  }
+
+  if ($tabCreate) $tabCreate.addEventListener('click', () => switchTab('create'));
+  if ($tabJoin)   $tabJoin.addEventListener('click',   () => switchTab('join'));
+
+  // ── Browse Rooms ───────────────────────────────────────────────────────────
+  $btnBrowse.addEventListener('click', () => {
+    showScreen($browseScreen);
+    loadRoomsList();
+  });
+
+  $btnBackToLobby.addEventListener('click', () => {
+    showScreen($lobby);
+  });
+
+  $btnRefreshRooms.addEventListener('click', () => {
+    loadRoomsList();
+    showToast('Refreshing rooms...');
+  });
+
+  function loadRoomsList() {
+    $roomsList.innerHTML = '<p class="loading-text">Loading rooms...</p>';
+
+    socket.emit('browse_rooms', (res) => {
+      if (!res || !res.rooms) {
+        $roomsList.innerHTML = '<p class="empty-text">Failed to load rooms</p>';
+        return;
+      }
+
+      if (res.rooms.length === 0) {
+        $roomsList.innerHTML = '<p class="empty-text">No public rooms available. Create one!</p>';
+        return;
+      }
+
+      $roomsList.innerHTML = '';
+      res.rooms.forEach(room => {
+        const roomCard = document.createElement('div');
+        roomCard.className = 'room-card';
+
+        const roomInfo = document.createElement('div');
+        roomInfo.className = 'room-info';
+
+        const roomCode = document.createElement('div');
+        roomCode.className = 'room-code-text';
+        roomCode.textContent = room.code;
+
+        const roomHost = document.createElement('div');
+        roomHost.className = 'room-host';
+        roomHost.textContent = room.hostNickname;
+
+        const roomMeta = document.createElement('div');
+        roomMeta.className = 'room-meta';
+
+        const roomPlayers = document.createElement('span');
+        roomPlayers.className = 'room-players';
+        roomPlayers.textContent = `${room.playerCount}/${room.maxPlayers}`;
+
+        const roomStatus = document.createElement('span');
+        roomStatus.className = `room-status ${room.status}`;
+        roomStatus.textContent = room.status === 'lobby' ? 'Waiting' : 'In Game';
+
+        roomMeta.appendChild(roomPlayers);
+        roomMeta.appendChild(roomStatus);
+
+        roomInfo.appendChild(roomCode);
+        roomInfo.appendChild(roomHost);
+        roomInfo.appendChild(roomMeta);
+
+        const joinBtn = document.createElement('button');
+        joinBtn.className = 'btn btn-join-room';
+        joinBtn.textContent = room.status === 'lobby' ? 'Join' : 'Spectate';
+        joinBtn.addEventListener('click', () => {
+          const nick = $nickname.value.trim();
+          if (!nick) {
+            showToast('Please enter a nickname first', true);
+            showScreen($lobby);
+            $nickname.focus();
+            return;
+          }
+
+          joinBtn.disabled = true;
+          const spectator = room.status === 'playing';
+          socket.emit('join_room', { roomCode: room.code, nickname: nick, spectator }, (res) => {
+            joinBtn.disabled = false;
+            if (res.error) {
+              showToast(res.error, true);
+            } else {
+              handleJoinSuccess(res, room.code);
+            }
+          });
+        });
+
+        roomCard.appendChild(roomInfo);
+        roomCard.appendChild(joinBtn);
+        $roomsList.appendChild(roomCard);
+      });
+    });
+  }
+
   // ── Enter key for inputs ───────────────────────────────────────────────────
   $nickname.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') $btnCreate.click();
+    if (e.key !== 'Enter') return;
+    // Trigger whichever tab is active
+    if ($tabCreate && $tabCreate.classList.contains('tab-btn--active')) {
+      $btnCreate.click();
+    } else {
+      $btnJoin.click();
+    }
   });
   $roomCode.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') $btnJoin.click();
@@ -511,18 +681,111 @@
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // ── Connection Management ─────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function showReconnectOverlay() {
+    const $overlay = document.getElementById('reconnect-overlay');
+    if ($overlay) $overlay.style.display = 'flex';
+  }
+
+  function hideReconnectOverlay() {
+    const $overlay = document.getElementById('reconnect-overlay');
+    if ($overlay) $overlay.style.display = 'none';
+  }
+
+  function updateReconnectMessage(msg) {
+    const $msg = document.getElementById('reconnect-message');
+    if ($msg) $msg.textContent = msg;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── Ping Monitoring ───────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function startPingMonitoring() {
+    clearInterval(_pingInterval);
+    _pingInterval = setInterval(() => {
+      _pingTimestamp = Date.now();
+      socket.emit('ping_measure');
+
+      // Warn about slow connection (max once per minute)
+      if (_pingLatency > 500 && Date.now() - _lastSlowToast > 60000) {
+        showToast('⚠ Slow connection detected');
+        _lastSlowToast = Date.now();
+      }
+    }, 3000); // Check every 3 seconds
+  }
+
+  function updatePingDisplay() {
+    const $ping = document.getElementById('ping-indicator');
+    if (!$ping) return;
+
+    const $pingMs = $ping.querySelector('.ping-ms');
+    if (!$pingMs) return;
+
+    if (_pingLatency === null) {
+      $pingMs.textContent = '-- ms';
+      $ping.className = 'ping-indicator';
+      return;
+    }
+
+    $pingMs.textContent = `${_pingLatency} ms`;
+
+    if (_pingLatency < 100) {
+      $ping.className = 'ping-indicator';
+    } else if (_pingLatency < 300) {
+      $ping.className = 'ping-indicator yellow';
+    } else {
+      $ping.className = 'ping-indicator red';
+    }
+  }
+
+  socket.on('pong_measure', () => {
+    if (_pingTimestamp) {
+      _pingLatency = Date.now() - _pingTimestamp;
+      updatePingDisplay();
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // ── Auto-reconnect on page refresh ────────────────────────────────────────
   // ═══════════════════════════════════════════════════════════════════════════
 
   socket.on('connect', () => {
-    const saved = (() => { try { return JSON.parse(sessionStorage.getItem('uno_session')); } catch { return null; } })();
-    if (!saved || !saved.roomCode || !saved.nickname || currentRoomCode) return;
+    const saved = (() => {
+      try {
+        return JSON.parse(sessionStorage.getItem('uno_session'));
+      } catch {
+        return null;
+      }
+    })();
+
+    // Validate session data
+    if (!saved || !saved.roomCode || !saved.nickname) {
+      startPingMonitoring();
+      return;
+    }
+
+    // Prevent duplicate reconnection if already in room
+    if (currentRoomCode) {
+      startPingMonitoring();
+      return;
+    }
+
+    showReconnectOverlay();
+    updateReconnectMessage('Rejoining your room...');
 
     // Attempt to re-join the saved room silently
     socket.emit('join_room', { roomCode: saved.roomCode, nickname: saved.nickname, playerId: saved.playerId }, (res) => {
+      hideReconnectOverlay();
+
       if (res.error) {
         sessionStorage.removeItem('uno_session');
-        return; // Room gone — just show lobby
+        showToast(`Could not reconnect: ${res.error}`, true);
+        showScreen($lobby);
+        startPingMonitoring();
+        return; // Room gone — show lobby
       }
       myPlayerId = res.playerId;
       myNickname = res.nickname;
@@ -543,7 +806,7 @@
       stackingEnabled = res.settings?.stacking || false;
 
       if (res.gameInProgress && res.reconnected) {
-        showToast('Reconnected to game!');
+        showToast('✓ Reconnected successfully!');
         // Build player list with known card counts (will be updated by game_state)
         const playerOrder = res.players.map(p => ({
           id: p.id, nickname: p.nickname, cardCount: 7,
@@ -554,6 +817,8 @@
         renderPlayerList();
         showScreen($waitingRoom);
       }
+
+      startPingMonitoring();
     });
   });
 
@@ -568,15 +833,30 @@
     _lastServerSeq = seq;
     players = data.players;      // exact order from server, no local mutation
     hostId = data.hostId;
+    isHost = myPlayerId === hostId;
     if (data.settings) {
       $stackingToggle.checked = data.settings.stacking;
       stackingEnabled = data.settings.stacking || false;
     }
     renderPlayerList();
+    updateManagePlayersButton();
   });
 
   socket.on('player_kicked', (data) => {
     showToast(`${data.nickname} was kicked from the room`);
+    // During an active game, prune the kicked player from the renderer immediately.
+    // The server will follow up with game_state + room_updated to confirm,
+    // but we act eagerly here so the canvas never shows a ghost player.
+    if (data.playerId && Game.state?.players?.length) {
+      const pruned = Game.state.players.filter(p => p.id !== data.playerId);
+      if (pruned.length !== Game.state.players.length) {
+        Game.setPlayers(pruned);
+      }
+    }
+  });
+
+  socket.on('player_left', (data) => {
+    showToast(`${data.nickname} left the room`);
   });
 
   socket.on('kicked_from_room', () => {
@@ -918,7 +1198,28 @@
   });
 
   socket.on('disconnect', () => {
-    showToast('Disconnected — trying to reconnect...', true);
+    _connectionState = 'reconnecting';
+    _reconnectAttempts = 0;
+    clearInterval(_pingInterval);
+    _pingLatency = null;
+    updatePingDisplay();
+    showReconnectOverlay();
+    showToast('Connection lost — reconnecting...', true);
+  });
+
+  // Socket.IO reconnection events
+  socket.io.on('reconnect_attempt', (attempt) => {
+    _reconnectAttempts = attempt;
+    updateReconnectMessage(`Reconnect attempt ${attempt}...`);
+  });
+
+  socket.io.on('reconnect_failed', () => {
+    updateReconnectMessage('Reconnection failed. Please refresh the page.');
+  });
+
+  socket.io.on('reconnect', () => {
+    _connectionState = 'connected';
+    hideReconnectOverlay();
   });
 
   // Mid-session reconnect (socket temporarily dropped)
@@ -944,6 +1245,7 @@
         renderPlayerList();
         showScreen($waitingRoom);
       }
+      startPingMonitoring();
     });
   });
 
@@ -982,5 +1284,89 @@
     };
 
     Game.onShowToast = showToast;
+    updateManagePlayersButton();
+  }
+
+  // ── Manage Players Modal ───────────────────────────────────────────────────
+
+  function updateManagePlayersButton() {
+    if ($btnManagePlayers && isHost && $gameScreen.classList.contains('active')) {
+      $btnManagePlayers.style.display = 'block';
+    } else if ($btnManagePlayers) {
+      $btnManagePlayers.style.display = 'none';
+    }
+  }
+
+  function renderManagePlayerList() {
+    $managePlayerList.innerHTML = '';
+
+    // Build a quick set of which player IDs are in the active game
+    // (game.js state.players has them in game-turn order)
+    const gamePlayerIds = new Set((Game.state?.players || []).map(p => p.id));
+
+    players.forEach(p => {
+      const li = document.createElement('li');
+      li.className = 'manage-player-item';
+
+      const avatar = document.createElement('div');
+      avatar.className = 'player-avatar';
+      avatar.textContent = p.nickname.charAt(0).toUpperCase();
+      li.appendChild(avatar);
+
+      const infoWrap = document.createElement('div');
+      infoWrap.className = 'manage-player-info';
+
+      const name = document.createElement('span');
+      name.className = 'manage-player-name';
+      name.textContent = p.nickname;
+      if (!p.connected) name.style.opacity = '0.45';
+      infoWrap.appendChild(name);
+
+      if (!p.connected) {
+        const offTag = document.createElement('span');
+        offTag.className = 'manage-player-status';
+        offTag.textContent = 'Disconnected';
+        infoWrap.appendChild(offTag);
+      }
+      li.appendChild(infoWrap);
+
+      if (p.id === hostId) {
+        const badge = document.createElement('span');
+        badge.className = 'host-badge';
+        badge.textContent = 'HOST';
+        li.appendChild(badge);
+      } else if (isHost) {
+        // Host can kick any non-host player at any time
+        const kickBtn = document.createElement('button');
+        kickBtn.className = 'btn-kick';
+        kickBtn.textContent = '✕ Kick';
+        kickBtn.title = p.connected ? 'Kick this player from the game' : 'Remove disconnected player';
+        kickBtn.addEventListener('click', () => {
+          const msg = p.connected
+            ? `Kick ${p.nickname} from the game? This cannot be undone.`
+            : `Remove disconnected player ${p.nickname}?`;
+          if (confirm(msg)) {
+            socket.emit('kick_player', { roomCode: currentRoomCode, targetPlayerId: p.id });
+            $manageModal.style.display = 'none';
+          }
+        });
+        li.appendChild(kickBtn);
+      }
+
+      $managePlayerList.appendChild(li);
+    });
+  }
+
+  if ($btnManagePlayers) {
+    $btnManagePlayers.addEventListener('click', () => {
+      renderManagePlayerList();
+      $manageModal.style.display = 'flex';
+    });
+  }
+
+  if ($btnCloseManage) {
+    $btnCloseManage.addEventListener('click', () => {
+      $manageModal.style.display = 'none';
+    });
   }
 })();

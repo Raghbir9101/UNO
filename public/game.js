@@ -875,11 +875,8 @@ const Game = (() => {
   }
 
   function setTurnTimer(playerId, durationMs) {
-    // Reset timer on every state update for that player
-    if (!state.turnTimer || state.turnTimer.playerId !== playerId) {
-      state.turnTimer = { playerId, startTime: Date.now(), durationMs };
-    }
-    // If same player, don't reset startTime (let it count down)
+    // ALWAYS reset startTime to fix stuck timer bug
+    state.turnTimer = { playerId, startTime: Date.now(), durationMs };
   }
 
   function setDealMode(active) {

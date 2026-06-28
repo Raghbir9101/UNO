@@ -206,13 +206,24 @@ function getSocketById(socketId) {
 io.on('connection', (socket) => {
   console.log(`[connect] ${socket.id}`);
 
+  // ── Ping Measurement ──
+  socket.on('ping_measure', () => {
+    socket.emit('pong_measure');
+  });
+
+  // ── Browse Rooms ──
+  socket.on('browse_rooms', (callback) => {
+    const publicRooms = roomManager.getPublicRooms();
+    callback({ rooms: publicRooms });
+  });
+
   // ── Create Room ──
-  socket.on('create_room', ({ nickname }, callback) => {
+  socket.on('create_room', ({ nickname, isPrivate }, callback) => {
     if (!nickname || nickname.trim().length === 0) {
       return callback({ error: 'Nickname is required' });
     }
     const name = nickname.trim().substring(0, 16);
-    const { roomCode, playerId, player } = roomManager.createRoom(name);
+    const { roomCode, playerId, player } = roomManager.createRoom(name, { isPrivate: !!isPrivate });
     roomManager.setPlayerSocket(roomCode, playerId, socket.id);
 
     socket.join(roomCode);
@@ -235,10 +246,17 @@ io.on('connection', (socket) => {
     const result = roomManager.joinRoom(code, name, existingPlayerId, { spectator, godPassword });
 
     if (result.error) {
+      console.log(`[join] Failed for ${name}: ${result.error}`);
       return callback({ error: result.error, canSpectate: result.canSpectate });
     }
 
     const { playerId, player, room, reconnected } = result;
+
+    if (reconnected) {
+      console.log(`[reconnect] ${name} (${playerId}) rejoined ${code}`);
+    } else {
+      console.log(`[join] ${name} (${playerId}) joined ${code}`);
+    }
     roomManager.setPlayerSocket(code, playerId, socket.id);
     roomManager.cancelRoomCleanup(code);
 
@@ -281,44 +299,117 @@ io.on('connection', (socket) => {
   socket.on('kick_player', ({ roomCode, targetPlayerId }) => {
     const room = roomManager.getRoom(roomCode);
     if (!room) return;
-    if (room.status !== 'lobby') return;
-    if (socket.data?.playerId !== room.hostId) return; // Only host can kick
-    if (targetPlayerId === room.hostId) return; // Can't kick self
+
+    if (socket.data?.playerId !== room.hostId) {
+      return socket.emit('error', { message: 'Only host can kick players' });
+    }
+
+    if (targetPlayerId === room.hostId) {
+      return socket.emit('error', { message: 'Cannot kick yourself' });
+    }
 
     const targetPlayer = room.players.find(p => p.id === targetPlayerId);
-    if (!targetPlayer) return;
+    if (!targetPlayer) {
+      return socket.emit('error', { message: 'Player not found' });
+    }
 
-    // Find the target socket
+    const wasPlaying = room.status === 'playing' && !!room.gameState;
+    const nickname   = targetPlayer.nickname;
+
+    // ── Step 1: Find and evict the target socket BEFORE removing from room ──
     let targetSocketId = null;
-    if (room.socketMap && room.socketMap[targetPlayerId]) {
-      targetSocketId = room.socketMap[targetPlayerId];
-    } else {
-      // Fallback: Find target socket via connected clients in the room
-      const clients = io.sockets.adapter.rooms.get(roomCode);
-      if (clients) {
-        for (const clientId of clients) {
-          const clientSocket = io.sockets.sockets.get(clientId);
-          if (clientSocket && clientSocket.data?.playerId === targetPlayerId) {
-            targetSocketId = clientId;
-            break;
-          }
+    const clients = io.sockets.adapter.rooms.get(roomCode);
+    if (clients) {
+      for (const clientId of clients) {
+        const cs = io.sockets.sockets.get(clientId);
+        if (cs && cs.data?.playerId === targetPlayerId) {
+          targetSocketId = clientId;
+          break;
         }
       }
     }
-
-    roomManager.removePlayer(roomCode, targetPlayerId);
-
     if (targetSocketId) {
       const targetSocket = io.sockets.sockets.get(targetSocketId);
       if (targetSocket) {
+        targetSocket.emit('kicked_from_room');  // tell client first
         targetSocket.leave(roomCode);
         targetSocket.data = {};
-        targetSocket.emit('kicked_from_room');
       }
     }
 
-    io.to(roomCode).emit('player_kicked', { nickname: targetPlayer.nickname });
+    // ── Step 2: Remove from game state (if game is live) ──
+    let kickWinner = null;
+    if (wasPlaying) {
+      clearTimeout(_autoPlayTimers[roomCode]); // stop auto-play for kicked player
+      const kickResult = gameLogic.removePlayerFromGame(room.gameState, targetPlayerId);
+      if (!kickResult.notInGame) {
+        kickWinner = kickResult.winner; // null = game continues, string = winner id
+      }
+    }
+
+    // ── Step 3: Permanently remove from room (no reconnect window) ──
+    roomManager.forceRemovePlayer(roomCode, targetPlayerId);
+
+    // ── Step 4: Notify remaining players ──
+    io.to(roomCode).emit('player_kicked', { nickname, playerId: targetPlayerId });
+    console.log(`[kick] ${nickname} (${targetPlayerId}) kicked from ${roomCode} (status: ${room.status})`);
+
+    if (!wasPlaying) {
+      // Lobby kick — just refresh the player list
+      broadcastRoomUpdate(roomCode);
+      return;
+    }
+
+    // ── Step 5: Game was active ──
+    if (kickWinner) {
+      // Only 1 player left — they win
+      const winner = room.players.find(p => p.id === kickWinner);
+      io.to(roomCode).emit('player_won', {
+        playerId: kickWinner,
+        nickname: winner ? winner.nickname : 'Unknown',
+      });
+      // End the game properly
+      clearTimeout(_autoPlayTimers[roomCode]);
+      room.status = 'lobby';
+      broadcastRoomUpdate(roomCode);
+    } else {
+      // Game continues with remaining players
+      broadcastGameState(roomCode);
+      broadcastRoomUpdate(roomCode);
+    }
+  });
+
+  // ── Leave Room (voluntary) ──
+  socket.on('leave_room', ({ roomCode }, callback) => {
+    const playerId = socket.data?.playerId;
+    if (!playerId) return callback?.({ error: 'Not in a room' });
+
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return callback?.({ error: 'Room not found' });
+
+    const player = room.players.find(p => p.id === playerId);
+    const spectator = room.spectators?.find(p => p.id === playerId);
+
+    if (!player && !spectator) {
+      return callback?.({ error: 'Not a member of this room' });
+    }
+
+    const nickname = player?.nickname || spectator?.nickname || 'Player';
+
+    // Remove player
+    roomManager.removePlayer(roomCode, playerId);
+
+    // Leave socket room
+    socket.leave(roomCode);
+    socket.data = {};
+
+    // Notify others
+    io.to(roomCode).emit('player_left', { nickname });
     broadcastRoomUpdate(roomCode);
+
+    console.log(`[leave] ${nickname} (${playerId}) voluntarily left ${roomCode}`);
+
+    callback?.({ success: true });
   });
 
   // ── Toggle Stacking ──
