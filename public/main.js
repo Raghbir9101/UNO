@@ -6,7 +6,7 @@
   'use strict';
 
   const socket = io({
-    transports: ['websocket', 'polling'],  // WebSocket first = ~500ms lower latency
+    transports: ['websocket', 'polling'],  // WebSocket first for lowest latency
     upgrade: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
