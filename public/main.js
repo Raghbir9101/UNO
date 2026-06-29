@@ -5,7 +5,13 @@
 (function () {
   'use strict';
 
-  const socket = io();
+  const socket = io({
+    transports: ['websocket', 'polling'],  // WebSocket first = ~500ms lower latency
+    upgrade: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    timeout: 10000,
+  });
 
   // ── Session state ──────────────────────────────────────────────────────────
   let myPlayerId = null;
@@ -714,7 +720,7 @@
         showToast('⚠ Slow connection detected');
         _lastSlowToast = Date.now();
       }
-    }, 3000); // Check every 3 seconds
+    }, 5000); // Check every 5 seconds (reduced from 3s to save bandwidth)
   }
 
   function updatePingDisplay() {
@@ -743,7 +749,9 @@
 
   socket.on('pong_measure', () => {
     if (_pingTimestamp) {
-      _pingLatency = Date.now() - _pingTimestamp;
+      const raw = Date.now() - _pingTimestamp;
+      // Exponential moving average for smoother display (α = 0.3)
+      _pingLatency = _pingLatency === null ? raw : Math.round(_pingLatency * 0.7 + raw * 0.3);
       updatePingDisplay();
     }
   });

@@ -16,6 +16,14 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' },
+  // ── Performance: force WebSocket-first to avoid long-polling latency ──
+  transports: ['websocket', 'polling'],
+  allowUpgrades: true,
+  // Faster heartbeat detection (default is 25s/20s which masks dead connections)
+  pingInterval: 10000,   // 10s between server pings
+  pingTimeout: 5000,     // 5s to respond before considered dead
+  // Reduce per-message overhead
+  perMessageDeflate: false,  // compression adds CPU latency on small payloads
 });
 
 const PORT = process.env.PORT || 3000;
@@ -27,11 +35,20 @@ app.set('views', path.join(__dirname, '..', 'views'));
 // ── Compression ──
 app.use(compression());
 
-// Disable caching for development
+// Disable caching for HTML pages only (not static assets / socket.io)
 app.use((req, res, next) => {
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-  res.set('Pragma', 'no-cache');
-  res.set('Expires', '0');
+  // Don't break socket.io or static asset caching
+  if (req.path.startsWith('/socket.io')) return next();
+  const ext = path.extname(req.path);
+  if (ext && ext !== '.html' && ext !== '.ejs') {
+    // Static assets: cache for 1 hour
+    res.set('Cache-Control', 'public, max-age=3600');
+  } else {
+    // HTML/dynamic pages: no cache
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+  }
   next();
 });
 
