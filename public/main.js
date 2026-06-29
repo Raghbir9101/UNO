@@ -31,8 +31,8 @@
   // ── Draw animation sync ────────────────────────────────────────────────────
   // When a multi-card draw happens, we reveal cards one-by-one in sync with
   // the fly animation instead of applying the full hand/count instantly.
-  const CARD_FLY_MS = 180; // ms a single card takes to fly (Four Colors style)
-  const CARD_STAGGER = 55; // ms between staggered cards (rapid dealing)
+  const CARD_FLY_MS = 380; // ms a single card takes to fly (Four Colors style)
+  const CARD_STAGGER = 120; // ms between staggered cards (rapid dealing)
   let _bufferedHand = null;          // full hand stored while incremental reveal runs
   let _handAnimating = false;         // true while self draw animation is in progress
   const _drawAnimPlayers = new Set(); // playerIds currently mid draw-animation (for others)
@@ -891,8 +891,10 @@
     // Deal cards one at a time: P1→P2→P3→P4→P1→P2→...
     // Each card uses flyCardToPlayer with an onLand callback that
     // increments the count and reveals the hand card on arrival.
+    // Cards are dealt SEQUENTIALLY — each card waits for the previous
+    // to land before the next launches, ensuring perfect sync.
     const CARDS_EACH = 7;
-    const DEAL_STAGGER = 55; // ms between consecutive card launches
+    const DEAL_GAP = 80; // ms pause after a card lands before next launches
 
     // Build deal order starting from local player
     const myIdx = playerOrder.findIndex(p => p.id === myPlayerId);
@@ -908,39 +910,46 @@
     // hand_updated arrives BEFORE game_started — _bufferedDealHand already has cards
 
     const totalCards = CARDS_EACH * N;
-    for (let seq = 0; seq < totalCards; seq++) {
+
+    // Sequential deal: launch card N, wait for it to land + DEAL_GAP, then launch N+1
+    function dealCard(seq) {
+      if (seq >= totalCards) return; // all cards dealt
+
       const playerSlot = seq % N;
       const dp = dealOrder[playerSlot];
       const isLastCard = seq === totalCards - 1;
 
-      // Launch fly animation with stagger
-      setTimeout(() => {
-        Game.flyCardToPlayer({
-          toSelf: dp.toSelf,
-          targetPlayerId: dp.toSelf ? null : dp.id,
-          onLand: () => {
-            // Card has visually arrived — sync state NOW
-            const pl = Game.state.players.find(x => x.id === dp.id);
-            if (pl) pl.cardCount++;
+      Game.flyCardToPlayer({
+        toSelf: dp.toSelf,
+        targetPlayerId: dp.toSelf ? null : dp.id,
+        onLand: () => {
+          // Card has visually arrived — sync state NOW
+          const pl = Game.state.players.find(x => x.id === dp.id);
+          if (pl) pl.cardCount++;
 
-            // Reveal one hand card in sync when dealt to local player
-            if (dp.toSelf && _bufferedDealHand) {
-              const selfCount = Game.state.players.find(x => x.id === myPlayerId)?.cardCount || 0;
-              Game.state.myHand = _bufferedDealHand.slice(0, selfCount);
-            }
+          // Reveal one hand card in sync when dealt to local player
+          if (dp.toSelf && _bufferedDealHand) {
+            const selfCount = Game.state.players.find(x => x.id === myPlayerId)?.cardCount || 0;
+            Game.state.myHand = _bufferedDealHand.slice(0, selfCount);
+          }
 
-            // Last card of the whole deal
-            if (isLastCard) {
-              if (_bufferedDealHand) {
-                Game.setHand(_bufferedDealHand); // final proper setHand
-                _bufferedDealHand = null;
-              }
-              _dealInProgress = false;
+          // Last card of the whole deal
+          if (isLastCard) {
+            if (_bufferedDealHand) {
+              Game.setHand(_bufferedDealHand); // final proper setHand
+              _bufferedDealHand = null;
             }
-          },
-        });
-      }, seq * DEAL_STAGGER);
+            _dealInProgress = false;
+          } else {
+            // Chain: launch next card after a short gap
+            setTimeout(() => dealCard(seq + 1), DEAL_GAP);
+          }
+        },
+      });
     }
+
+    // Kick off the first card
+    dealCard(0);
   });
 
   socket.on('hand_updated', (data) => {
@@ -1045,14 +1054,14 @@
 
     // Show label + flash effects
     if (cardType === 'draw2') {
-      Game.showDomAnim('anim-plus', '+2', 1200);
-      Game.showDomAnim('anim-red-flash', '', 600);
+      Game.showDomAnim('anim-plus', '+2', 2000);
+      Game.showDomAnim('anim-red-flash', '', 1000);
     } else if (cardType === 'wild4') {
-      Game.showDomAnim('anim-plus', '+4', 1200);
-      Game.showDomAnim('anim-red-flash', '', 600);
+      Game.showDomAnim('anim-plus', '+4', 2000);
+      Game.showDomAnim('anim-red-flash', '', 1000);
     } else if (cardType === 'wild8') {
-      Game.showDomAnim('anim-plus', '+8', 1200);
-      Game.showDomAnim('anim-red-flash', '', 600);
+      Game.showDomAnim('anim-plus', '+8', 2000);
+      Game.showDomAnim('anim-red-flash', '', 1000);
     } else if (cardType === 'reverse') {
       Game.triggerAnimation('reverse');
     } else if (cardType === 'skip') {

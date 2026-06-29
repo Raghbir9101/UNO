@@ -54,7 +54,7 @@ const Game = (() => {
     el.className = 'anim-el ' + className;
     if (innerHTML) el.innerHTML = innerHTML;
     animOverlay.appendChild(el);
-    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, duration + 100);
+    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, duration + 200);
   }
 
   // ── FLIP Animation State ──
@@ -367,10 +367,10 @@ const Game = (() => {
     const endY     = targetCY - screenH / 2;
 
     const randomAngle = (Math.random() * 14 - 7);
-    const TOTAL_MS  = 420; // total flight time
-    const LIFT_MS   = 90;  // phase 1: lift
-    const TRAVEL_MS = 280; // phase 2: arc travel
-    const SETTLE_MS = 50;  // phase 3: settle
+    const TOTAL_MS  = 700; // total flight time
+    const LIFT_MS   = 140; // phase 1: lift
+    const TRAVEL_MS = 460; // phase 2: arc travel
+    const SETTLE_MS = 100; // phase 3: settle
 
     // Phase 1 — Lift
     flyEl.style.transition = `transform ${LIFT_MS}ms cubic-bezier(0.34,1.56,0.64,1)`;
@@ -557,7 +557,7 @@ const Game = (() => {
         state.myHand = [];
     }
 
-    if (discardChanged) showDomAnim('anim-card-played', '', 500);
+    if (discardChanged) showDomAnim('anim-card-played', '', 900);
   }
 
   function setWinner(id, name) { state.winner = id; state.winnerName = name; }
@@ -634,13 +634,13 @@ const Game = (() => {
       `will-change:transform;pointer-events:none;`;
     animOverlay.appendChild(snap);
 
-    // ── Animation: 180ms easeOutCubic, no fade, subtle arc, smooth rotation ──
-    const FLIGHT_MS = 180;
+    // ── Animation: 380ms easeOutCubic, no fade, subtle arc, smooth rotation ──
+    const FLIGHT_MS = 380;
     const startTime = performance.now();
     const dx = targetL - startL;
     const dy = targetT - startT;
-    // Very subtle arc: 15px upward for self, 15px downward for opponents
-    const arcH = toSelf ? -15 : -15;
+    // Subtle arc: 25px upward
+    const arcH = toSelf ? -25 : -25;
 
     function frame(now) {
       const t = Math.min(now - startTime, FLIGHT_MS);
@@ -727,7 +727,7 @@ const Game = (() => {
       `will-change:transform,opacity;pointer-events:none;`;
     animOverlay.appendChild(snap);
 
-    const duration  = 450;
+    const duration  = 750;
     const startTime = performance.now();
     const randomAngle = (Math.random() * 10 - 5);
 
@@ -735,7 +735,7 @@ const Game = (() => {
       const t    = Math.min(now - startTime, duration);
       const p    = t / duration;
       const ease = p < 0.5 ? 2*p*p : -1+(4-2*p)*p;
-      const arcY = Math.sin(p * Math.PI) * -60;
+      const arcY = Math.sin(p * Math.PI) * -80;
       const x    = (endL - startL) * ease;
       const y    = (endT - startT) * ease + arcY;
       const sc   = 1 - 0.15 * ease;
@@ -764,13 +764,13 @@ const Game = (() => {
 
   // ── Feature 6: Better UNO animation ──
   function triggerUnoAnim() {
-    showDomAnim('anim-uno-burst', 'UNO!', 600);
+    showDomAnim('anim-uno-burst', 'UNO!', 1400);
   }
 
   // ── Feature 7: Reverse animation ──
   function triggerReverseAnim() {
-    showDomAnim('anim-reverse-spin', '↻', 1000);
-    showDomAnim('anim-reverse-label', 'REVERSE', 1000);
+    showDomAnim('anim-reverse-spin', '↻', 1800);
+    showDomAnim('anim-reverse-label', 'REVERSE', 1800);
   }
 
   // ── Feature 8: Color change effect ──
@@ -781,10 +781,10 @@ const Game = (() => {
     const colorMap = { red: '#E53935', blue: '#1E88E5', green: '#43A047', yellow: '#FDD835' };
     el.style.setProperty('--ring-color', colorMap[color] || '#fff');
     if (animOverlay) animOverlay.appendChild(el);
-    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 700);
+    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 1400);
 
     // Table flash
-    showDomAnim('anim-color-flash anim-color-flash--' + (color || 'wild'), '', 600);
+    showDomAnim('anim-color-flash anim-color-flash--' + (color || 'wild'), '', 1200);
   }
 
   // ── Feature 9: Winner confetti via DOM ──
@@ -815,16 +815,16 @@ const Game = (() => {
 
   function triggerAnimation(type, data) {
     if (type === 'card_played') {
-      showDomAnim('anim-card-played', '', 500);
+      showDomAnim('anim-card-played', '', 900);
     }
     if (type === 'skip') {
-      showDomAnim('anim-skip', '⊘', 1000);
+      showDomAnim('anim-skip', '⊘', 1800);
     }
     if (type === 'reverse') {
       triggerReverseAnim();
     }
     if (type === 'draw_flash') {
-      showDomAnim('anim-red-flash', '', 600);
+      showDomAnim('anim-red-flash', '', 1000);
     }
     if (type === 'uno') {
       triggerUnoAnim();

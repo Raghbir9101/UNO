@@ -835,7 +835,7 @@ body.landscape .btn-fullscreen:active {
   margin-top: -80px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 215, 0, 0.5) 0%, transparent 70%);
-  animation: animPulse 0.5s ease-out forwards;
+  animation: animPulse 0.9s ease-out forwards;
 }
 
 @keyframes animPulse {
@@ -852,7 +852,7 @@ body.landscape .btn-fullscreen:active {
   font-weight: 900;
   color: #E53935;
   text-shadow: 0 0 30px rgba(229, 57, 53, 0.8), 0 0 60px rgba(229, 57, 53, 0.4);
-  animation: animSkip 1s ease-out forwards;
+  animation: animSkip 1.8s ease-out forwards;
 }
 
 @keyframes animSkip {
@@ -871,7 +871,7 @@ body.landscape .btn-fullscreen:active {
   font-weight: 900;
   color: #FFD700;
   text-shadow: 0 0 30px rgba(255, 215, 0, 0.9), 0 0 60px rgba(255, 215, 0, 0.5), 0 0 100px rgba(255, 215, 0, 0.2);
-  animation: animReverseSpin 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: animReverseSpin 1.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .anim-reverse-label {
@@ -884,7 +884,7 @@ body.landscape .btn-fullscreen:active {
   color: #fff;
   letter-spacing: 4px;
   text-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
-  animation: animFadeUp 1s ease-out forwards;
+  animation: animFadeUp 1.8s ease-out forwards;
 }
 
 @keyframes animReverseSpin {
@@ -912,7 +912,7 @@ body.landscape .btn-fullscreen:active {
   font-family: var(--font);
   color: #ff4444;
   text-shadow: 0 0 30px rgba(255, 0, 0, 0.8), 0 0 60px rgba(255, 0, 0, 0.4);
-  animation: animPlus 1.2s ease-out forwards;
+  animation: animPlus 2s ease-out forwards;
 }
 
 @keyframes animPlus {
@@ -926,7 +926,7 @@ body.landscape .btn-fullscreen:active {
 .anim-red-flash {
   inset: 0;
   background: rgba(229, 57, 53, 0.25);
-  animation: animFlash 0.6s ease-out forwards;
+  animation: animFlash 1s ease-out forwards;
 }
 
 @keyframes animFlash {
@@ -948,7 +948,7 @@ body.landscape .btn-fullscreen:active {
     0 0 40px rgba(229, 57, 53, 0.8),
     0 0 80px rgba(229, 57, 53, 0.5),
     0 0 120px rgba(255, 100, 50, 0.3);
-  animation: animUnoBurst 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: animUnoBurst 1400ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @keyframes animUnoBurst {
@@ -973,7 +973,7 @@ body.landscape .btn-fullscreen:active {
   border-radius: 50%;
   border: 6px solid var(--ring-color, #fff);
   box-shadow: 0 0 30px var(--ring-color, #fff), inset 0 0 20px rgba(255,255,255,0.1);
-  animation: animColorRing 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: animColorRing 1200ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @keyframes animColorRing {
@@ -984,7 +984,7 @@ body.landscape .btn-fullscreen:active {
 
 .anim-color-flash {
   inset: 0;
-  animation: animColorTableFlash 600ms ease-out forwards;
+  animation: animColorTableFlash 1200ms ease-out forwards;
 }
 .anim-color-flash--red    { background: rgba(229, 57,  53,  0.18); }
 .anim-color-flash--blue   { background: rgba(30,  136, 229, 0.18); }
