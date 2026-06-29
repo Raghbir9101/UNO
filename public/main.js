@@ -6,7 +6,7 @@
   'use strict';
 
   const socket = io({
-    transports: ['polling', 'websocket'],  // Polling first (WebSocket blocked by proxy)
+    transports: ['websocket', 'polling'],  // WebSocket first — lowest latency
     upgrade: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,

@@ -16,8 +16,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' },
-  // ── Transports: polling first (WebSocket upgrade if proxy supports it) ──
-  transports: ['polling', 'websocket'],
+  // ── WebSocket first: lowest latency (Cloudflare WebSockets ON, nginx upgraded) ──
+  transports: ['websocket', 'polling'],
   allowUpgrades: true,
   // Faster heartbeat detection (default is 25s/20s which masks dead connections)
   pingInterval: 10000,   // 10s between server pings
