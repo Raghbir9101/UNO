@@ -6,9 +6,7 @@
   'use strict';
 
   const socket = io({
-    // Polling-first: session established via HTTP, then auto-upgrades to WebSocket.
-    // Required behind Cloudflare HTTP/2 — direct WS-first skips the handshake and fails.
-    transports: ['polling', 'websocket'],
+    transports: ['websocket', 'polling'],  // WebSocket first — nginx confirmed 101
     upgrade: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,

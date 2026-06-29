@@ -16,8 +16,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' },
-  // Polling-first with WebSocket upgrade — required for Cloudflare HTTP/2 proxy
-  transports: ['polling', 'websocket'],
+  // WebSocket first — nginx confirmed 101, Cloudflare grey-clouded
+  transports: ['websocket', 'polling'],
   allowUpgrades: true,
   // Faster heartbeat detection (default is 25s/20s which masks dead connections)
   pingInterval: 10000,   // 10s between server pings
