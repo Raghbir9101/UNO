@@ -1,0 +1,45 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+<main id="main-content" class="content-page">
+  <div class="container">
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span class="sep">›</span><span>Game Modes</span></nav>
+    <h1>UNO Game Modes</h1>
+    <p class="page-subtitle">Choose how you want to play UNO online.</p>
+
+    <h2>🎲 Classic Mode</h2>
+    <p>Standard UNO rules with no modifications. When a +2 or +4 is played, the next player must draw immediately — no stacking allowed. This is the way UNO was designed to be played, and it's perfect for beginners and purists.</p>
+    <ul>
+      <li>2–20 players</li>
+      <li>Standard 110-card deck (220 for 11+ players)</li>
+      <li>No stacking</li>
+      <li>30-second turn timer</li>
+    </ul>
+    <a href="/play" class="btn btn-outline-sm">Play Classic Mode</a>
+
+    <h2>🔥 Stacking Mode</h2>
+    <p>The most popular way to play online. When a +2 is played on you, you can play another +2 to pass the penalty to the next player — and it stacks! The same applies to +4 and the devastating +8. Penalties build up until someone can't stack and has to draw everything.</p>
+    <ul>
+      <li>2–20 players</li>
+      <li>+2 stacks on +2, +4 on +4, +8 on +8</li>
+      <li>Penalties can exceed 20+ cards</li>
+      <li>High-stakes, high-drama gameplay</li>
+    </ul>
+    <a href="/play" class="btn btn-outline-sm">Play Stacking Mode</a>
+
+    <h2>🚀 Coming Soon</h2>
+    <p>We're working on new game modes for future updates:</p>
+    <ul>
+      <li><strong>Speed UNO</strong> — 5-second turns. Think fast!</li>
+      <li><strong>Teams</strong> — 2v2 or 3v3 cooperative UNO</li>
+      <li><strong>Elimination</strong> — Multiple rounds, last player standing wins</li>
+      <li><strong>Custom Rules</strong> — Pick and choose from a menu of house rules</li>
+    </ul>
+
+    <div class="cta-banner">
+      <h3>Ready to Play?</h3>
+      <p>Pick a mode and start a game with friends.</p>
+      <a href="/play" class="btn btn-hero">▶ Play Now</a>
+    </div>
+  </div>
+</main>
+<%- include('partials/footer') %>

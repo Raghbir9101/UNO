@@ -1,0 +1,54 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+<main id="main-content" class="content-page">
+  <div class="container">
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="/">Home</a><span class="sep">›</span><span>FAQ</span>
+    </nav>
+    <h1>Frequently Asked Questions</h1>
+    <p class="page-subtitle">Everything you want to know about playing UNO online.</p>
+
+    <% const faqs = [
+      { q: 'How many players can play UNO online?', a: 'Up to 20 players can play in a single room. This makes it perfect for large groups, parties, and classrooms. Games with 11+ players automatically use two decks.' },
+      { q: 'Is UNO Online free?', a: 'Yes, completely free. There is no signup, no credit card, and no hidden fees. Just open the website and start playing.' },
+      { q: 'Do I need to download anything?', a: 'No. The game runs entirely in your web browser. It works on Chrome, Firefox, Safari, Edge, and most modern browsers.' },
+      { q: 'Can I play on my phone?', a: 'Yes! The game has full touch support on both iOS and Android. The interface adapts automatically to your screen size.' },
+      { q: 'Can I play on a tablet or iPad?', a: 'Absolutely. Tablets provide a great UNO experience with more screen space for cards and player information.' },
+      { q: 'How do I create a room?', a: 'Go to the <a href="/play">Play page</a>, enter a nickname, and click "Create New Room." You\'ll receive a room code to share with friends.' },
+      { q: 'How do I join a room?', a: 'Enter the room code shared by the host, or click "Browse Public Rooms" to find open games.' },
+      { q: 'How do I invite friends?', a: 'After creating a room, click "Copy Invite Link" and send it via WhatsApp, Discord, text, or any messaging app. Friends join in one click.' },
+      { q: 'What is a private room?', a: 'A private room can only be joined with the room code or invite link. It won\'t appear in the public room browser.' },
+      { q: 'What is a public room?', a: 'A public room appears in the "Browse Public Rooms" list, allowing anyone to join.' },
+      { q: 'What are the UNO rules?', a: 'Standard UNO rules apply. Match cards by color, number, or symbol. Wild cards can be played anytime. <a href="/rules">Read the full rules →</a>' },
+      { q: 'What is card stacking?', a: 'When enabled, you can stack +2 on +2, +4 on +4, and +8 on +8. The penalty accumulates until someone can\'t stack and must draw all the cards. <a href="/rules/stacking">Learn more →</a>' },
+      { q: 'What is the Wild Draw 8 card?', a: 'A custom card exclusive to our game. It works like a Wild Draw 4 but forces the next player to draw 8 cards. There are 2 per deck.' },
+      { q: 'How does UNO calling work?', a: 'When you have 1 card left, you must press the UNO button within a few seconds. If another player catches you first, you draw 2 penalty cards.' },
+      { q: 'What happens if I disconnect?', a: 'You\'ll automatically reconnect within seconds. Your cards are preserved on the server. If you\'re away too long, the auto-play system will play for you.' },
+      { q: 'What is auto-play?', a: 'If a player is AFK (away from keyboard) for 30 seconds, the game automatically plays a valid card for them or draws and passes.' },
+      { q: 'Can I watch a game without playing?', a: 'Yes! If a game is in progress, you can join as a spectator and watch without affecting the game.' },
+      { q: 'Is there a time limit per turn?', a: 'Yes, each player has 30 seconds to play. After that, auto-play kicks in. A visual timer shows the remaining time.' },
+      { q: 'Can the host kick players?', a: 'Yes. The host can remove any player from the room at any time, both in the lobby and during the game.' },
+      { q: 'Is it safe for kids?', a: 'Yes. There is no text chat, no user accounts, and no personal data collected. The game is family-friendly.' },
+      { q: 'How many cards are in the deck?', a: 'A standard deck has 110 cards: 76 number cards, 24 action cards (Skip, Reverse, Draw Two), and 10 wild cards. Games with 11+ players use 220 cards.' },
+      { q: 'Do you support custom rules?', a: 'Currently, the host can toggle card stacking on or off. More custom rules (Jump-In, Seven-Zero, etc.) are on our roadmap.' },
+      { q: 'Can I play UNO solo?', a: 'Not yet. We\'re working on AI bot opponents so you can practice or play solo. Stay tuned!' },
+      { q: 'Is this affiliated with Mattel?', a: 'No. This is an independent fan-made project. UNO® is a registered trademark of Mattel, Inc.' },
+    ]; %>
+
+    <div class="faq-list">
+      <% faqs.forEach(function(faq, i) { %>
+      <details class="faq-item" id="faq-<%= i %>">
+        <summary class="faq-question"><%= faq.q %></summary>
+        <div class="faq-answer"><p><%- faq.a %></p></div>
+      </details>
+      <% }); %>
+    </div>
+
+    <div class="cta-banner">
+      <h3>Still Have Questions?</h3>
+      <p>The best way to learn is to play! Start a game and figure it out as you go.</p>
+      <a href="/play" class="btn btn-hero">▶ Play UNO Now</a>
+    </div>
+  </div>
+</main>
+<%- include('partials/footer') %>

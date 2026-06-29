@@ -1,0 +1,60 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+<main id="main-content" class="content-page">
+  <div class="container">
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span class="sep">›</span><span>Privacy Policy</span></nav>
+    <h1>Privacy Policy</h1>
+    <p class="page-subtitle">Last updated: <%= new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) %></p>
+
+    <h2>1. Information We Collect</h2>
+    <p>We collect minimal information to provide our game service:</p>
+    <ul>
+      <li><strong>Nicknames:</strong> Temporary, session-based. Not stored permanently.</li>
+      <li><strong>Room data:</strong> Ephemeral. Deleted automatically when all players leave.</li>
+      <li><strong>IP addresses:</strong> Used for rate limiting and abuse prevention. Not shared with third parties.</li>
+      <li><strong>Cookies:</strong> Used for session management, analytics, and advertising (see Cookie Policy).</li>
+      <li><strong>Analytics data:</strong> Anonymized usage data through Google Analytics.</li>
+    </ul>
+
+    <h2>2. How We Use Your Information</h2>
+    <ul>
+      <li>To provide and maintain the game service</li>
+      <li>To remember your nickname between sessions</li>
+      <li>To analyze usage patterns and improve the game</li>
+      <li>To display relevant advertisements (Google AdSense)</li>
+      <li>To prevent abuse and enforce fair play</li>
+    </ul>
+
+    <h2>3. Third-Party Services</h2>
+    <p>We use the following third-party services:</p>
+    <ul>
+      <li><strong>Google Analytics:</strong> For anonymized usage analytics. <a href="https://policies.google.com/privacy" rel="noopener noreferrer" target="_blank">Google Privacy Policy</a></li>
+      <li><strong>Google AdSense:</strong> For displaying advertisements. <a href="https://policies.google.com/technologies/ads" rel="noopener noreferrer" target="_blank">How Google uses data</a></li>
+      <li><strong>Microsoft Clarity:</strong> For anonymized heatmaps and session recordings.</li>
+    </ul>
+
+    <h2>4. Cookies</h2>
+    <p>We use cookies for essential game functionality, analytics, and advertising. You can manage your cookie preferences through our cookie consent banner. See our <a href="/cookie-policy">Cookie Policy</a> for details.</p>
+
+    <h2>5. Children's Privacy</h2>
+    <p>Our game does not knowingly collect personal information from children under 13. No account creation is required, no chat is available, and no personal data is stored.</p>
+
+    <h2>6. Data Retention</h2>
+    <p>Game data (rooms, nicknames, card states) is stored in memory only and deleted when the room is closed. We do not maintain a database of player information.</p>
+
+    <h2>7. Your Rights</h2>
+    <p>You have the right to:</p>
+    <ul>
+      <li>Opt out of non-essential cookies via the cookie consent banner</li>
+      <li>Request information about data we hold about you</li>
+      <li>Request deletion of any stored data</li>
+    </ul>
+
+    <h2>8. Changes to This Policy</h2>
+    <p>We may update this policy from time to time. Changes will be posted on this page with an updated date.</p>
+
+    <h2>9. Contact</h2>
+    <p>For privacy-related inquiries, email us at <a href="mailto:privacy@yourdomain.com">privacy@yourdomain.com</a>.</p>
+  </div>
+</main>
+<%- include('partials/footer') %>

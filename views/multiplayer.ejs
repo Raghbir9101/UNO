@@ -1,0 +1,55 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+<main id="main-content" class="content-page">
+  <div class="container">
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="/">Home</a><span class="sep">›</span><span>Multiplayer</span>
+    </nav>
+    <h1>Multiplayer UNO Online — Play With Friends in Real-Time</h1>
+    <p class="page-subtitle">Create a room, share the link, and play UNO with friends instantly. No downloads, no signups.</p>
+
+    <h2>🌐 Real-Time Multiplayer</h2>
+    <p>Our game uses WebSocket technology for instant, lag-free communication. Every card play, draw, and UNO call is synchronized across all players in real-time. There's no page refreshing, no waiting — just seamless gameplay.</p>
+
+    <h2>🔗 3 Ways to Play Together</h2>
+    <h3>1. Private Rooms</h3>
+    <p>Create a private room and share the room code or invite link with your friends. Only people with the code can join — perfect for friend groups and family.</p>
+
+    <h3>2. Public Rooms</h3>
+    <p>Create a public room and it appears in the room browser. Anyone can join and play. Great for meeting new opponents and playing pickup games.</p>
+
+    <h3>3. Invite Links</h3>
+    <p>One-click invite links work on any platform. Share via WhatsApp, Discord, iMessage, email, or any messaging app. Friends tap the link and they're in the game.</p>
+
+    <h2>👑 Host Controls</h2>
+    <p>The room host has full control over the game experience:</p>
+    <ul>
+      <li><strong>Start & Restart</strong> — Begin new rounds whenever you're ready</li>
+      <li><strong>Kick Players</strong> — Remove disruptive players at any time</li>
+      <li><strong>Toggle Stacking</strong> — Enable or disable card stacking rules</li>
+      <li><strong>Reorder Seats</strong> — Arrange the playing order before starting</li>
+    </ul>
+
+    <h2>🔄 Reconnection & AFK</h2>
+    <p>Life happens. If you disconnect, your cards are preserved on the server and you'll automatically reconnect when you return. If a player is AFK for 30 seconds, the game plays for them so nobody is left waiting.</p>
+
+    <h2>👀 Spectator Mode</h2>
+    <p>Game already started? No problem. Join as a spectator and watch the action unfold. You'll see all public game state — cards on the table, player card counts, and who's winning.</p>
+
+    <h2>📊 Supported Configurations</h2>
+    <ul>
+      <li>2 to 20 players per room</li>
+      <li>Automatic double-deck for 11+ players</li>
+      <li>Works on any device with a modern browser</li>
+      <li>No app installation required</li>
+      <li>Free — no premium tiers or paywalls</li>
+    </ul>
+
+    <div class="cta-banner">
+      <h3>Start a Multiplayer Game Now</h3>
+      <p>Create a room and send the invite link. Your friends will be playing in seconds.</p>
+      <a href="/play" class="btn btn-hero">▶ Play Multiplayer UNO</a>
+    </div>
+  </div>
+</main>
+<%- include('partials/footer') %>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof title !== 'undefined' ? title : 'Play UNO Online Free — Multiplayer Card Game for Up to 20 Players' %></title>
+  <meta name="description" content="<%= typeof description !== 'undefined' ? description : 'Play UNO online with friends in your browser. No download required. Create private rooms, join public games, and play with up to 20 players. Free, fast, and mobile-friendly.' %>">
+  <link rel="canonical" href="<%= typeof canonical !== 'undefined' ? canonical : 'https://yourdomain.com/' %>">
+  <meta name="theme-color" content="#0f0f1a">
+  <meta name="color-scheme" content="dark">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="<%= typeof ogTitle !== 'undefined' ? ogTitle : (typeof title !== 'undefined' ? title : 'Play UNO Online Free — Up to 20 Players') %>">
+  <meta property="og:description" content="<%= typeof ogDescription !== 'undefined' ? ogDescription : (typeof description !== 'undefined' ? description : 'The best browser-based UNO game. Play with friends, no download needed.') %>">
+  <meta property="og:type" content="<%= typeof ogType !== 'undefined' ? ogType : 'website' %>">
+  <meta property="og:url" content="<%= typeof canonical !== 'undefined' ? canonical : 'https://yourdomain.com/' %>">
+  <meta property="og:image" content="<%= typeof ogImage !== 'undefined' ? ogImage : '/images/og-image.jpg' %>">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="UNO Online">
+  <meta property="og:locale" content="en_US">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="<%= typeof title !== 'undefined' ? title : 'Play UNO Online Free — Up to 20 Players' %>">
+  <meta name="twitter:description" content="<%= typeof description !== 'undefined' ? description : 'Browser-based UNO for up to 20 players. No download, no signup. Just play.' %>">
+  <meta name="twitter:image" content="<%= typeof ogImage !== 'undefined' ? ogImage : '/images/og-image.jpg' %>">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
+  <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.json">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- Site Styles -->
+  <link rel="stylesheet" href="/css/site.css">
+
+  <% if (typeof extraHead !== 'undefined') { %><%- extraHead %><% } %>
+
+  <!-- Structured Data -->
+  <% if (typeof jsonLd !== 'undefined') { %>
+  <script type="application/ld+json"><%- JSON.stringify(jsonLd) %></script>
+  <% } %>
+</head>
+<body>
+  <!-- Skip to content (accessibility) -->
+  <a href="#main-content" class="skip-link">Skip to main content</a>

@@ -1,0 +1,95 @@
+  <!-- ── Footer ── -->
+  <footer class="site-footer" role="contentinfo">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a href="/" class="footer-logo" aria-label="UNO Online — Home">
+            <span class="logo-u">U</span><span class="logo-n">N</span><span class="logo-o">O</span>
+            <span class="nav-logo-text">Online</span>
+          </a>
+          <p class="footer-tagline">The best way to play UNO online with friends. Free, fast, and no download required.</p>
+        </div>
+
+        <div class="footer-col">
+          <h3 class="footer-heading">Game</h3>
+          <ul>
+            <li><a href="/play">Play Now</a></li>
+            <li><a href="/game-modes">Game Modes</a></li>
+            <li><a href="/20-player-uno">20-Player UNO</a></li>
+            <li><a href="/multiplayer">Multiplayer</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h3 class="footer-heading">Learn</h3>
+          <ul>
+            <li><a href="/rules">UNO Rules</a></li>
+            <li><a href="/how-to-play">How to Play</a></li>
+            <li><a href="/faq">FAQ</a></li>
+            <li><a href="/blog">Blog</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h3 class="footer-heading">Company</h3>
+          <ul>
+            <li><a href="/about">About</a></li>
+            <li><a href="/contact">Contact</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h3 class="footer-heading">Legal</h3>
+          <ul>
+            <li><a href="/privacy-policy">Privacy Policy</a></li>
+            <li><a href="/terms">Terms of Service</a></li>
+            <li><a href="/cookie-policy">Cookie Policy</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <p>&copy; <%= new Date().getFullYear() %> UNO Online. Not affiliated with Mattel, Inc. UNO&reg; is a registered trademark of Mattel, Inc.</p>
+        <p class="footer-love">Made with ♥ for card game lovers everywhere.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Mobile nav script -->
+  <script>
+    (function() {
+      const btn = document.getElementById('nav-hamburger');
+      const menu = document.getElementById('nav-menu');
+      const nav = document.getElementById('site-nav');
+      if (btn && menu) {
+        btn.addEventListener('click', function() {
+          const open = menu.classList.toggle('nav-menu--open');
+          btn.setAttribute('aria-expanded', open);
+          btn.classList.toggle('is-active', open);
+        });
+        // Close on link click
+        menu.querySelectorAll('a').forEach(function(a) {
+          a.addEventListener('click', function() {
+            menu.classList.remove('nav-menu--open');
+            btn.setAttribute('aria-expanded', 'false');
+            btn.classList.remove('is-active');
+          });
+        });
+      }
+      // Scroll-based nav background
+      if (nav) {
+        var ticking = false;
+        window.addEventListener('scroll', function() {
+          if (!ticking) {
+            requestAnimationFrame(function() {
+              nav.classList.toggle('nav-scrolled', window.scrollY > 60);
+              ticking = false;
+            });
+            ticking = true;
+          }
+        }, { passive: true });
+      }
+    })();
+  </script>
+</body>
+</html>

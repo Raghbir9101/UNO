@@ -1,0 +1,281 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<main id="main-content">
+
+  <!-- ══════════ HERO SECTION ══════════ -->
+  <section class="hero" id="hero">
+    <div class="hero-bg-shapes" aria-hidden="true">
+      <div class="hero-shape hero-shape--1"></div>
+      <div class="hero-shape hero-shape--2"></div>
+      <div class="hero-shape hero-shape--3"></div>
+    </div>
+    <div class="container hero-inner">
+      <h1 class="hero-title">Play UNO Online<br>with <span class="text-gradient">Friends</span></h1>
+      <p class="hero-subtitle">The #1 browser-based UNO game for up to <strong>20 players</strong>. No download. No signup. Just play.</p>
+      <div class="hero-ctas">
+        <a href="/play" class="btn btn-hero" id="hero-play-btn">▶ Play Now — It's Free</a>
+        <a href="/play#browse" class="btn btn-hero-secondary" id="hero-browse-btn">Browse Public Rooms</a>
+      </div>
+      <div class="hero-badges">
+        <span class="hero-badge">✓ 20 Players</span>
+        <span class="hero-badge">✓ Mobile Ready</span>
+        <span class="hero-badge">✓ Instant Play</span>
+        <span class="hero-badge">✓ Private Rooms</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ SOCIAL PROOF BAR ══════════ -->
+  <section class="proof-bar" aria-label="Statistics">
+    <div class="container proof-bar-inner">
+      <div class="proof-stat">
+        <span class="proof-icon">🎮</span>
+        <span class="proof-number" data-count="2500">0</span>
+        <span class="proof-label">Games Played</span>
+      </div>
+      <div class="proof-stat">
+        <span class="proof-icon">👥</span>
+        <span class="proof-number" data-count="500">0</span>
+        <span class="proof-label">Players Joined</span>
+      </div>
+      <div class="proof-stat">
+        <span class="proof-icon">⚡</span>
+        <span class="proof-number" data-count="20">0</span>
+        <span class="proof-label">Max Players Per Room</span>
+      </div>
+      <div class="proof-stat">
+        <span class="proof-icon">⭐</span>
+        <span class="proof-number proof-number--static">4.8/5</span>
+        <span class="proof-label">Fun Rating</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ FEATURES GRID ══════════ -->
+  <section class="section features" id="features">
+    <div class="container">
+      <h2 class="section-title">Why Players Love <span class="text-gradient">UNO Online</span></h2>
+      <p class="section-subtitle">Everything you need for the perfect online card game experience.</p>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">👥</div>
+          <h3>Up to 20 Players</h3>
+          <p>Play UNO with massive groups. Perfect for parties, classrooms, and game nights. No other browser UNO supports this many players.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>Instant Play</h3>
+          <p>No downloads, no signups, no installs. Open your browser and start playing in under 10 seconds. Share a link and everyone joins.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📱</div>
+          <h3>Any Device</h3>
+          <p>Full touch support on phones and tablets, keyboard shortcuts on desktop. Your game works beautifully on any screen size.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔒</div>
+          <h3>Private & Public Rooms</h3>
+          <p>Create a private room for friends with a shareable invite link, or browse public rooms to jump into a game with strangers.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎨</div>
+          <h3>Smooth Animations</h3>
+          <p>Card dealing, drawing, stacking — every action has polished, fluid animations. Feels like a native app, runs in your browser.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🏆</div>
+          <h3>Real UNO Rules</h3>
+          <p>UNO catch, stacking +2/+4/+8, reverse, skip, color wild — all the rules you know, plus optional <a href="/rules/stacking">house rules</a>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ HOW IT WORKS ══════════ -->
+  <section class="section how-it-works" id="how-it-works">
+    <div class="container">
+      <h2 class="section-title">Start Playing in <span class="text-gradient">3 Steps</span></h2>
+      <p class="section-subtitle">No signup. No download. Game starts in seconds.</p>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <h3>Create a Room</h3>
+          <p>Enter a nickname and tap Create. You'll get a room code instantly.</p>
+        </div>
+        <div class="step-connector" aria-hidden="true"></div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <h3>Share the Link</h3>
+          <p>Send the room code or invite link to your friends via any messaging app.</p>
+        </div>
+        <div class="step-connector" aria-hidden="true"></div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <h3>Play!</h3>
+          <p>Once everyone joins, the host starts the game. Cards are dealt automatically.</p>
+        </div>
+      </div>
+
+      <div class="steps-cta">
+        <a href="/play" class="btn btn-hero">Create a Room Now</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ GAME MODES ══════════ -->
+  <section class="section game-modes" id="game-modes">
+    <div class="container">
+      <h2 class="section-title">Game <span class="text-gradient">Modes</span></h2>
+      <p class="section-subtitle">Choose how you want to play.</p>
+
+      <div class="modes-grid">
+        <div class="mode-card">
+          <div class="mode-icon">🎲</div>
+          <h3>Classic UNO</h3>
+          <p>Standard UNO rules. 2–20 players. Draw cards are applied immediately — no stacking. Perfect for purists and beginners.</p>
+          <a href="/play" class="btn btn-outline-sm">Play Classic</a>
+        </div>
+        <div class="mode-card mode-card--hot">
+          <div class="mode-badge">Popular</div>
+          <div class="mode-icon">🔥</div>
+          <h3>Stacking Mode</h3>
+          <p>Stack +2 on +2, +4 on +4, and the devastating +8 on +8. Cards pile up, stakes go higher, and someone draws a mountain.</p>
+          <a href="/play" class="btn btn-outline-sm">Play Stacking</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 20-PLAYER SECTION (USP) ══════════ -->
+  <section class="section big-multiplayer" id="multiplayer">
+    <div class="container">
+      <div class="big-mp-content">
+        <div class="big-mp-text">
+          <span class="big-mp-eyebrow">Our Biggest Feature</span>
+          <h2>The Only UNO for <span class="text-gradient">20 Players</span></h2>
+          <p class="big-mp-desc">Most online UNO games max out at 4 players. We support up to <strong>20 in a single room</strong>. That changes everything.</p>
+          <ul class="big-mp-list">
+            <li>🎉 Party with your entire friend group</li>
+            <li>🏫 Classroom games with 20 students</li>
+            <li>💬 Discord community game nights</li>
+            <li>👨‍👩‍👧‍👦 Family reunions across the globe</li>
+            <li>🏢 Team building with remote coworkers</li>
+          </ul>
+          <a href="/play" class="btn btn-hero">Start a Big Game</a>
+        </div>
+        <div class="big-mp-visual">
+          <div class="big-mp-card-fan" aria-hidden="true">
+            <div class="fan-card fan-card--1"></div>
+            <div class="fan-card fan-card--2"></div>
+            <div class="fan-card fan-card--3"></div>
+            <div class="fan-card fan-card--4"></div>
+            <div class="fan-card fan-card--5"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ DEVICE SUPPORT ══════════ -->
+  <section class="section devices" id="devices">
+    <div class="container">
+      <h2 class="section-title">Play Anywhere, on <span class="text-gradient">Any Device</span></h2>
+      <div class="devices-grid">
+        <div class="device-card">
+          <div class="device-icon">📱</div>
+          <h3>Phone</h3>
+          <p>iPhone, Android — full touch support with optimized mobile layout.</p>
+        </div>
+        <div class="device-card">
+          <div class="device-icon">📟</div>
+          <h3>Tablet</h3>
+          <p>iPad, Android tablets — larger cards, better visibility for group viewing.</p>
+        </div>
+        <div class="device-card">
+          <div class="device-icon">💻</div>
+          <h3>Desktop</h3>
+          <p>Chrome, Firefox, Safari, Edge — keyboard shortcuts and full-screen mode.</p>
+        </div>
+      </div>
+      <div class="devices-stats">
+        <div class="device-stat"><strong>60fps</strong> animations</div>
+        <div class="device-stat"><strong>&lt;2s</strong> load time</div>
+        <div class="device-stat"><strong>Works on 3G</strong> connections</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ FAQ ══════════ -->
+  <section class="section faq-section" id="faq">
+    <div class="container">
+      <h2 class="section-title">Frequently Asked <span class="text-gradient">Questions</span></h2>
+
+      <div class="faq-list">
+        <% const faqs = [
+          { q: 'How many players can play?', a: 'Up to 20 players in a single room — more than any other browser UNO game.' },
+          { q: 'Is it free?', a: 'Yes, completely free. No signup, no credit card, no hidden fees.' },
+          { q: 'Do I need to download anything?', a: 'No. The game runs entirely in your web browser. Just open the link and play.' },
+          { q: 'Can I play on my phone?', a: 'Yes! Full touch support on both iOS and Android. The game adapts to your screen size automatically.' },
+          { q: 'How do I invite friends?', a: 'Create a room and share the invite link or room code. Friends can join in one click.' },
+          { q: 'What are the rules?', a: 'Standard UNO rules with optional card stacking (+2/+4/+8). <a href="/rules">Read the full rules →</a>' },
+          { q: 'Is it safe for kids?', a: 'Yes. There is no chat, no user accounts, and no personal data collected during gameplay.' },
+          { q: 'What happens if I disconnect?', a: 'You\'ll automatically reconnect within seconds. Your cards are saved on the server.' },
+        ]; %>
+        <% faqs.forEach(function(faq, i) { %>
+        <details class="faq-item" id="faq-<%= i %>">
+          <summary class="faq-question"><%= faq.q %></summary>
+          <div class="faq-answer"><p><%- faq.a %></p></div>
+        </details>
+        <% }); %>
+      </div>
+
+      <div class="faq-more">
+        <a href="/faq" class="btn btn-outline-sm">View All FAQs →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ FINAL CTA ══════════ -->
+  <section class="section final-cta" id="final-cta">
+    <div class="container final-cta-inner">
+      <h2>Ready to Play?</h2>
+      <p>Create a room and invite your friends. It takes less than 10 seconds.</p>
+      <a href="/play" class="btn btn-hero btn-hero--large">▶ Play UNO Now — Free</a>
+    </div>
+  </section>
+
+</main>
+
+<!-- Counter animation script -->
+<script>
+  (function() {
+    var observer = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) {
+          var el = entry.target;
+          var target = parseInt(el.getAttribute('data-count'), 10);
+          if (!target || el.dataset.animated) return;
+          el.dataset.animated = '1';
+          var duration = 1500;
+          var start = performance.now();
+          function tick(now) {
+            var progress = Math.min((now - start) / duration, 1);
+            var eased = 1 - Math.pow(1 - progress, 3);
+            el.textContent = Math.round(eased * target).toLocaleString() + (target >= 100 ? '+' : '');
+            if (progress < 1) requestAnimationFrame(tick);
+          }
+          requestAnimationFrame(tick);
+          observer.unobserve(el);
+        }
+      });
+    }, { threshold: 0.3 });
+    document.querySelectorAll('.proof-number[data-count]').forEach(function(el) {
+      observer.observe(el);
+    });
+  })();
+</script>
+
+<%- include('partials/footer') %>

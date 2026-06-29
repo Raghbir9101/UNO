@@ -1,0 +1,23 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+<main id="main-content" class="content-page" style="min-height:70vh;display:flex;align-items:center;">
+  <div class="container" style="text-align:center;">
+    <div style="font-size:6rem;margin-bottom:16px;">🃏</div>
+    <h1>Page Not Found</h1>
+    <p class="page-subtitle" style="margin-bottom:32px;">Looks like this card isn't in the deck. The page you're looking for doesn't exist or has been moved.</p>
+    <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
+      <a href="/" class="btn btn-hero-secondary">← Back to Home</a>
+      <a href="/play" class="btn btn-hero">▶ Play UNO</a>
+    </div>
+    <div style="margin-top:48px;">
+      <p style="color:var(--text-muted);font-size:0.9rem;">Looking for something specific?</p>
+      <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:12px;">
+        <a href="/rules" style="color:var(--text-secondary);">Rules</a>
+        <a href="/how-to-play" style="color:var(--text-secondary);">How to Play</a>
+        <a href="/faq" style="color:var(--text-secondary);">FAQ</a>
+        <a href="/game-modes" style="color:var(--text-secondary);">Game Modes</a>
+      </div>
+    </div>
+  </div>
+</main>
+<%- include('partials/footer') %>

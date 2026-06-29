@@ -1,0 +1,68 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+<main id="main-content" class="content-page">
+  <div class="container">
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="/">Home</a><span class="sep">›</span><span>UNO Rules</span>
+    </nav>
+    <h1>UNO Rules — Complete Guide</h1>
+    <p class="page-subtitle">Everything you need to know to play UNO online, from setup to scoring.</p>
+
+    <h2>Objective</h2>
+    <p>Be the first player to get rid of all the cards in your hand. When you have one card left, you must call <strong>"UNO!"</strong> — or risk a penalty.</p>
+
+    <h2>Setup</h2>
+    <p>Each player is dealt <strong>7 cards</strong>. The remaining cards form the draw pile. The top card is flipped to start the discard pile. If the first card is a special card, its effect is applied immediately.</p>
+
+    <h2>How Turns Work</h2>
+    <p>On your turn, you must play a card that matches the top of the discard pile by <strong>color</strong>, <strong>number</strong>, or <strong>symbol</strong>. If you cannot play, you must draw a card. After drawing, you may play the drawn card if it's valid, or pass your turn.</p>
+
+    <h2>Card Types</h2>
+
+    <h3>Number Cards (0–9)</h3>
+    <p>Played by matching the color or number on the discard pile. Each color has one 0 and two of each number 1–9.</p>
+
+    <h3>Skip Card</h3>
+    <p>The next player loses their turn. Can be played on a matching color or on another Skip card. <a href="/rules/skip">Learn more about Skip →</a></p>
+
+    <h3>Reverse Card</h3>
+    <p>Reverses the direction of play (clockwise becomes counter-clockwise). In a 2-player game, it acts like a Skip. <a href="/rules/reverse">Learn more about Reverse →</a></p>
+
+    <h3>Draw Two (+2)</h3>
+    <p>The next player draws 2 cards and loses their turn (unless stacking is enabled). <a href="/rules/draw-two">Learn more about Draw Two →</a></p>
+
+    <h3>Wild Card</h3>
+    <p>Can be played on any card. The player who plays it chooses the next color. <a href="/rules/wild-cards">Learn more about Wild Cards →</a></p>
+
+    <h3>Wild Draw Four (+4)</h3>
+    <p>The most powerful card. Changes the color and forces the next player to draw 4 cards. <a href="/rules/draw-four">Learn more about Draw Four →</a></p>
+
+    <h3>Wild Draw Eight (+8) — Custom Card</h3>
+    <p>Exclusive to our game! Changes the color and forces the next player to draw <strong>8 cards</strong>. There are 2 per deck. Use wisely.</p>
+
+    <h2>Calling UNO</h2>
+    <p>When you play your second-to-last card and have <strong>only 1 card remaining</strong>, you must call "UNO!" within a few seconds. If another player catches you before you call it, you draw 2 penalty cards.</p>
+
+    <h2>Card Stacking (Optional)</h2>
+    <p>When stacking is enabled, if a +2 is played on you, you can play another +2 to pass the penalty to the next player. The same applies to +4 and +8 cards. The penalty keeps growing until someone can't stack and must draw all accumulated cards. <a href="/rules/stacking">Learn more about stacking →</a></p>
+
+    <h2>Winning</h2>
+    <p>The first player to play all their cards wins the game. In our online version, the game ends immediately and shows the final standings.</p>
+
+    <h2>Special Rules in Our Game</h2>
+    <ul>
+      <li><strong>2–20 players</strong> per room</li>
+      <li><strong>Auto-play</strong>: If you're AFK for 30 seconds, the game plays for you automatically</li>
+      <li><strong>Reconnection</strong>: If you disconnect, you can rejoin and your cards are preserved</li>
+      <li><strong>Spectator mode</strong>: Watch games in progress without playing</li>
+      <li><strong>Double deck</strong>: Games with 11+ players automatically use two decks (220 cards)</li>
+    </ul>
+
+    <div class="cta-banner">
+      <h3>Ready to Play?</h3>
+      <p>Now that you know the rules, jump into a game!</p>
+      <a href="/play" class="btn btn-hero">▶ Play UNO Online</a>
+    </div>
+  </div>
+</main>
+<%- include('partials/footer') %>

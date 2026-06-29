@@ -1,0 +1,44 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+<main id="main-content" class="content-page">
+  <div class="container">
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span class="sep">›</span><span>Terms of Service</span></nav>
+    <h1>Terms of Service</h1>
+    <p class="page-subtitle">Last updated: <%= new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) %></p>
+
+    <h2>1. Acceptance of Terms</h2>
+    <p>By accessing and using UNO Online ("the Service"), you agree to be bound by these Terms of Service. If you do not agree, please do not use the Service.</p>
+
+    <h2>2. Description of Service</h2>
+    <p>UNO Online is a free, browser-based multiplayer card game. The Service allows users to create and join game rooms, play UNO with other users, and interact through gameplay mechanics.</p>
+
+    <h2>3. User Conduct</h2>
+    <p>You agree not to:</p>
+    <ul>
+      <li>Use automated scripts, bots, or cheating tools</li>
+      <li>Harass, abuse, or disrupt other players</li>
+      <li>Attempt to manipulate game mechanics or exploit bugs</li>
+      <li>Use offensive or inappropriate nicknames</li>
+      <li>Overload the service with excessive requests</li>
+    </ul>
+
+    <h2>4. Intellectual Property</h2>
+    <p>The game code, design, and content of this website are the intellectual property of the site operator. UNO® is a registered trademark of Mattel, Inc. This is an independent fan-made project and is not affiliated with, endorsed by, or connected to Mattel, Inc.</p>
+
+    <h2>5. Disclaimer of Warranties</h2>
+    <p>The Service is provided "as is" and "as available" without warranties of any kind, express or implied. We do not guarantee uninterrupted or error-free service.</p>
+
+    <h2>6. Limitation of Liability</h2>
+    <p>In no event shall the site operator be liable for any indirect, incidental, special, or consequential damages arising from the use of the Service.</p>
+
+    <h2>7. Termination</h2>
+    <p>We reserve the right to terminate or restrict access to the Service at any time, for any reason, without notice. This includes the right to ban users, remove rooms, or block IP addresses.</p>
+
+    <h2>8. Changes to Terms</h2>
+    <p>We may modify these Terms at any time. Continued use of the Service after changes constitutes acceptance of the updated Terms.</p>
+
+    <h2>9. Contact</h2>
+    <p>For questions about these Terms, email <a href="mailto:hello@yourdomain.com">hello@yourdomain.com</a>.</p>
+  </div>
+</main>
+<%- include('partials/footer') %>

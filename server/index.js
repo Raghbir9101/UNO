@@ -6,9 +6,11 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const compression = require('compression');
 require('dotenv').config();
 const roomManager = require('./roomManager');
 const gameLogic = require('./gameLogic');
+const seoPages = require('./routes/seoPages');
 
 const app = express();
 const server = http.createServer(app);
@@ -18,6 +20,13 @@ const io = new Server(server, {
 
 const PORT = process.env.PORT || 3000;
 
+// ── View Engine (EJS for SEO pages) ──
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, '..', 'views'));
+
+// ── Compression ──
+app.use(compression());
+
 // Disable caching for development
 app.use((req, res, next) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -26,8 +35,25 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve static files
-app.use(express.static(path.join(__dirname, '..', 'public')));
+// ── SEO Pages (must come BEFORE static middleware so / doesn't serve index.html) ──
+app.use(seoPages);
+
+// ── Game SPA: serve the existing index.html at /play ──
+app.get('/play', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+});
+
+// Serve static files (JS, CSS, images, assets — but NOT index.html as homepage)
+app.use(express.static(path.join(__dirname, '..', 'public'), { index: false }));
+
+// ── 404 Handler (must come after all other routes) ──
+app.use((req, res) => {
+  res.status(404).render('404', {
+    title: 'Page Not Found — UNO Online',
+    description: 'The page you are looking for does not exist.',
+    canonical: (process.env.BASE_URL || 'https://yourdomain.com') + req.path,
+  });
+});
 
 // ─── Helper: broadcast room player list ───────────────────────────────────────
 
