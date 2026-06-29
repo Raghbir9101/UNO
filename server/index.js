@@ -16,8 +16,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' },
-  // ── WebSocket first: lowest latency (Cloudflare WebSockets ON, nginx upgraded) ──
-  transports: ['websocket', 'polling'],
+  // Polling-first with WebSocket upgrade — required for Cloudflare HTTP/2 proxy
+  transports: ['polling', 'websocket'],
   allowUpgrades: true,
   // Faster heartbeat detection (default is 25s/20s which masks dead connections)
   pingInterval: 10000,   // 10s between server pings
@@ -104,12 +104,12 @@ function broadcastGameState(roomCode) {
   io.to(roomCode).emit('game_state', publicState);
 
   if (room.spectators) {
-      for (const spec of room.spectators) {
-          if (spec.connected && spec.socketId && spec.isGodMode) {
-              const sock = getSocketById(spec.socketId);
-              if (sock) sock.emit('god_hands', room.gameState.hands);
-          }
+    for (const spec of room.spectators) {
+      if (spec.connected && spec.socketId && spec.isGodMode) {
+        const sock = getSocketById(spec.socketId);
+        if (sock) sock.emit('god_hands', room.gameState.hands);
       }
+    }
   }
 
   // Reset the 30-second auto-play timer for the current player
@@ -331,9 +331,9 @@ io.on('connection', (socket) => {
     if ((reconnected || player.isSpectator) && room.status === 'playing' && room.gameState) {
       socket.emit('game_state', gameLogic.getPublicState(room.gameState));
       if (!player.isSpectator) {
-         sendHandToPlayer(socket, playerId, room.gameState);
+        sendHandToPlayer(socket, playerId, room.gameState);
       } else if (player.isGodMode) {
-         socket.emit('god_hands', room.gameState.hands);
+        socket.emit('god_hands', room.gameState.hands);
       }
     }
   });
@@ -357,7 +357,7 @@ io.on('connection', (socket) => {
     }
 
     const wasPlaying = room.status === 'playing' && !!room.gameState;
-    const nickname   = targetPlayer.nickname;
+    const nickname = targetPlayer.nickname;
 
     // ── Step 1: Find and evict the target socket BEFORE removing from room ──
     let targetSocketId = null;
@@ -693,7 +693,7 @@ io.on('connection', (socket) => {
     const { roomCode, player } = info;
     // Mark as disconnected but keep in room (allows reconnection on refresh)
     player.connected = false;
-    player.socketId  = null;
+    player.socketId = null;
     broadcastRoomUpdate(roomCode);
 
     // Schedule room cleanup after 2 minutes if no one reconnects

@@ -6,7 +6,9 @@
   'use strict';
 
   const socket = io({
-    transports: ['websocket', 'polling'],  // WebSocket first — lowest latency
+    // Polling-first: session established via HTTP, then auto-upgrades to WebSocket.
+    // Required behind Cloudflare HTTP/2 — direct WS-first skips the handshake and fails.
+    transports: ['polling', 'websocket'],
     upgrade: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
@@ -53,15 +55,15 @@
   // MUST stay in sync with the nLeft/nRight/nTop split in renderer.js drawOpponents()
   function computeSide(oppIdx, oppCount) {
     let nLeft = 0, nRight = 0;
-    if      (oppCount === 1) { nLeft = 0; nRight = 0; }
+    if (oppCount === 1) { nLeft = 0; nRight = 0; }
     else if (oppCount === 2) { nLeft = 0; nRight = 0; }
     else if (oppCount === 3) { nLeft = 1; nRight = 1; }
     else if (oppCount === 4) { nLeft = 1; nRight = 1; }
     else if (oppCount === 5) { nLeft = 1; nRight = 1; }
     else if (oppCount === 6) { nLeft = 2; nRight = 2; }
-    else if (oppCount <= 9)  { nLeft = Math.floor(oppCount / 3); nRight = Math.floor(oppCount / 3); }
-    else if (oppCount <= 12) { nLeft = Math.ceil(oppCount / 3);  nRight = Math.floor(oppCount / 3); }
-    else                     { nLeft = Math.round(oppCount / 3); nRight = Math.round(oppCount / 3); }
+    else if (oppCount <= 9) { nLeft = Math.floor(oppCount / 3); nRight = Math.floor(oppCount / 3); }
+    else if (oppCount <= 12) { nLeft = Math.ceil(oppCount / 3); nRight = Math.floor(oppCount / 3); }
+    else { nLeft = Math.round(oppCount / 3); nRight = Math.round(oppCount / 3); }
     // leftOps  = opps.slice(0, nLeft)           → indices 0 .. nLeft-1
     // topOps   = opps.slice(nLeft, n-nRight)    → indices nLeft .. n-nRight-1
     // rightOps = opps.slice(n-nRight)           → indices n-nRight .. n-1
@@ -124,9 +126,9 @@
     if ($tabBar) $tabBar.style.display = 'none';
 
     const $panelCreate = document.getElementById('panel-create');
-    const $panelJoin   = document.getElementById('panel-join');
+    const $panelJoin = document.getElementById('panel-join');
     if ($panelCreate) $panelCreate.classList.add('tab-panel--hidden');
-    if ($panelJoin)   $panelJoin.classList.remove('tab-panel--hidden');
+    if ($panelJoin) $panelJoin.classList.remove('tab-panel--hidden');
 
     $roomCode.value = _inviteCode;
     $roomCode.setAttribute('readonly', 'readonly'); // code is fixed from link
@@ -548,10 +550,10 @@
   });
 
   // ── Lobby Tabs ─────────────────────────────────────────────────────────────
-  const $tabCreate   = document.getElementById('tab-create');
-  const $tabJoin     = document.getElementById('tab-join');
+  const $tabCreate = document.getElementById('tab-create');
+  const $tabJoin = document.getElementById('tab-join');
   const $panelCreate = document.getElementById('panel-create');
-  const $panelJoin   = document.getElementById('panel-join');
+  const $panelJoin = document.getElementById('panel-join');
 
   function switchTab(active) {
     const isCreate = active === 'create';
@@ -571,7 +573,7 @@
   }
 
   if ($tabCreate) $tabCreate.addEventListener('click', () => switchTab('create'));
-  if ($tabJoin)   $tabJoin.addEventListener('click',   () => switchTab('join'));
+  if ($tabJoin) $tabJoin.addEventListener('click', () => switchTab('join'));
 
   // ── Browse Rooms ───────────────────────────────────────────────────────────
   $btnBrowse.addEventListener('click', () => {
