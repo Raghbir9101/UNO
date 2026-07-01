@@ -11,6 +11,7 @@ require('dotenv').config();
 const roomManager = require('./roomManager');
 const gameLogic = require('./gameLogic');
 const seoPages = require('./routes/seoPages');
+const statePersistence = require('./statePersistence');
 
 const app = express();
 const server = http.createServer(app);
@@ -274,6 +275,7 @@ io.on('connection', (socket) => {
 
     callback({ roomCode, playerId, nickname: player.nickname });
     broadcastRoomUpdate(roomCode);
+    saveStateSoon(); // Save after room creation
   });
 
   // ── Join Room ──
@@ -326,6 +328,7 @@ io.on('connection', (socket) => {
     });
 
     broadcastRoomUpdate(code);
+    if (!reconnected) saveStateSoon(); // Save after new player joins
 
     // If reconnecting/spectating an in-progress game, send game state + hand
     if ((reconnected || player.isSpectator) && room.status === 'playing' && room.gameState) {
@@ -513,6 +516,7 @@ io.on('connection', (socket) => {
     });
 
     callback?.({ success: true });
+    saveStateSoon(); // Save after game starts
   });
 
   // ── Play Card ──
@@ -565,6 +569,7 @@ io.on('connection', (socket) => {
 
     // Broadcast updated game state
     broadcastGameState(roomCode);
+    saveStateSoon(); // Save after card played
 
     // Check for UNO trigger
     const hand = room.gameState.hands[playerId];
@@ -700,6 +705,60 @@ io.on('connection', (socket) => {
     roomManager.scheduleRoomCleanup(roomCode, 120000);
   });
 });
+
+// ─── State Persistence ────────────────────────────────────────────────────────
+
+// Load saved state on startup
+const savedRooms = statePersistence.loadState();
+let restoredRoomCount = 0;
+if (savedRooms) {
+  // Restore rooms into roomManager
+  for (const [code, room] of savedRooms) {
+    roomManager.rooms.set(code, room);
+    restoredRoomCount++;
+  }
+  // Cleanup old rooms (older than 24 hours)
+  statePersistence.cleanupOldRooms(roomManager.rooms);
+  // Save cleaned state
+  statePersistence.saveState(roomManager.rooms);
+  console.log(`[persistence] Restored ${restoredRoomCount} room(s) - players can reconnect`);
+}
+
+// Auto-save every 30 seconds
+const SAVE_INTERVAL_MS = 30_000;
+const saveInterval = setInterval(() => {
+  if (roomManager.rooms.size > 0) {
+    statePersistence.saveState(roomManager.rooms);
+  }
+}, SAVE_INTERVAL_MS);
+
+// Helper: save state immediately on critical events
+function saveStateSoon() {
+  // Debounced save to avoid hammering disk on rapid events
+  clearTimeout(saveStateSoon._timer);
+  saveStateSoon._timer = setTimeout(() => {
+    statePersistence.saveState(roomManager.rooms);
+  }, 2000); // 2-second debounce
+}
+
+// Graceful shutdown: save state before exit
+function gracefulShutdown(signal) {
+  console.log(`\n[${signal}] Shutting down gracefully...`);
+  clearInterval(saveInterval);
+  statePersistence.saveState(roomManager.rooms);
+  server.close(() => {
+    console.log('[shutdown] HTTP server closed');
+    process.exit(0);
+  });
+  // Force exit after 5 seconds if server doesn't close
+  setTimeout(() => {
+    console.error('[shutdown] Forcing exit after timeout');
+    process.exit(1);
+  }, 5000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
 

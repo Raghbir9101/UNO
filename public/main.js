@@ -42,6 +42,7 @@
   let _bufferedHand = null;          // full hand stored while incremental reveal runs
   let _handAnimating = false;         // true while self draw animation is in progress
   const _drawAnimPlayers = new Set(); // playerIds currently mid draw-animation (for others)
+  const _pendingCardCounts = new Map(); // playerId → latest server cardCount received while protected
 
   // ── Deal animation ──────────────────────────────────────────────────────
   let _dealInProgress = false;  // true during initial round-robin deal
@@ -1004,12 +1005,15 @@
     // While deal animation is running, skip card count updates entirely —
     // the deal loop increments counts one-by-one in sync with the animations.
     if (data.cardCounts && Game.state.players.length > 0 && !_dealInProgress) {
-      const updated = Game.state.players.map(p => ({
-        ...p,
-        cardCount: _drawAnimPlayers.has(p.id)
-          ? p.cardCount                        // protected — draw animation is running
-          : (data.cardCounts[p.id] ?? p.cardCount),
-      }));
+      const updated = Game.state.players.map(p => {
+        if (_drawAnimPlayers.has(p.id)) {
+          // Protected — save for later
+          _pendingCardCounts.set(p.id, data.cardCounts[p.id]);
+          return { ...p, cardCount: p.cardCount };
+        } else {
+          return { ...p, cardCount: data.cardCounts[p.id] ?? p.cardCount };
+        }
+      });
       Game.setPlayers(updated);
     }
     // During deal, also strip cardCounts from updateGameState so the
@@ -1097,7 +1101,7 @@
     const pid = data.playerId;
 
     // For opponents: protect their card count during animation
-    if (!toSelf && data.count > 1) {
+    if (!toSelf) {
       _drawAnimPlayers.add(pid);
     }
 
@@ -1110,12 +1114,13 @@
           toSelf,
           targetPlayerId: toSelf ? null : pid,
           onLand: () => {
-            if (!toSelf) {
-              // Opponent: increment card count on each landing
-              const pl = Game.state.players.find(x => x.id === pid);
-              if (pl) pl.cardCount++;
-              if (isLast) {
-                _drawAnimPlayers.delete(pid); // unprotect so next game_state can sync
+            if (!toSelf && isLast) {
+              // Animation complete — apply pending server count and unprotect
+              _drawAnimPlayers.delete(pid);
+              if (_pendingCardCounts.has(pid)) {
+                const pl = Game.state.players.find(x => x.id === pid);
+                if (pl) pl.cardCount = _pendingCardCounts.get(pid);
+                _pendingCardCounts.delete(pid);
               }
             }
             // Self: hand reveal is driven by hand_updated handler

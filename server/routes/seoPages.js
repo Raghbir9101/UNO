@@ -7,8 +7,8 @@
 const express = require('express');
 const router = express.Router();
 
-const SITE_NAME = 'UNO Online';
-const BASE_URL = process.env.BASE_URL || 'https://yourdomain.com';
+const SITE_NAME = 'Play UNO Free';
+const BASE_URL = process.env.BASE_URL || 'https://playunofree.com';
 
 // ── Helper: render a page with standard SEO defaults ──
 function renderPage(res, view, overrides = {}) {
@@ -24,8 +24,8 @@ function renderPage(res, view, overrides = {}) {
 // ── Homepage ──
 router.get('/', (req, res) => {
   renderPage(res, 'homepage', {
-    title: 'Play UNO Online Free — Multiplayer Card Game for Up to 20 Players',
-    description: 'Play UNO online with friends in your browser. No download required. Create private rooms, join public games, and play with up to 20 players. Free, fast, and mobile-friendly.',
+    title: 'Play UNO Free — Free Multiplayer Card Game for Up to 20 Players',
+    description: 'Play UNO free online with friends. No download, no signup required. Create private rooms, join public games, and play with up to 20 players. 100% free forever.',
     canonical: `${BASE_URL}/`,
     jsonLd: [
       {
@@ -44,15 +44,16 @@ router.get('/', (req, res) => {
         "@context": "https://schema.org",
         "@type": "VideoGame",
         "name": SITE_NAME,
-        "description": "Play UNO online with up to 20 players in your browser",
-        "genre": ["Card Game", "Multiplayer", "Party Game"],
+        "description": "Play UNO free online with up to 20 players in your browser. No download, no signup. Always free.",
+        "genre": ["Card Game", "Multiplayer", "Party Game", "Free Game"],
         "gamePlatform": ["Web Browser", "Mobile Browser"],
         "numberOfPlayers": { "@type": "QuantitativeValue", "minValue": 2, "maxValue": 20 },
         "playMode": ["MultiPlayer"],
         "applicationCategory": "Game",
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD", "availability": "https://schema.org/InStock" },
         "operatingSystem": "Any (Web Browser)",
-        "url": `${BASE_URL}/play`
+        "url": `${BASE_URL}/play`,
+        "isAccessibleForFree": true
       },
       {
         "@context": "https://schema.org",
@@ -60,7 +61,7 @@ router.get('/', (req, res) => {
         "mainEntity": [
           { "@type": "Question", "name": "How many players can play UNO online?", "acceptedAnswer": { "@type": "Answer", "text": "Up to 20 players can play in a single room." } },
           { "@type": "Question", "name": "Do I need to download anything?", "acceptedAnswer": { "@type": "Answer", "text": "No. The game runs entirely in your web browser." } },
-          { "@type": "Question", "name": "Is it free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes, completely free. No signup required." } },
+          { "@type": "Question", "name": "Is Play UNO Free really free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes, 100% free forever. No signup, no credit card, no hidden costs." } },
           { "@type": "Question", "name": "Can I play on my phone?", "acceptedAnswer": { "@type": "Answer", "text": "Yes! Full touch support on iOS and Android." } },
         ]
       }
@@ -71,8 +72,8 @@ router.get('/', (req, res) => {
 // ── Rules ──
 router.get('/rules', (req, res) => {
   renderPage(res, 'rules', {
-    title: 'UNO Rules — Complete Guide to Playing UNO Online',
-    description: 'Learn how to play UNO with our complete rules guide. Card types, special cards, stacking, UNO calling, and winning — everything explained.',
+    title: 'UNO Rules — Complete Guide to Playing UNO Free Online',
+    description: 'Learn how to play UNO free with our complete rules guide. Card types, special cards, stacking, UNO calling, and winning — everything explained.',
     canonical: `${BASE_URL}/rules`,
     jsonLd: {
       "@context": "https://schema.org", "@type": "Article",
@@ -89,8 +90,8 @@ router.get('/rules', (req, res) => {
 // ── How to Play ──
 router.get('/how-to-play', (req, res) => {
   renderPage(res, 'how-to-play', {
-    title: 'How to Play UNO Online — Step-by-Step Guide',
-    description: 'Learn how to play UNO online with friends in 7 easy steps. Create a room, invite friends, and start playing in your browser.',
+    title: 'How to Play UNO Free Online — Step-by-Step Guide',
+    description: 'Learn how to play UNO free online with friends in 7 easy steps. Create a room, invite friends, and start playing. No download, always free.',
     canonical: `${BASE_URL}/how-to-play`,
   });
 });
@@ -98,8 +99,8 @@ router.get('/how-to-play', (req, res) => {
 // ── FAQ ──
 router.get('/faq', (req, res) => {
   renderPage(res, 'faq', {
-    title: 'UNO Online FAQ — Frequently Asked Questions',
-    description: 'Answers to common questions about UNO Online. Players, rules, devices, rooms, stacking, and more.',
+    title: 'Play UNO Free FAQ — Frequently Asked Questions',
+    description: 'Answers to common questions about Play UNO Free. Players, rules, devices, rooms, and why it\'s 100% free forever.',
     canonical: `${BASE_URL}/faq`,
   });
 });
@@ -107,8 +108,8 @@ router.get('/faq', (req, res) => {
 // ── Game Modes ──
 router.get('/game-modes', (req, res) => {
   renderPage(res, 'game-modes', {
-    title: 'UNO Game Modes — Classic, Stacking, and More',
-    description: 'Explore UNO game modes including Classic and Stacking. Learn the differences and choose your favorite way to play.',
+    title: 'Free UNO Game Modes — Classic, Stacking, and More',
+    description: 'Explore free UNO game modes including Classic and Stacking. Learn the differences and choose your favorite way to play for free.',
     canonical: `${BASE_URL}/game-modes`,
   });
 });
@@ -116,8 +117,8 @@ router.get('/game-modes', (req, res) => {
 // ── 20-Player UNO ──
 router.get('/20-player-uno', (req, res) => {
   renderPage(res, '20-player-uno', {
-    title: '20-Player UNO Online — Massive Multiplayer Card Games',
-    description: 'Play UNO with up to 20 players in a single room. Double decks, auto-play, spectator mode — the biggest online UNO experience anywhere.',
+    title: '20-Player UNO Free — Massive Multiplayer Card Games',
+    description: 'Play UNO free with up to 20 players in a single room. Double decks, auto-play, spectator mode — the biggest free online UNO experience anywhere.',
     canonical: `${BASE_URL}/20-player-uno`,
   });
 });
@@ -125,8 +126,8 @@ router.get('/20-player-uno', (req, res) => {
 // ── Multiplayer ──
 router.get('/multiplayer', (req, res) => {
   renderPage(res, 'multiplayer', {
-    title: 'Multiplayer UNO Online — Play With Friends in Real-Time',
-    description: 'Create a room, share the invite link, and play UNO with friends instantly. Private rooms, public rooms, host controls, and spectator mode.',
+    title: 'Free Multiplayer UNO Online — Play With Friends in Real-Time',
+    description: 'Create a free room, share the invite link, and play UNO with friends instantly. Private rooms, public rooms, host controls — all free.',
     canonical: `${BASE_URL}/multiplayer`,
   });
 });
@@ -134,8 +135,8 @@ router.get('/multiplayer', (req, res) => {
 // ── Blog ──
 router.get('/blog', (req, res) => {
   renderPage(res, 'blog', {
-    title: 'UNO Online Blog — Tips, Strategies & Updates',
-    description: 'UNO tips, strategies, game updates, and card game knowledge. Learn to play better and discover new features.',
+    title: 'Play UNO Free Blog — Tips, Strategies & Updates',
+    description: 'Free UNO tips, strategies, game updates, and card game knowledge. Learn to play better and discover new free features.',
     canonical: `${BASE_URL}/blog`,
   });
 });
@@ -143,8 +144,8 @@ router.get('/blog', (req, res) => {
 // ── About ──
 router.get('/about', (req, res) => {
   renderPage(res, 'about', {
-    title: 'About UNO Online — The Best Browser-Based UNO Game',
-    description: 'Learn about UNO Online, the free browser-based multiplayer UNO game supporting up to 20 players.',
+    title: 'About Play UNO Free — The Best Free Browser-Based UNO Game',
+    description: 'Learn about Play UNO Free, the 100% free browser-based multiplayer UNO game supporting up to 20 players.',
     canonical: `${BASE_URL}/about`,
   });
 });
@@ -152,8 +153,8 @@ router.get('/about', (req, res) => {
 // ── Contact ──
 router.get('/contact', (req, res) => {
   renderPage(res, 'contact', {
-    title: 'Contact Us — UNO Online',
-    description: 'Get in touch with the UNO Online team. Report bugs, request features, or send business inquiries.',
+    title: 'Contact Us — Play UNO Free',
+    description: 'Get in touch with the Play UNO Free team. Report bugs, request features, or send business inquiries.',
     canonical: `${BASE_URL}/contact`,
   });
 });
@@ -161,8 +162,8 @@ router.get('/contact', (req, res) => {
 // ── Privacy Policy ──
 router.get('/privacy-policy', (req, res) => {
   renderPage(res, 'privacy-policy', {
-    title: 'Privacy Policy — UNO Online',
-    description: 'UNO Online privacy policy. Learn about data collection, cookies, and your rights.',
+    title: 'Privacy Policy — Play UNO Free',
+    description: 'Play UNO Free privacy policy. Learn about data collection, cookies, and your rights.',
     canonical: `${BASE_URL}/privacy-policy`,
   });
 });
@@ -170,8 +171,8 @@ router.get('/privacy-policy', (req, res) => {
 // ── Terms ──
 router.get('/terms', (req, res) => {
   renderPage(res, 'terms', {
-    title: 'Terms of Service — UNO Online',
-    description: 'UNO Online terms of service. User conduct, intellectual property, and liability.',
+    title: 'Terms of Service — Play UNO Free',
+    description: 'Play UNO Free terms of service. User conduct, intellectual property, and liability.',
     canonical: `${BASE_URL}/terms`,
   });
 });
@@ -179,8 +180,8 @@ router.get('/terms', (req, res) => {
 // ── Cookie Policy ──
 router.get('/cookie-policy', (req, res) => {
   renderPage(res, 'cookie-policy', {
-    title: 'Cookie Policy — UNO Online',
-    description: 'UNO Online cookie policy. Essential, analytics, and advertising cookies explained.',
+    title: 'Cookie Policy — Play UNO Free',
+    description: 'Play UNO Free cookie policy. Essential, analytics, and advertising cookies explained.',
     canonical: `${BASE_URL}/cookie-policy`,
   });
 });
@@ -231,9 +232,9 @@ ${pages.map(p => `  <url>
 // ── manifest.json ──
 router.get('/manifest.json', (req, res) => {
   res.json({
-    name: 'UNO Online — Multiplayer Card Game',
-    short_name: 'UNO Online',
-    description: 'Play UNO with friends in your browser',
+    name: 'Play UNO Free — Multiplayer Card Game',
+    short_name: 'UNO Free',
+    description: 'Play UNO free with up to 20 friends in your browser',
     start_url: '/play',
     display: 'standalone',
     background_color: '#0f0f1a',

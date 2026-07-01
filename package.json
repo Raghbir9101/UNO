@@ -1,7 +1,7 @@
 {
-  "name": "uno-multiplayer",
+  "name": "play-uno-free",
   "version": "1.0.0",
-  "description": "Real-time multiplayer UNO card game with HTML5 Canvas",
+  "description": "Play UNO Free — Real-time multiplayer UNO card game for up to 20 players",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",

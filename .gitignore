@@ -145,3 +145,6 @@ vite.config.ts.timestamp-*
 # OS files
 .DS_Store
 Thumbs.db
+
+# Game state persistence
+data/
