@@ -13,6 +13,15 @@
     timeout: 10000,
   });
 
+  // Debug: Log connection info
+  socket.io.on('open', () => {
+    console.log('[Socket.IO] Connected via:', socket.io.engine.transport.name);
+  });
+
+  socket.io.engine.on('upgrade', (transport) => {
+    console.log('[Socket.IO] Upgraded to:', transport.name);
+  });
+
   // ── Session state ──────────────────────────────────────────────────────────
   let myPlayerId = null;
   let myNickname = null;
@@ -37,8 +46,8 @@
   // ── Draw animation sync ────────────────────────────────────────────────────
   // When a multi-card draw happens, we reveal cards one-by-one in sync with
   // the fly animation instead of applying the full hand/count instantly.
-  const CARD_FLY_MS = 380; // ms a single card takes to fly (Four Colors style)
-  const CARD_STAGGER = 120; // ms between staggered cards (rapid dealing)
+  const CARD_FLY_MS = 250; // ms a single card takes to fly (Four Colors style)
+  const CARD_STAGGER = 80; // ms between staggered cards (rapid dealing)
   let _bufferedHand = null;          // full hand stored while incremental reveal runs
   let _handAnimating = false;         // true while self draw animation is in progress
   const _drawAnimPlayers = new Set(); // playerIds currently mid draw-animation (for others)
@@ -710,9 +719,15 @@
   // ── Ping Monitoring ───────────────────────────────────────────────────────
   // ═══════════════════════════════════════════════════════════════════════════
 
+  let _pingIntervalDuration = 3000;
+
   function startPingMonitoring() {
     clearInterval(_pingInterval);
-    _pingInterval = setInterval(() => {
+
+    function doPing() {
+      // Skip ping measurement if tab is hidden (avoid inaccurate throttled results)
+      if (document.hidden) return;
+
       _pingTimestamp = Date.now();
       socket.emit('ping_measure');
 
@@ -721,8 +736,32 @@
         showToast('⚠ Slow connection detected');
         _lastSlowToast = Date.now();
       }
-    }, 5000); // Check every 5 seconds (reduced from 3s to save bandwidth)
+    }
+
+    _pingInterval = setInterval(doPing, _pingIntervalDuration);
   }
+
+  // Adjust ping frequency based on tab visibility to minimize throttling impact
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      console.log('[Ping] Tab hidden - reducing ping frequency');
+      // Slow down ping when hidden (less wasted measurements)
+      clearInterval(_pingInterval);
+      _pingIntervalDuration = 10000; // 10 seconds when hidden
+      startPingMonitoring();
+      updatePingDisplay(); // Show "paused" immediately
+    } else {
+      console.log('[Ping] Tab visible - normal ping frequency');
+      // Speed up ping when visible
+      clearInterval(_pingInterval);
+      _pingIntervalDuration = 3000; // 3 seconds when visible
+      startPingMonitoring();
+      updatePingDisplay(); // Restore display immediately
+      // Immediately measure ping when tab becomes visible
+      _pingTimestamp = Date.now();
+      socket.emit('ping_measure');
+    }
+  });
 
   function updatePingDisplay() {
     const $ping = document.getElementById('ping-indicator');
@@ -730,6 +769,13 @@
 
     const $pingMs = $ping.querySelector('.ping-ms');
     if (!$pingMs) return;
+
+    // Show "paused" if tab is hidden
+    if (document.hidden) {
+      $pingMs.textContent = '⏸ paused';
+      $ping.className = 'ping-indicator dimmed';
+      return;
+    }
 
     if (_pingLatency === null) {
       $pingMs.textContent = '-- ms';
@@ -739,12 +785,13 @@
 
     $pingMs.textContent = `${_pingLatency} ms`;
 
-    if (_pingLatency < 100) {
-      $ping.className = 'ping-indicator';
+    // Realistic thresholds for a turn-based game
+    if (_pingLatency < 150) {
+      $ping.className = 'ping-indicator'; // Green - Excellent
     } else if (_pingLatency < 300) {
-      $ping.className = 'ping-indicator yellow';
+      $ping.className = 'ping-indicator yellow'; // Yellow - Good
     } else {
-      $ping.className = 'ping-indicator red';
+      $ping.className = 'ping-indicator red'; // Red - Poor
     }
   }
 
@@ -753,6 +800,10 @@
       const raw = Date.now() - _pingTimestamp;
       // Exponential moving average for smoother display (α = 0.3)
       _pingLatency = _pingLatency === null ? raw : Math.round(_pingLatency * 0.7 + raw * 0.3);
+
+      // Debug log (remove in production)
+      console.log(`[Ping] Raw: ${raw}ms | Smoothed: ${_pingLatency}ms | Transport: ${socket.io.engine?.transport?.name || 'unknown'}`);
+
       updatePingDisplay();
     }
   });
@@ -903,7 +954,7 @@
     // Cards are dealt SEQUENTIALLY — each card waits for the previous
     // to land before the next launches, ensuring perfect sync.
     const CARDS_EACH = 7;
-    const DEAL_GAP = 80; // ms pause after a card lands before next launches
+    const DEAL_GAP = 20; // ms pause after a card lands before next launches
 
     // Build deal order starting from local player
     const myIdx = playerOrder.findIndex(p => p.id === myPlayerId);

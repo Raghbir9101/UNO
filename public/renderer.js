@@ -315,20 +315,22 @@ const Renderer = (() => {
     }
 
     // ── TOP opponents ─────────────────────────────────────────────────────────
-    const tcw = Math.min(CW / (Math.max(nTop, 1) * 3.2), TOP_H * 0.32, vs(32));
+    // Adapt card size and count based on player density
+    const maxCards = nTop >= 7 ? 3 : (nTop >= 5 ? 4 : 5);
+    const tcw = Math.min(CW / (Math.max(nTop, 1) * 4.0), TOP_H * 0.25, vs(24));
     const tch = tcw * 1.45;
     const topSlotW = nTop > 0 ? CW / nTop : CW;
-    const nameRowH = vs(28); // reserved height below cards for name row
+    const nameRowH = vs(24);
 
     topOps.forEach((p, i) => {
       const isCur = p.id === curPlayer;
       const cc = p.cardCount || 0;
-      const ms = Math.min(cc, 8);
-      const ov = Math.min(tcw * 0.55, (topSlotW * 0.75 - tcw) / Math.max(ms - 1, 1));
+      const ms = Math.min(cc, maxCards);
+      const ov = Math.min(tcw * 0.35, (topSlotW * 0.65 - tcw) / Math.max(ms - 1, 1));
       const fanW = tcw + Math.max(ms - 1, 0) * ov;
       const slotCX = CX + topSlotW * i + topSlotW / 2;
       const fx = slotCX - fanW / 2;
-      const fy = vs(8);
+      const fy = vs(6);
 
       if (isCur && ms > 0) glowBox(fx - vs(3), fy - vs(3), fanW + vs(6), tch + vs(6));
       for (let c = 0; c < ms; c++) _cardBack(ctx, fx + c * ov, fy, tcw, tch);
@@ -339,41 +341,48 @@ const Renderer = (() => {
       }
 
       // Name row below cards
-      const nameRowY = fy + tch + vs(5);
-      const avR = vs(9);
-      const avX = slotCX - vs(2);
+      const nameRowY = fy + tch + vs(4);
+      const avR = vs(7);
+      const avX = slotCX;
       // Avatar circle
       ctx.save();
       ctx.beginPath(); ctx.arc(avX - avR - vs(2), nameRowY + avR, avR, 0, Math.PI * 2);
       ctx.fillStyle = pColor(p); ctx.fill();
       if (isCur) { ctx.strokeStyle = '#FFD700'; ctx.lineWidth = vs(1.5); ctx.stroke(); }
       ctx.restore();
-      // Name
-      const nm = p.nickname.length > 12 ? p.nickname.slice(0, 11) + '…' : p.nickname;
+      // Name - truncate aggressively based on player count
+      const maxLen = nTop >= 7 ? 5 : (nTop >= 5 ? 6 : 8);
+      const nm = p.nickname.length > maxLen ? p.nickname.slice(0, maxLen - 1) + '…' : p.nickname;
       ctx.fillStyle = isCur ? '#FFD700' : '#fff';
-      ctx.font = `700 ${vs(12)}px ${font}`;
+      ctx.font = `700 ${vs(9)}px ${font}`;
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = vs(4);
+      ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = vs(3);
       ctx.fillText(nm, avX - vs(2) + vs(2), nameRowY + avR);
       ctx.shadowBlur = 0;
 
-      badge(fx + fanW + vs(5), fy + vs(4), cc);
-      if (cc === 1) unoTag(slotCX, fy + tch + nameRowH + vs(4));
+      badge(fx + fanW + vs(3), fy + vs(3), cc);
+      if (cc === 1) unoTag(slotCX, fy + tch + nameRowH + vs(3));
     });
 
     // ── SIDE helper ───────────────────────────────────────────────────────────
-    const scw = Math.min(SIDE_W * 0.52, CH / (Math.max(nLeft, nRight, 1) * 2.8), vs(28));
+    const maxSideSlots = Math.max(nLeft, nRight);
+    // Smaller cards when many players
+    const scw = Math.min(SIDE_W * 0.42, CH / (maxSideSlots * 1.3), vs(24));
     const sch = scw * 1.45;
-    const sideAvailH = CH;
+    // Use extreme vertical space - extend into all available margins
+    const sideAvailH = CH * 1.8; // Maximum extension for spacing
 
     function drawSide(p, isLeft, slotIdx, nSlots) {
       const isCur = p.id === curPlayer;
       const cc = p.cardCount || 0;
-      const ms = Math.min(cc, 7);
-      const ov = Math.min(sch * 0.35, vs(5));
+      // Show minimal cards to reduce height per player slot
+      const maxCards = nSlots >= 5 ? 2 : 3;
+      const ms = Math.min(cc, maxCards);
+      const ov = Math.min(sch * 0.25, vs(3));
       const fanH = sch + Math.max(ms - 1, 0) * ov;
       const slotH = sideAvailH / nSlots;
-      const cy2 = CY + slotH * slotIdx + slotH / 2;
+      const startY = CY - (sideAvailH - CH) / 2; // Center the extended range
+      const cy2 = startY + slotH * slotIdx + slotH / 2;
       const fx = isLeft ? SIDE_W / 2 - scw / 2 : W - SIDE_W / 2 - scw / 2;
       const fy = cy2 - fanH / 2;
 
@@ -388,10 +397,10 @@ const Renderer = (() => {
         ctx.strokeStyle = '#fff'; ctx.lineWidth = vs(1); ctx.stroke(); ctx.restore();
       }
 
-      // Name pill below cards
+      // Name and avatar below cards - compact for many players
       const pileCX = fx + scw / 2;
-      const nameY = fy + fanH + vs(6);
-      const avR = vs(8);
+      const nameY = fy + fanH + vs(3);
+      const avR = vs(6);
 
       // Avatar
       ctx.save();
@@ -400,20 +409,22 @@ const Renderer = (() => {
       if (isCur) { ctx.strokeStyle = '#FFD700'; ctx.lineWidth = vs(1.5); ctx.stroke(); }
       ctx.restore();
 
-      // Name below avatar
-      const nm = p.nickname.length > 8 ? p.nickname.slice(0, 7) + '…' : p.nickname;
+      // Name below avatar - very compact
+      const maxLen = nSlots >= 5 ? 4 : (nSlots >= 4 ? 5 : 6);
+      const nm = p.nickname.length > maxLen ? p.nickname.slice(0, maxLen - 1) + '…' : p.nickname;
       ctx.fillStyle = isCur ? '#FFD700' : '#fff';
-      ctx.font = `700 ${vs(11)}px ${font}`;
+      ctx.font = `700 ${vs(8)}px ${font}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-      ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = vs(4);
-      ctx.fillText(nm, pileCX, nameY + avR * 2 + vs(2));
+      ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = vs(2);
+      ctx.fillText(nm, pileCX, nameY + avR * 2 + vs(1));
       ctx.shadowBlur = 0;
 
-      badge(isLeft ? fx + scw + vs(10) : fx - vs(10), cy2 + fanH / 2 + vs(4), cc);
-      if (cc === 1) unoTag(pileCX, fy - vs(12));
+      badge(isLeft ? fx + scw + vs(8) : fx - vs(8), cy2 - fanH / 2 + vs(4), cc);
+      if (cc === 1) unoTag(pileCX, fy - vs(10));
     }
 
-    leftOps.forEach((p, i) => drawSide(p, true, i, nLeft));
+    // Draw left side bottom-to-top for correct clockwise flow
+    leftOps.forEach((p, i) => drawSide(p, true, nLeft - 1 - i, nLeft));
     rightOps.forEach((p, i) => drawSide(p, false, i, nRight));
   }
 
@@ -958,10 +969,11 @@ const Renderer = (() => {
       results.push({ id: p.id, side: 'top', cx: slotCX, cy: vs(8) + tch / 2, rotation: 180 });
     });
 
-    // Left opponents
+    // Left opponents (bottom-to-top for correct clockwise flow)
     leftOps.forEach((p, i) => {
       const slotH = sideAvailH / nLeft;
-      const cy = CY + slotH * i + slotH / 2;
+      const slotIdx = nLeft - 1 - i; // Reverse: first player at bottom
+      const cy = CY + slotH * slotIdx + slotH / 2;
       const fx = SIDE_W / 2;
       results.push({ id: p.id, side: 'left', cx: fx, cy, rotation: -90 });
     });

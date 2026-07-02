@@ -634,13 +634,15 @@ const Game = (() => {
       `will-change:transform;pointer-events:none;`;
     animOverlay.appendChild(snap);
 
-    // ── Animation: 380ms easeOutCubic, no fade, subtle arc, smooth rotation ──
-    const FLIGHT_MS = 380;
+    // ── Animation: 250ms easeOutCubic, no fade, subtle arc, smooth rotation ──
+    const FLIGHT_MS = 250;
     const startTime = performance.now();
     const dx = targetL - startL;
     const dy = targetT - startT;
     // Subtle arc: 25px upward
     const arcH = toSelf ? -25 : -25;
+    // Target scale: full size for self, ~40% for opponents
+    const targetScale = toSelf ? 1.0 : 0.4;
 
     function frame(now) {
       const t = Math.min(now - startTime, FLIGHT_MS);
@@ -650,7 +652,7 @@ const Game = (() => {
 
       const x   = dx * ease;
       const y   = dy * ease + Math.sin(p * Math.PI) * arcH;
-      const sc  = 0.95 + 0.05 * ease;  // 0.95 → 1.0
+      const sc  = 0.95 + (targetScale - 0.95) * ease;  // 0.95 → targetScale
       const rot = targetRot * ease;     // 0° → target orientation
 
       snap.style.transform =

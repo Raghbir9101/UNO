@@ -1690,6 +1690,14 @@ input[type="text"]::placeholder {
   animation: ping-pulse 1s infinite;
 }
 
+.ping-indicator.dimmed {
+  opacity: 0.5;
+}
+
+.ping-indicator.dimmed .ping-dot {
+  background: #888;
+}
+
 @keyframes ping-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
