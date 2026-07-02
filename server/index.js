@@ -42,8 +42,13 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/socket.io')) return next();
   const ext = path.extname(req.path);
   if (ext && ext !== '.html' && ext !== '.ejs') {
-    // Static assets: cache for 1 hour
-    res.set('Cache-Control', 'public, max-age=3600');
+    if (req.query.v) {
+      // Versioned assets (?v=N bumped on deploy): safe to cache forever
+      res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    } else {
+      // Unversioned static assets: cache for 1 day
+      res.set('Cache-Control', 'public, max-age=86400');
+    }
   } else {
     // HTML/dynamic pages: no cache
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -86,6 +91,7 @@ function broadcastRoomUpdate(roomCode) {
     id: p.id,
     nickname: p.nickname,
     connected: p.connected,
+    isBot: !!p.isBot,
   }));
 
   io.to(roomCode).emit('room_updated', {
@@ -133,8 +139,164 @@ function releaseRoomLock(roomCode) {
   delete _roomLocks[roomCode];
 }
 
-// ─── Auto-play: play for idle player after 30 seconds ────────────────────────
+// ─── Auto-play: AFK players (after 30s) and bots (after a short delay) ───────
 const _autoPlayTimers = {};  // roomCode → timeout handle
+
+const AFK_TIMEOUT_MS = 30000;
+// Bots think for a moment so the game has a human rhythm instead of instant replies
+function botDelayMs() {
+  return 1100 + Math.floor(Math.random() * 1400); // 1.1–2.5s
+}
+
+// The client deals cards sequentially at ~270ms per card (CARD_FLY_MS 250 +
+// DEAL_GAP 20 in public/main.js — keep in sync). No auto-play may fire while
+// clients are still dealing, or bots visibly play over the deal animation.
+const DEAL_CARD_MS = 270;
+const DEAL_BUFFER_MS = 800; // network delivery + client render start
+
+function dealAnimationMs(playerCount) {
+  return playerCount * 7 * DEAL_CARD_MS + DEAL_BUFFER_MS;
+}
+
+function isBotPlayer(room, playerId) {
+  const p = room.players.find(pl => pl.id === playerId);
+  return !!(p && p.isBot);
+}
+
+// Pick a wild color the way a person would: the color you hold most of
+function bestWildColor(hand) {
+  const counts = {};
+  for (const c of hand) {
+    if (c.color !== 'wild') counts[c.color] = (counts[c.color] || 0) + 1;
+  }
+  let best = null;
+  for (const color of gameLogic.COLORS) {
+    if (best === null || (counts[color] || 0) > (counts[best] || 0)) best = color;
+  }
+  return best || gameLogic.COLORS[Math.floor(Math.random() * 4)];
+}
+
+// Perform one full turn for a player who can't act themselves (AFK human or bot).
+// Mirrors exactly what the play_card / draw_card / pass_turn socket handlers do.
+function performAutoAction(roomCode, currentId, { isBot } = {}) {
+  const r = roomManager.getRoom(roomCode);
+  if (!r || !r.gameState || r.gameState.winner) return;
+  if (gameLogic.getCurrentPlayerId(r.gameState) !== currentId) return;
+
+  const gs = r.gameState;
+  const hand = gs.hands[currentId] || [];
+
+  const sendHandTo = (playerId) => {
+    const p = r.players.find(pl => pl.id === playerId);
+    if (p && p.socketId) {
+      const sock = getSocketById(p.socketId);
+      if (sock) sendHandToPlayer(sock, playerId, gs);
+    }
+  };
+
+  const playCardAs = (card, chosenColor) => {
+    const result = gameLogic.playCard(gs, currentId, card.id, chosenColor);
+    if (result.error) return false;
+
+    sendHandTo(currentId);
+    for (const effect of result.effects) {
+      if (effect.type === 'draw' && effect.playerId) {
+        // Same ordering contract as the play_card handler: player_drew (with
+        // causedBy) first, then the victim's hand_updated
+        io.to(roomCode).emit('player_drew', { playerId: effect.playerId, count: effect.count, causedBy: currentId });
+        sendHandTo(effect.playerId);
+      }
+      if (effect.type === 'skip') {
+        io.to(roomCode).emit('turn_skipped', { playerId: effect.playerId });
+      }
+      if (effect.type === 'reverse') {
+        io.to(roomCode).emit('direction_changed', { direction: effect.direction });
+      }
+    }
+    const drawEffect = result.effects.find(e => e.type === 'draw');
+    io.to(roomCode).emit('card_effect', {
+      cardType: card.type,
+      cardColor: card.color,
+      chosenColor: chosenColor || null,
+      playedBy: currentId,
+      targetPlayerId: drawEffect ? drawEffect.playerId : null,
+    });
+    broadcastGameState(roomCode);
+    saveStateSoon();
+
+    // Bot UNO etiquette: call UNO after a beat — humans get a window to catch it,
+    // and sometimes (15%) the bot "forgets" entirely and can be caught.
+    if (isBot && !result.winner && gs.hands[currentId] && gs.hands[currentId].length === 1) {
+      if (Math.random() > 0.15) {
+        setTimeout(() => {
+          const room2 = roomManager.getRoom(roomCode);
+          if (!room2 || !room2.gameState) return;
+          const res = gameLogic.callUno(room2.gameState, currentId);
+          if (res.success) io.to(roomCode).emit('uno_called', { playerId: currentId });
+        }, 1200 + Math.floor(Math.random() * 1200));
+      }
+    }
+
+    if (result.winner) {
+      const winner = r.players.find(p => p.id === result.winner);
+      io.to(roomCode).emit('player_won', {
+        playerId: result.winner,
+        nickname: winner ? winner.nickname : 'Unknown',
+      });
+    }
+    return true;
+  };
+
+  // ── Case 1: Pending forced draw (draw2/wild4/wild8 stack) ──
+  if (gs.pendingDraw > 0) {
+    // Bots stack back when they can instead of eating the cards
+    if (isBot && gs.settings.stacking) {
+      const stackCard = hand.find(c => c.type === gs.pendingDrawType);
+      if (stackCard) {
+        const chosenColor = stackCard.color === 'wild' ? bestWildColor(hand) : undefined;
+        if (playCardAs(stackCard, chosenColor)) return;
+      }
+    }
+    const result = gameLogic.playerDrawCard(gs, currentId);
+    if (!result.error) {
+      sendHandTo(currentId);
+      io.to(roomCode).emit('player_drew', { playerId: currentId, count: result.drawn?.length || 1 });
+      // playerDrawCard with pendingDraw already calls advanceTurn internally
+      broadcastGameState(roomCode);
+    }
+    return;
+  }
+
+  // ── Case 2: Find a card playable under current game rules ──
+  const playable = hand.filter(card => {
+    if (card.color === 'wild') return true;
+    if (card.color === gs.activeColor) return true;
+    const top = gs.discardPile[gs.discardPile.length - 1];
+    if (top && card.type === 'number' && top.type === 'number' && card.value === top.value) return true;
+    if (top && card.type !== 'number' && card.type === top.type) return true;
+    return false;
+  });
+
+  if (playable.length > 0) {
+    // Prefer non-wild cards to conserve wilds
+    const card = playable.find(c => c.color !== 'wild') || playable[0];
+    const chosenColor = card.color === 'wild'
+      ? (isBot ? bestWildColor(hand) : gameLogic.COLORS[Math.floor(Math.random() * 4)])
+      : undefined;
+    if (playCardAs(card, chosenColor)) return;
+  }
+
+  // ── Case 3: No playable card — draw 1, play it if possible (bots), else pass ──
+  const drawResult = gameLogic.playerDrawCard(gs, currentId);
+  if (!drawResult.error) {
+    sendHandTo(currentId);
+    io.to(roomCode).emit('player_drew', { playerId: currentId, count: drawResult.drawn?.length || 1 });
+
+    // Must explicitly pass turn after drawing (turn doesn't auto-advance for normal draw)
+    gameLogic.passTurn(gs, currentId);
+    broadcastGameState(roomCode);
+  }
+}
 
 function resetAutoPlayTimer(roomCode) {
   clearTimeout(_autoPlayTimers[roomCode]);
@@ -145,94 +307,26 @@ function resetAutoPlayTimer(roomCode) {
   const currentId = gameLogic.getCurrentPlayerId(room.gameState);
   if (!currentId) return;
 
+  // While clients are still running the deal animation, hold every auto-play
+  // past its end — this also covers re-arms caused by a human acting mid-deal
+  const dealHold = Math.max(0, (room.dealEndsAt || 0) - Date.now());
+  const isBot = isBotPlayer(room, currentId);
+  const delay = dealHold + (isBot ? botDelayMs() : AFK_TIMEOUT_MS);
+
   _autoPlayTimers[roomCode] = setTimeout(() => {
     const r = roomManager.getRoom(roomCode);
     if (!r || !r.gameState || r.gameState.winner) return;
     if (gameLogic.getCurrentPlayerId(r.gameState) !== currentId) return;
 
-    const gs = r.gameState;
-    const hand = gs.hands[currentId] || [];
-    const nickname = r.players.find(p => p.id === currentId)?.nickname || 'A player';
-
-    console.log(`[auto-play] Acting for idle player ${currentId} (${nickname}) in ${roomCode}`);
-
-    // Notify all clients this is an AFK move
-    io.to(roomCode).emit('afk_action', { playerId: currentId, nickname });
-
-    // ── Case 1: Player has a pending forced draw (draw2/wild4/wild8 stack) ──
-    if (gs.pendingDraw > 0) {
-      const result = gameLogic.playerDrawCard(gs, currentId);
-      if (!result.error) {
-        // Send updated hand to the player
-        const p = r.players.find(pl => pl.id === currentId);
-        if (p && p.socketId) {
-          const sock = getSocketById(p.socketId);
-          if (sock) sendHandToPlayer(sock, currentId, gs);
-        }
-        io.to(roomCode).emit('player_drew', { playerId: currentId, count: result.drawn?.length || 1 });
-        // playerDrawCard with pendingDraw already calls advanceTurn internally
-        broadcastGameState(roomCode);
-      }
-      return;
+    if (!isBot) {
+      const nickname = r.players.find(p => p.id === currentId)?.nickname || 'A player';
+      console.log(`[auto-play] Acting for idle player ${currentId} (${nickname}) in ${roomCode}`);
+      // Notify all clients this is an AFK move
+      io.to(roomCode).emit('afk_action', { playerId: currentId, nickname });
     }
 
-    // ── Case 2: Find a card playable under current game rules ──
-    // Use the same isPlayable logic: match color, type, or value
-    const playable = hand.filter(card => {
-      if (gs.pendingDraw > 0 && gs.settings.stacking) {
-        return card.type === gs.pendingDrawType;
-      }
-      if (card.color === 'wild') return gs.pendingDraw === 0 || !gs.settings.stacking;
-      if (card.color === gs.activeColor) return true;
-      const top = gs.discardPile[gs.discardPile.length - 1];
-      if (top && card.type === 'number' && top.type === 'number' && card.value === top.value) return true;
-      if (top && card.type !== 'number' && card.type === top.type) return true;
-      return false;
-    });
-
-    if (playable.length > 0) {
-      // Prefer non-wild cards to conserve wilds
-      const card = playable.find(c => c.color !== 'wild') || playable[0];
-      const chosenColor = card.color === 'wild'
-        ? gameLogic.COLORS[Math.floor(Math.random() * 4)]
-        : undefined;
-      const result = gameLogic.playCard(gs, currentId, card.id, chosenColor);
-      if (!result.error) {
-        const p = r.players.find(pl => pl.id === currentId);
-        if (p && p.socketId) {
-          const sock = getSocketById(p.socketId);
-          if (sock) sendHandToPlayer(sock, currentId, gs);
-        }
-        for (const effect of result.effects) {
-          if (effect.type === 'draw' && effect.playerId) {
-            const tp = r.players.find(pl => pl.id === effect.playerId);
-            if (tp && tp.socketId) {
-              const ts = getSocketById(tp.socketId);
-              if (ts) sendHandToPlayer(ts, tp.id, gs);
-            }
-          }
-        }
-        io.to(roomCode).emit('card_effect', { cardType: card.type, chosenColor });
-        broadcastGameState(roomCode);
-      }
-      return;
-    }
-
-    // ── Case 3: No playable card — draw 1 then pass ──
-    const drawResult = gameLogic.playerDrawCard(gs, currentId);
-    if (!drawResult.error) {
-      const p = r.players.find(pl => pl.id === currentId);
-      if (p && p.socketId) {
-        const sock = getSocketById(p.socketId);
-        if (sock) sendHandToPlayer(sock, currentId, gs);
-      }
-      io.to(roomCode).emit('player_drew', { playerId: currentId, count: drawResult.drawn?.length || 1 });
-
-      // Must explicitly pass turn after drawing (turn doesn't auto-advance for normal draw)
-      gameLogic.passTurn(gs, currentId);
-      broadcastGameState(roomCode);
-    }
-  }, 30000); // 30 seconds
+    performAutoAction(roomCode, currentId, { isBot });
+  }, delay);
 }
 
 
@@ -312,6 +406,7 @@ io.on('connection', (socket) => {
       id: p.id,
       nickname: p.nickname,
       connected: p.connected,
+      isBot: !!p.isBot,
     }));
 
     callback({
@@ -458,6 +553,20 @@ io.on('connection', (socket) => {
     callback?.({ success: true });
   });
 
+  // ── Add Bot (host only, lobby only) ──
+  socket.on('add_bot', ({ roomCode }, callback) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return callback?.({ error: 'Room not found' });
+    if (socket.data?.playerId !== room.hostId) return callback?.({ error: 'Only host can add bots' });
+
+    const result = roomManager.addBot(roomCode);
+    if (result.error) return callback?.({ error: result.error });
+
+    console.log(`[bot] ${result.player.nickname} added to ${roomCode}`);
+    broadcastRoomUpdate(roomCode);
+    callback?.({ success: true, botId: result.player.id, nickname: result.player.nickname });
+  });
+
   // ── Toggle Stacking ──
   socket.on('toggle_stacking', ({ roomCode, enabled }) => {
     const room = roomManager.getRoom(roomCode);
@@ -517,6 +626,12 @@ io.on('connection', (socket) => {
 
     callback?.({ success: true });
     saveStateSoon(); // Save after game starts
+
+    // Arm the turn timer — if the first player is a bot this kicks off its
+    // move, and if a human goes AFK on turn one the 30s fallback works.
+    // dealEndsAt makes resetAutoPlayTimer wait out the clients' deal animation.
+    room.dealEndsAt = Date.now() + dealAnimationMs(activePlayers.length);
+    resetAutoPlayTimer(roomCode);
   });
 
   // ── Play Card ──
@@ -537,9 +652,12 @@ io.on('connection', (socket) => {
     // Send updated hand to the player who played
     sendHandToPlayer(socket, playerId, room.gameState);
 
-    // If effects caused other players to draw, send them updated hands
+    // If effects caused other players to draw, send them updated hands.
+    // player_drew goes out BEFORE hand_updated: it carries causedBy, which the
+    // client uses to delay the draw animation until the +card play is visible.
     for (const effect of result.effects) {
       if (effect.type === 'draw' && effect.playerId) {
+        io.to(roomCode).emit('player_drew', { playerId: effect.playerId, count: effect.count, causedBy: playerId });
         const targetPlayer = room.players.find(p => p.id === effect.playerId);
         if (targetPlayer) {
           const targetSock = getSocketById(targetPlayer.socketId);
@@ -547,7 +665,6 @@ io.on('connection', (socket) => {
             sendHandToPlayer(targetSock, effect.playerId, room.gameState);
           }
         }
-        io.to(roomCode).emit('player_drew', { playerId: effect.playerId, count: effect.count });
       }
       if (effect.type === 'skip') {
         io.to(roomCode).emit('turn_skipped', { playerId: effect.playerId });
@@ -722,6 +839,18 @@ if (savedRooms) {
   // Save cleaned state
   statePersistence.saveState(roomManager.rooms);
   console.log(`[persistence] Restored ${restoredRoomCount} room(s) - players can reconnect`);
+
+  // Re-arm turn timers for restored in-progress games — otherwise a game whose
+  // current player is a bot (or AFK) would sit frozen until someone acted.
+  // Also start the cleanup clock: every restored room has zero connected humans,
+  // so if nobody rejoins within the window the room is garbage-collected
+  // (join_room cancels the timer on the first human reconnect).
+  for (const [code, room] of roomManager.rooms) {
+    roomManager.scheduleRoomCleanup(code);
+    if (room.status === 'playing' && room.gameState && !room.gameState.winner) {
+      resetAutoPlayTimer(code);
+    }
+  }
 }
 
 // Auto-save every 30 seconds

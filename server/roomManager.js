@@ -35,6 +35,37 @@ function generatePlayerId() {
 
 // Nicknames are allowed to be duplicated — no uniqueness enforcement.
 
+// ─── Bots ─────────────────────────────────────────────────────────────────────
+
+const BOT_NAMES = ['Ace Bot', 'Nova Bot', 'Zippy Bot', 'Turbo Bot', 'Pixel Bot', 'Echo Bot', 'Gizmo Bot', 'Rusty Bot', 'Sparky Bot', 'Ziggy Bot'];
+
+// A room is "empty" for cleanup purposes when no humans remain — bots are
+// always connected: true, so every emptiness check must ignore them.
+function hasActiveHumans(room) {
+  return room.players.some(p => !p.isBot && p.connected);
+}
+
+function addBot(roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room) return { error: 'Room not found' };
+  if (room.status !== 'lobby') return { error: 'Cannot add bots during a game' };
+  if (room.players.length >= MAX_PLAYERS) return { error: 'Room is full (max 20 players)' };
+
+  const used = new Set(room.players.map(p => p.nickname));
+  const name = BOT_NAMES.find(n => !used.has(n)) ||
+    `Bot ${crypto.randomInt(100, 999)}`;
+
+  const player = {
+    id: 'bot_' + generatePlayerId(),
+    nickname: name,
+    connected: true,
+    socketId: null,
+    isBot: true,
+  };
+  room.players.push(player);
+  return { player, room };
+}
+
 // ─── Room CRUD ────────────────────────────────────────────────────────────────
 
 function createRoom(nickname, options = {}) {
@@ -150,8 +181,8 @@ function removePlayer(roomCode, playerId) {
         // After timeout, permanently remove
         room.players = room.players.filter(p => p.id !== playerId);
         disconnectTimers.delete(timerKey);
-        // If no players left at all, schedule room cleanup
-        if (room.players.every(p => !p.connected)) {
+        // If no humans left at all, schedule room cleanup
+        if (!hasActiveHumans(room)) {
           scheduleRoomCleanup(roomCode);
         }
       }, RECONNECT_WINDOW_MS)
@@ -161,22 +192,22 @@ function removePlayer(roomCode, playerId) {
     room.players = room.players.filter(p => p.id !== playerId);
   }
 
-  // Host migration
+  // Host migration — bots can never be host
   if (room.hostId === playerId) {
-    const nextHost = room.players.find(p => p.connected);
+    const nextHost = room.players.find(p => p.connected && !p.isBot);
     if (nextHost) {
       room.hostId = nextHost.id;
     }
   }
 
-  // If room is empty in lobby, destroy now
-  if (room.status === 'lobby' && room.players.length === 0) {
+  // If no humans remain in lobby, destroy now (bots alone don't keep a room alive)
+  if (room.status === 'lobby' && room.players.every(p => p.isBot)) {
     rooms.delete(roomCode);
     return { roomDestroyed: true };
   }
 
-  // If all players disconnected during game, schedule cleanup
-  if (room.players.length === 0 || room.players.every(p => !p.connected)) {
+  // If all humans disconnected during game, schedule cleanup
+  if (!hasActiveHumans(room)) {
     scheduleRoomCleanup(roomCode);
   }
 
@@ -212,14 +243,14 @@ function forceRemovePlayer(roomCode, playerId) {
   // Permanently remove the player regardless of game status
   room.players = room.players.filter(p => p.id !== playerId);
 
-  // Host migration
+  // Host migration — bots can never be host
   if (room.hostId === playerId) {
-    const nextHost = room.players.find(p => p.connected);
+    const nextHost = room.players.find(p => p.connected && !p.isBot);
     if (nextHost) room.hostId = nextHost.id;
   }
 
-  // If room is now empty, clean it up
-  if (room.players.length === 0) {
+  // If no humans remain at all, clean up now (bot-only rooms are dead rooms)
+  if (room.players.every(p => p.isBot)) {
     rooms.delete(roomCode);
     return { roomDestroyed: true };
   }
@@ -292,6 +323,7 @@ module.exports = {
   rooms,
   createRoom,
   joinRoom,
+  addBot,
   removePlayer,
   forceRemovePlayer,
   getRoom,

@@ -248,6 +248,8 @@ const Renderer = (() => {
     }
   }
 
+  // NOTE: getOpponentPositions() mirrors this function's seat geometry so fly
+  // animations land on the exact drawn seats — change layout math in BOTH.
   function drawOpponents(ctx, players, myId, curPlayer, dir, W, H) {
     if (!players.length) return;
 
@@ -897,6 +899,24 @@ const Renderer = (() => {
     };
   }
 
+  /** Returns the discard pile center and card dimensions in canvas pixels.
+   *  MUST mirror drawPiles() exactly — fly animations land on this point. */
+  function getDiscardPosition(W, H) {
+    const _SW = W * 0.16, _TH = H * 0.26, _HH = H * 0.26;
+    const _CW = W - 2 * _SW, _CH = H - _TH - _HH;
+    const _CX = _SW + _CW / 2, _CY = _TH + _CH / 2;
+    const _cw = Math.min(_CW * 0.17, _CH * 0.52, vs(90));
+    const _ch = _cw * 1.45;
+    const _gap = Math.max(_cw * 0.15, vs(12));
+    const _dcx = _CX + _gap; // discard left edge
+    return {
+      cx: _dcx + _cw / 2,
+      cy: _CY,
+      w: _cw,
+      h: _ch,
+    };
+  }
+
   /** Returns the local player's hand area center and card dimensions. */
   function getHandTarget(W, H) {
     const SIDE_W = W * 0.16;
@@ -955,35 +975,38 @@ const Renderer = (() => {
 
     const results = [];
 
-    // Card sizes (same as drawOpponents)
-    const tcw = Math.min(CW / (Math.max(nTop, 1) * 3.2), TOP_H * 0.32, vs(32));
-    const tch = tcw * 1.45;
-    const scw = Math.min(SIDE_W * 0.52, CH / (Math.max(nLeft, nRight, 1) * 2.8), vs(28));
-    const sch = scw * 1.45;
-    const topSlotW = nTop > 0 ? CW / nTop : CW;
-    const sideAvailH = CH;
+    // ── Seat geometry: MUST mirror drawOpponents exactly ──────────────────────
+    // Fly animations land on these points; any drift from the drawn layout makes
+    // cards visually arrive at a neighboring player's seat.
 
-    // Top opponents
+    // Top row (same as drawOpponents: fan is centered on slotCX at fy = vs(6))
+    const tcw = Math.min(CW / (Math.max(nTop, 1) * 4.0), TOP_H * 0.25, vs(24));
+    const tch = tcw * 1.45;
+    const topSlotW = nTop > 0 ? CW / nTop : CW;
     topOps.forEach((p, i) => {
       const slotCX = CX + topSlotW * i + topSlotW / 2;
-      results.push({ id: p.id, side: 'top', cx: slotCX, cy: vs(8) + tch / 2, rotation: 180 });
+      results.push({ id: p.id, side: 'top', cx: slotCX, cy: vs(6) + tch / 2, rotation: 180, w: tcw, h: tch });
     });
 
-    // Left opponents (bottom-to-top for correct clockwise flow)
+    // Side columns (same as drawOpponents drawSide: slots spread over CH * 1.8
+    // centered on the middle zone, left column reversed bottom-to-top)
+    const maxSideSlots = Math.max(nLeft, nRight);
+    const scw = Math.min(SIDE_W * 0.42, CH / (maxSideSlots * 1.3), vs(24));
+    const sch = scw * 1.45;
+    const sideAvailH = CH * 1.8;
+    const startY = CY - (sideAvailH - CH) / 2;
+
     leftOps.forEach((p, i) => {
       const slotH = sideAvailH / nLeft;
       const slotIdx = nLeft - 1 - i; // Reverse: first player at bottom
-      const cy = CY + slotH * slotIdx + slotH / 2;
-      const fx = SIDE_W / 2;
-      results.push({ id: p.id, side: 'left', cx: fx, cy, rotation: -90 });
+      const cy = startY + slotH * slotIdx + slotH / 2;
+      results.push({ id: p.id, side: 'left', cx: SIDE_W / 2, cy, rotation: -90, w: scw, h: sch });
     });
 
-    // Right opponents
     rightOps.forEach((p, i) => {
       const slotH = sideAvailH / nRight;
-      const cy = CY + slotH * i + slotH / 2;
-      const fx = W - SIDE_W / 2;
-      results.push({ id: p.id, side: 'right', cx: fx, cy, rotation: 90 });
+      const cy = startY + slotH * i + slotH / 2;
+      results.push({ id: p.id, side: 'right', cx: W - SIDE_W / 2, cy, rotation: 90, w: scw, h: sch });
     });
 
     return results;
@@ -993,7 +1016,7 @@ const Renderer = (() => {
     font, updateScale, drawBackground, drawCard, drawCardBack: _cardBack,
     drawPlayerHand, drawHandPlaceholders, drawOpponents, drawPiles, drawDirectionArrow,
     drawActionButtons, drawColorPicker, drawWinScreen, drawTurnIndicator, drawTurnTimer, vs,
-    getDeckPosition, getOpponentPositions, getHandTarget,
+    getDeckPosition, getDiscardPosition, getOpponentPositions, getHandTarget,
   };
 })();
 

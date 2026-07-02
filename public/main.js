@@ -48,6 +48,11 @@
   // the fly animation instead of applying the full hand/count instantly.
   const CARD_FLY_MS = 250; // ms a single card takes to fly (Four Colors style)
   const CARD_STAGGER = 80; // ms between staggered cards (rapid dealing)
+  // When a draw is forced by another player's +card, hold the draw animation so
+  // the +card is first seen flying to the discard pile (otherwise both happen
+  // at once and the penalty cards appear to arrive out of nowhere).
+  const FORCED_DRAW_DELAY_MS = 1000;
+  let _pendingSelfDrawDelay = 0; // set by player_drew, consumed by hand_updated
   let _bufferedHand = null;          // full hand stored while incremental reveal runs
   let _handAnimating = false;         // true while self draw animation is in progress
   const _drawAnimPlayers = new Set(); // playerIds currently mid draw-animation (for others)
@@ -340,7 +345,7 @@
       const avatar = document.createElement('div');
       avatar.className = 'player-avatar';
       avatar.style.background = getAvatarColor(i);
-      avatar.textContent = p.nickname.charAt(0).toUpperCase();
+      avatar.textContent = p.isBot ? '🤖' : p.nickname.charAt(0).toUpperCase();
       li.appendChild(avatar);
 
       // Name
@@ -349,6 +354,12 @@
       if (!p.connected) name.style.opacity = '0.4';
       li.appendChild(name);
 
+      if (p.isBot) {
+        const bot = document.createElement('span');
+        bot.className = 'bot-badge';
+        bot.textContent = 'BOT';
+        li.appendChild(bot);
+      }
       if (p.id === myPlayerId) {
         const you = document.createElement('span');
         you.className = 'you-badge';
@@ -365,10 +376,11 @@
         const kickBtn = document.createElement('button');
         kickBtn.className = 'btn-kick';
         kickBtn.innerHTML = '✖';
-        kickBtn.title = 'Kick player';
+        kickBtn.title = p.isBot ? 'Remove bot' : 'Kick player';
         kickBtn.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (confirm(`Kick ${p.nickname}?`)) {
+          // Bots are removed without confirmation — it's a settings tweak, not a kick
+          if (p.isBot || confirm(`Kick ${p.nickname}?`)) {
             socket.emit('kick_player', { roomCode: currentRoomCode, targetPlayerId: p.id });
           }
         });
@@ -434,6 +446,72 @@
     });
   });
 
+  // ── Lobby: Play vs Bots (instant solo game — no second human needed) ──────
+  const $btnPlayBots = document.getElementById('btn-play-bots');
+  const QUICK_PLAY_BOTS = 3; // classic 4-player table
+
+  $btnPlayBots.addEventListener('click', () => {
+    const nick = $nickname.value.trim();
+    if (!nick) {
+      showToast('Please enter a nickname', true);
+      $nickname.focus();
+      return;
+    }
+
+    $btnPlayBots.disabled = true;
+    socket.emit('create_room', { nickname: nick, isPrivate: true }, (res) => {
+      if (res.error) {
+        $btnPlayBots.disabled = false;
+        return showToast(res.error, true);
+      }
+
+      myPlayerId = res.playerId;
+      myNickname = res.nickname;
+      currentRoomCode = res.roomCode;
+
+      sessionStorage.setItem('uno_session', JSON.stringify({
+        roomCode: res.roomCode,
+        playerId: res.playerId,
+        nickname: res.nickname,
+      }));
+      localStorage.setItem('uno_nickname', res.nickname);
+
+      $displayCode.textContent = res.roomCode;
+      history.replaceState({}, '', `?room=${res.roomCode}&playerId=${res.playerId}&nickname=${encodeURIComponent(res.nickname)}`);
+      showScreen($waitingRoom); // valid fallback state if bot setup fails midway
+      showToast('Setting up your game...');
+
+      // Add bots one by one, then start — game_started flips us to the game UI
+      let added = 0;
+      function addNextBot() {
+        socket.emit('add_bot', { roomCode: currentRoomCode }, (botRes) => {
+          if (botRes && botRes.error) {
+            $btnPlayBots.disabled = false;
+            return showToast(botRes.error, true);
+          }
+          added++;
+          if (added < QUICK_PLAY_BOTS) return addNextBot();
+          socket.emit('start_game', { roomCode: currentRoomCode }, (startRes) => {
+            $btnPlayBots.disabled = false;
+            if (startRes && startRes.error) showToast(startRes.error, true);
+          });
+        });
+      }
+      addNextBot();
+    });
+  });
+
+  // ── Waiting Room: Add Bot (host only — button lives inside #host-settings) ─
+  const $btnAddBot = document.getElementById('btn-add-bot');
+  $btnAddBot.addEventListener('click', () => {
+    $btnAddBot.disabled = true;
+    socket.emit('add_bot', { roomCode: currentRoomCode }, (res) => {
+      $btnAddBot.disabled = false;
+      if (res && res.error) return showToast(res.error, true);
+      showToast(`${res.nickname} joined the table`);
+    });
+  });
+
   // ── Waiting Room: Copy Invite Link ─────────────────────────────────
   const $btnCopyLink = document.getElementById('btn-copy-link');
   $btnCopyLink.addEventListener('click', () => {
@@ -449,6 +527,14 @@
       // Fallback: show the URL as toast
       showToast(`Invite: ${url}`);
     });
+  });
+
+  // ── Waiting Room: Share on WhatsApp ────────────────────────────────
+  const $btnShareWhatsApp = document.getElementById('btn-share-whatsapp');
+  $btnShareWhatsApp.addEventListener('click', () => {
+    const url = `${location.origin}${location.pathname}?room=${currentRoomCode}`;
+    const text = `🃏 Join my UNO game! Room ${currentRoomCode} — tap to play: ${url}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
   });
 
 
@@ -1021,6 +1107,11 @@
       return;
     }
 
+    // Consume any hold requested by a forced draw — the server sends player_drew
+    // (which sets this) before hand_updated, so it's ready by the time we're here
+    const baseDelay = _pendingSelfDrawDelay;
+    _pendingSelfDrawDelay = 0;
+
     const prevLen = Game.state.myHand.length;
     const newCards = data.cards;
     const added = newCards.length - prevLen;
@@ -1036,7 +1127,7 @@
     _bufferedHand = newCards;
 
     for (let i = 0; i < added; i++) {
-      const delay = i * CARD_STAGGER + CARD_FLY_MS; // wait for each card to land
+      const delay = baseDelay + i * CARD_STAGGER + CARD_FLY_MS; // wait for each card to land
       setTimeout(() => {
         if (!_bufferedHand) return; // cancelled
         // Show cards up to prevLen + i + 1
@@ -1110,7 +1201,8 @@
         const tgtOpp = opps.find(o => o.id === playedBy);
         if (tgtOpp) {
           const side = computeSide(tgtOpp.oppIdx, opps.length);
-          Game.triggerAnimation('fly_opponent_card', { side });
+          // playerId lets the animation start from the exact seat; side is fallback
+          Game.triggerAnimation('fly_opponent_card', { side, playerId: playedBy });
         }
       }
     }
@@ -1151,6 +1243,11 @@
     const toSelf = data.playerId === myPlayerId;
     const pid = data.playerId;
 
+    // Draw forced by another player's +card: hold the incoming-card animation
+    // so the +card is seen landing on the discard pile first
+    const startDelay = (data.causedBy && data.causedBy !== data.playerId) ? FORCED_DRAW_DELAY_MS : 0;
+    if (toSelf) _pendingSelfDrawDelay = startDelay; // hand_updated arrives next and syncs to this
+
     // For opponents: protect their card count during animation
     if (!toSelf) {
       _drawAnimPlayers.add(pid);
@@ -1177,7 +1274,7 @@
             // Self: hand reveal is driven by hand_updated handler
           },
         });
-      }, i * CARD_STAGGER);
+      }, startDelay + i * CARD_STAGGER);
     }
 
     // If this was MY normal draw (not forced), show Pass Turn button
@@ -1186,7 +1283,11 @@
     }
 
     if (data.count > 1) {
-      Game.triggerAnimation('draw_flash');
+      if (startDelay > 0) {
+        setTimeout(() => Game.triggerAnimation('draw_flash'), startDelay);
+      } else {
+        Game.triggerAnimation('draw_flash');
+      }
     }
   });
 

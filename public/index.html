@@ -22,9 +22,16 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- Non-blocking font load: media="print" makes the browser fetch it at low
+       priority without blocking first paint; onload swaps it live. Text renders
+       immediately in the fallback font (display=swap) either way. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
-    rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=25" />
+    rel="stylesheet" media="print" onload="this.media='all'" />
+  <noscript>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet" />
+  </noscript>
+  <link rel="stylesheet" href="style.css?v=29" />
 
   <!--
     Game scripts: moved to <head> with `defer` instead of the old runtime loader
@@ -43,10 +50,10 @@
       deploy, matching the pattern already used for style.css above.
   -->
   <script defer src="/socket.io/socket.io.js"></script>
-  <script defer src="assets/cards.js?v=25"></script>
-  <script defer src="renderer.js?v=25"></script>
-  <script defer src="game.js?v=25"></script>
-  <script defer src="main.js?v=25"></script>
+  <script defer src="assets/cards.js?v=29"></script>
+  <script defer src="renderer.js?v=29"></script>
+  <script defer src="game.js?v=29"></script>
+  <script defer src="main.js?v=29"></script>
 
   <style>
     /* Visually hides labels for sighted users while keeping them for screen readers */
@@ -133,6 +140,9 @@
         </div>
 
         <div class="button-group">
+          <button id="btn-play-bots" class="btn btn-outline btn-large">
+            <span class="btn-icon">🤖</span> Play vs Bots
+          </button>
           <button id="btn-browse" class="btn btn-outline btn-large">
             <span class="btn-icon">🔍</span> Browse Public Rooms
           </button>
@@ -186,6 +196,10 @@
           aria-label="Copy invite link">
           🔗 Copy Invite Link
         </button>
+        <button id="btn-share-whatsapp" class="btn btn-ghost btn-share btn-whatsapp" title="Share invite on WhatsApp"
+          aria-label="Share invite on WhatsApp">
+          💬 Share on WhatsApp
+        </button>
       </div>
 
       <div class="players-card">
@@ -201,6 +215,9 @@
             <span class="toggle-slider"></span>
           </div>
         </label>
+        <button id="btn-add-bot" class="btn btn-outline btn-add-bot" title="Add a bot player">
+          🤖 Add Bot
+        </button>
       </div>
 
       <button id="btn-start" class="btn btn-primary btn-start" disabled>

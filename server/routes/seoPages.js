@@ -33,12 +33,7 @@ router.get('/', (req, res) => {
         "@type": "WebSite",
         "name": SITE_NAME,
         "url": BASE_URL,
-        "description": "Free browser-based multiplayer UNO card game",
-        "potentialAction": {
-          "@type": "SearchAction",
-          "target": `${BASE_URL}/search?q={search_term_string}`,
-          "query-input": "required name=search_term_string"
-        }
+        "description": "Free browser-based multiplayer UNO card game"
       },
       {
         "@context": "https://schema.org",

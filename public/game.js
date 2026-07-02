@@ -346,23 +346,11 @@ const Game = (() => {
     flyEl.style.pointerEvents = 'none';
     animOverlay.appendChild(flyEl);
 
-    // Compute the discard pile center using the exact same formula as the renderer
-    // so the card always lands on the actual pile regardless of screen size.
+    // Land on the exact discard pile position the renderer draws
     const W = canvas.width, H = canvas.height;
-    const _SW  = W * 0.16, _TH = H * 0.26, _HH = H * 0.26;
-    const _CW  = W - 2 * _SW, _CH = H - _TH - _HH;
-    const _CX  = _SW + _CW / 2, _CY = _TH + _CH / 2;
-    const _cw  = Math.min(_CW * 0.17, _CH * 0.52, Renderer.vs(90));
-    const _ch  = _cw * 1.45;
-    const _gap = _cw * 0.28;
-    const _dcx = _CX + _gap;           // discard pile left edge (canvas px)
-    const _dy  = _CY - _ch / 2;        // discard pile top edge  (canvas px)
-
-    // Center of discard pile in canvas pixels → convert to screen pixels
-    const discardCX_canvas = _dcx + _cw / 2;
-    const discardCY_canvas = _dy  + _ch / 2;
-    const targetCX = canvasRect.left + discardCX_canvas * scaleX;
-    const targetCY = canvasRect.top  + discardCY_canvas * scaleY;
+    const discard = Renderer.getDiscardPosition(W, H);
+    const targetCX = canvasRect.left + discard.cx * scaleX;
+    const targetCY = canvasRect.top  + discard.cy * scaleY;
     const endX     = targetCX - screenW / 2;
     const endY     = targetCY - screenH / 2;
 
@@ -669,25 +657,33 @@ const Game = (() => {
     requestAnimationFrame(frame);
   }
 
-  // Animate a card-back flying FROM an opponent's zone TO the discard pile.
-  // side: 'top' | 'left' | 'right'
-  function flyCardFromOpponentToDiscard(side) {
+  // Animate a card-back flying FROM an opponent's seat TO the discard pile.
+  // playerId locates the exact seat via getOpponentPositions; side is only a
+  // fallback for the rare case the player isn't in the layout (just left, etc.)
+  function flyCardFromOpponentToDiscard(side, playerId) {
     if (!animOverlay || !canvas) return;
 
     const cRect  = canvas.getBoundingClientRect();
     const scaleX = cRect.width  / canvas.width;
     const scaleY = cRect.height / canvas.height;
-
-    // Card size (same as deck card)
     const W = canvas.width, H = canvas.height;
-    const cw_c = Math.min(W * 0.22, Renderer.vs(85));
-    const ch_c = cw_c * 1.45;
-    const screenW = cw_c * scaleX;
-    const screenH = ch_c * scaleY;
 
-    // Source: opponent zone center
-    let srcCX, srcCY;
-    if (side === 'left') {
+    // Target: the exact discard pile the renderer draws — the flying element is
+    // pile-card-sized and lands scale 1, so it matches the discardTop underneath
+    const discard = Renderer.getDiscardPosition(W, H);
+    const screenW = discard.w * scaleX;
+    const screenH = discard.h * scaleY;
+    const tgtCX = cRect.left + discard.cx * scaleX;
+    const tgtCY = cRect.top  + discard.cy * scaleY;
+
+    // Source: the player's exact seat
+    let srcCX = null, srcCY = null;
+    const slot = Renderer.getOpponentPositions(state.players, state.myId, W, H)
+      .find(o => o.id === playerId);
+    if (slot) {
+      srcCX = cRect.left + slot.cx * scaleX;
+      srcCY = cRect.top  + slot.cy * scaleY;
+    } else if (side === 'left') {
       srcCX = cRect.left + cRect.width * 0.08;
       srcCY = cRect.top  + cRect.height * 0.45;
     } else if (side === 'right') {
@@ -698,34 +694,25 @@ const Game = (() => {
       srcCX = cRect.left + cRect.width * 0.50;
       srcCY = cRect.top  + cRect.height * 0.10;
     }
+
+    // Start small (opponents' cards are drawn small at their seats), grow to pile size
+    const START_SCALE = 0.45;
     const startL = srcCX - screenW / 2;
     const startT = srcCY - screenH / 2;
-
-    // Target: discard pile center (same formula as flyCardToDiscard)
-    const _SW  = W * 0.16, _TH = H * 0.26, _HH = H * 0.26;
-    const _CW  = W - 2 * _SW, _CH = H - _TH - _HH;
-    const _CX  = _SW + _CW / 2, _CY = _TH + _CH / 2;
-    const _cw  = Math.min(_CW * 0.17, _CH * 0.52, Renderer.vs(90));
-    const _ch2 = _cw * 1.45;
-    const _gap = _cw * 0.28;
-    const _dcx = _CX + _gap;
-    const _dy  = _CY - _ch2 / 2;
-    const tgtCX = cRect.left + (_dcx + _cw / 2) * scaleX;
-    const tgtCY = cRect.top  + (_dy  + _ch2/ 2) * scaleY;
-    const endL  = tgtCX - screenW / 2;
-    const endT  = tgtCY - screenH / 2;
+    const endL   = tgtCX - screenW / 2;
+    const endT   = tgtCY - screenH / 2;
 
     // Draw a card-back onto an offscreen canvas
     const snap = document.createElement('canvas');
-    snap.width  = Math.round(cw_c);
-    snap.height = Math.round(ch_c);
+    snap.width  = Math.round(discard.w);
+    snap.height = Math.round(discard.h);
     Renderer.drawCard(snap.getContext('2d'), null, 0, 0, snap.width, snap.height, { faceUp: false });
 
     snap.className = 'anim-el';
     snap.style.cssText = `position:absolute;left:${startL}px;top:${startT}px;` +
       `width:${screenW}px;height:${screenH}px;` +
       `border-radius:${snap.width * 0.12 * scaleX}px;` +
-      `transform:translate(0,0) scale(1);opacity:1;z-index:615;` +
+      `transform:translate(0,0) scale(${START_SCALE});opacity:1;z-index:615;` +
       `will-change:transform,opacity;pointer-events:none;`;
     animOverlay.appendChild(snap);
 
@@ -740,8 +727,9 @@ const Game = (() => {
       const arcY = Math.sin(p * Math.PI) * -80;
       const x    = (endL - startL) * ease;
       const y    = (endT - startT) * ease + arcY;
-      const sc   = 1 - 0.15 * ease;
-      const op   = p > 0.75 ? 1 - (p - 0.75) / 0.25 : 1;
+      const sc   = START_SCALE + (1 - START_SCALE) * ease;
+      // Fade only at the very end, once the card has landed on the pile
+      const op   = p > 0.85 ? 1 - (p - 0.85) / 0.15 : 1;
       snap.style.transform = `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) rotate(${(randomAngle*ease).toFixed(1)}deg) scale(${sc.toFixed(3)})`;
       snap.style.opacity   = op.toFixed(3);
       if (t < duration) {
@@ -845,7 +833,7 @@ const Game = (() => {
     // fly_opponent_card: opponent played a card — animate it to the discard pile
     if (type === 'fly_opponent_card') {
       const side = (data && data.side) || 'top';
-      flyCardFromOpponentToDiscard(side);
+      flyCardFromOpponentToDiscard(side, data && data.playerId);
     }
     if (type === 'winner') {
       triggerWinnerConfetti();

@@ -34,6 +34,7 @@ function saveState(rooms) {
         id: p.id,
         nickname: p.nickname,
         connected: p.connected,
+        isBot: !!p.isBot,
         // Don't persist socketId — it will be reassigned on reconnect
       })),
       spectators: room.spectators ? room.spectators.map(s => ({
@@ -95,12 +96,14 @@ function loadState() {
     // Convert back to Map structure
     const rooms = new Map();
     for (const roomData of state.rooms) {
-      // Restore players with disconnected status (they can reconnect)
+      // Restore players with disconnected status (they can reconnect).
+      // Bots have no socket to reconnect — they come back alive immediately.
       const players = roomData.players.map(p => ({
         id: p.id,
         nickname: p.nickname,
-        connected: false, // Mark all as disconnected initially
+        connected: !!p.isBot,
         socketId: null,
+        isBot: !!p.isBot,
       }));
 
       const spectators = roomData.spectators ? roomData.spectators.map(s => ({
@@ -147,8 +150,9 @@ function loadState() {
             const players = roomData.players.map(p => ({
               id: p.id,
               nickname: p.nickname,
-              connected: false,
+              connected: !!p.isBot,
               socketId: null,
+              isBot: !!p.isBot,
             }));
             const spectators = roomData.spectators ? roomData.spectators.map(s => ({
               id: s.id,

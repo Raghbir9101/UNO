@@ -1974,3 +1974,31 @@ input[type="text"]::placeholder {
     padding: 10px;
   }
 }
+
+/* ── Bots & Sharing ─────────────────────────────────────────────────────────── */
+
+#player-list li .bot-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  background: rgba(100, 181, 246, 0.15);
+  color: #64B5F6;
+  border: 1px solid rgba(100, 181, 246, 0.35);
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.btn-add-bot {
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px;
+  font-size: 14px;
+}
+
+.btn-whatsapp {
+  color: #25D366;
+}
+.btn-whatsapp:hover {
+  color: #2ee97a;
+}
