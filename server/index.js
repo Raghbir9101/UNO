@@ -8,9 +8,11 @@ const { Server } = require('socket.io');
 const path = require('path');
 const compression = require('compression');
 require('dotenv').config();
+const fs = require('fs');
 const roomManager = require('./roomManager');
 const gameLogic = require('./gameLogic');
 const seoPages = require('./routes/seoPages');
+const ogImage = require('./routes/ogImage');
 const statePersistence = require('./statePersistence');
 
 const app = express();
@@ -32,6 +34,17 @@ const PORT = process.env.PORT || 3000;
 // ── View Engine (EJS for SEO pages) ──
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, '..', 'views'));
+
+// Behind nginx/Cloudflare — trust X-Forwarded-Proto so req.protocol is https
+app.set('trust proxy', true);
+
+// Absolute base URL for OG tags/images. Link-preview crawlers (WhatsApp,
+// Discord) need absolute URLs on whatever domain the site is actually served
+// from — BASE_URL overrides, otherwise derive from the request.
+app.use((req, res, next) => {
+  res.locals.baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+  next();
+});
 
 // ── Compression ──
 app.use(compression());
@@ -61,9 +74,46 @@ app.use((req, res, next) => {
 // ── SEO Pages (must come BEFORE static middleware so / doesn't serve index.html) ──
 app.use(seoPages);
 
-// ── Game SPA: serve the existing index.html at /play ──
+// ── Dynamic OG images (/og/room/:code.png for room invite link previews) ──
+app.use(ogImage);
+
+// ── Game SPA at /play, with link-preview meta injected per request ──
+// Room invite links (/play?room=CODE) get room-specific OG tags and a
+// generated preview image so pasting the link into WhatsApp/Discord shows
+// a personalized card. The <!--OG_TAGS--> placeholder lives in index.html.
+const PLAY_HTML = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+const ROOM_CODE_RE = /^[A-Z0-9]{3,10}$/;
+
 app.get('/play', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+  const base = res.locals.baseUrl;
+  const room = String(req.query.room || '').toUpperCase().trim();
+  const isRoom = ROOM_CODE_RE.test(room);
+
+  const title = isRoom
+    ? `Join my UNO game — Room ${room}`
+    : 'Play UNO Free — Multiplayer Card Game';
+  const desc = isRoom
+    ? `You're invited to a free online UNO game! Tap to join room ${room} — no download, no signup, up to 20 players.`
+    : 'Play UNO free online with friends — real-time multiplayer card game for 2-20 players. 100% free forever.';
+  const image = isRoom ? `${base}/og/room/${room}.png` : `${base}/images/og-image.jpg`;
+  const url = isRoom ? `${base}/play?room=${room}` : `${base}/play`;
+
+  const ogTags = [
+    `<meta property="og:title" content="${title}" />`,
+    `<meta property="og:description" content="${desc}" />`,
+    `<meta property="og:type" content="website" />`,
+    `<meta property="og:url" content="${url}" />`,
+    `<meta property="og:image" content="${image}" />`,
+    `<meta property="og:image:width" content="1200" />`,
+    `<meta property="og:image:height" content="630" />`,
+    `<meta property="og:site_name" content="Play UNO Free" />`,
+    `<meta name="twitter:card" content="summary_large_image" />`,
+    `<meta name="twitter:title" content="${title}" />`,
+    `<meta name="twitter:description" content="${desc}" />`,
+    `<meta name="twitter:image" content="${image}" />`,
+  ].join('\n  ');
+
+  res.type('html').send(PLAY_HTML.replace('<!--OG_TAGS-->', ogTags));
 });
 
 // Serve static files (JS, CSS, images, assets — but NOT index.html as homepage)
