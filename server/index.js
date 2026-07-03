@@ -95,7 +95,7 @@ app.get('/play', (req, res) => {
   const desc = isRoom
     ? `You're invited to a free online UNO game! Tap to join room ${room} — no download, no signup, up to 20 players.`
     : 'Play UNO free online with friends — real-time multiplayer card game for 2-20 players. 100% free forever.';
-  const image = isRoom ? `${base}/og/room/${room}.png` : `${base}/images/og-image.jpg`;
+  const image = isRoom ? `${base}/og/room/${room}.png` : `${base}/images/og-image.jpg?v=2`;
   const url = isRoom ? `${base}/play?room=${room}` : `${base}/play`;
 
   const ogTags = [

@@ -17,7 +17,7 @@ function renderPage(res, view, overrides = {}) {
   const defaults = {
     siteName: SITE_NAME,
     baseUrl: base,
-    ogImage: `${base}/images/og-image.jpg`,
+    ogImage: `${base}/images/og-image.jpg?v=2`,
     ogType: 'website',
   };
   res.render(view, { ...defaults, ...overrides });
