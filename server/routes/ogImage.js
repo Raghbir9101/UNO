@@ -94,36 +94,66 @@ function cardFan(cx, baseY) {
 }
 
 function roomSvg(code) {
+  const codeWidth = 100 + code.length * 68;
   return `<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <radialGradient id="glow" cx="0.72" cy="0.55" r="0.6">
-      <stop offset="0" stop-color="${C.blue}" stop-opacity="0.10"/>
+    <!-- Background glow pool -->
+    <radialGradient id="bgGlow" cx="0.5" cy="0.65" r="0.75">
+      <stop offset="0" stop-color="${C.blue}" stop-opacity="0.12"/>
       <stop offset="1" stop-color="${C.blue}" stop-opacity="0"/>
     </radialGradient>
+    <!-- Projection grid -->
     <pattern id="grid" width="52" height="52" patternUnits="userSpaceOnUse">
-      <path d="M52 0H0V52" fill="none" stroke="${C.steel}" stroke-opacity="0.07" stroke-width="1"/>
+      <path d="M52 0H0V52" fill="none" stroke="${C.steel}" stroke-opacity="0.06" stroke-width="1"/>
     </pattern>
+    <!-- Brand gradient (yellow → red) -->
     <linearGradient id="brand" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="${C.yellow}"/><stop offset="1" stop-color="${C.red}"/>
+      <stop offset="0" stop-color="${C.yellow}"/>
+      <stop offset="1" stop-color="${C.red}"/>
     </linearGradient>
+    <!-- Glass panel gradient -->
+    <linearGradient id="panelBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${C.panel}" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="${C.cardBottom}" stop-opacity="0.95"/>
+    </linearGradient>
+    <!-- Green glow for room code box -->
+    <filter id="codeGlow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
   </defs>
+
+  <!-- Void background -->
   <rect width="1200" height="630" fill="${C.bg}"/>
-  <rect width="1200" height="630" fill="url(#grid)"/>
-  <rect width="1200" height="630" fill="url(#glow)"/>
+  <!-- Projection grid (masked radial fade) -->
+  <rect width="1200" height="630" fill="url(#grid)" opacity="0.7"/>
+  <!-- Blue glow pool -->
+  <rect width="1200" height="630" fill="url(#bgGlow)"/>
 
-  <!-- Left column: invitation copy + room code -->
-  <text x="80" y="130" font-family="${FONT}" font-weight="bold" font-size="30" letter-spacing="6" fill="${C.yellow}">YOU'RE INVITED</text>
-  <text x="80" y="212" font-family="${FONT}" font-weight="bold" font-size="64" fill="${C.white}">Join my UNO game</text>
+  <!-- Glass content panel (left 2/3) -->
+  <rect x="60" y="80" width="660" height="470" rx="24" fill="url(#panelBody)" stroke="${C.steel}" stroke-opacity="0.16" stroke-width="1.5"/>
+  <rect x="60.75" y="80.75" width="658.5" height="468.5" rx="23.25" fill="none" stroke="${C.white}" stroke-opacity="0.07" stroke-width="1"/>
 
-  <text x="80" y="300" font-family="${FONT}" font-size="28" fill="${C.steel}">ROOM CODE</text>
-  <rect x="76" y="330" width="${90 + code.length * 62}" height="112" rx="20" fill="${C.panel}" stroke="${C.green}" stroke-opacity="0.55" stroke-width="2"/>
-  <text x="${76 + (90 + code.length * 62) / 2}" y="386" font-family="${FONT}" font-weight="bold" font-size="76" letter-spacing="14" fill="${C.green}" text-anchor="middle" dominant-baseline="central">${code}</text>
+  <!-- YOU'RE INVITED eyebrow -->
+  <text x="100" y="155" font-family="${FONT}" font-weight="bold" font-size="26" letter-spacing="5" fill="${C.yellow}" opacity="0.95">YOU'RE INVITED</text>
 
-  <text x="80" y="520" font-family="${FONT}" font-size="30" fill="${C.steel}">Free multiplayer UNO · 2–20 players · No download</text>
-  <text x="80" y="575" font-family="${FONT}" font-weight="bold" font-size="32" fill="url(#brand)">Tap to join the game</text>
+  <!-- Hero title -->
+  <text x="100" y="225" font-family="${FONT}" font-weight="bold" font-size="58" fill="${C.white}">Join my</text>
+  <text x="100" y="285" font-family="${FONT}" font-weight="bold" font-size="58" fill="url(#brand)">UNO game</text>
 
-  <!-- Right column: the card fan -->
-  ${cardFan(920, 480)}
+  <!-- Room code label -->
+  <text x="100" y="360" font-family="${FONT}" font-weight="600" font-size="22" letter-spacing="3" fill="${C.steel}" opacity="0.85">ROOM CODE</text>
+
+  <!-- Room code box: glass slab with green emissive border + glow -->
+  <rect x="96" y="385" width="${codeWidth}" height="90" rx="16" fill="${C.cardBottom}" stroke="${C.green}" stroke-opacity="0.65" stroke-width="2.5" filter="url(#codeGlow)"/>
+  <rect x="96" y="385" width="${codeWidth}" height="90" rx="16" fill="none" stroke="${C.white}" stroke-opacity="0.04" stroke-width="1"/>
+  <text x="${96 + codeWidth / 2}" y="430" font-family="${FONT}" font-weight="bold" font-size="64" letter-spacing="12" fill="${C.green}" text-anchor="middle" dominant-baseline="central" filter="url(#codeGlow)">${code}</text>
+
+  <!-- Footer tagline -->
+  <text x="100" y="520" font-family="${FONT}" font-size="20" fill="${C.steel}">2–20 players · No download · Always free</text>
+
+  <!-- Right side: holo-foil card fan (same as hero canvas) -->
+  ${cardFan(950, 465)}
 </svg>`;
 }
 
