@@ -2,12 +2,18 @@
 <%- include('partials/nav') %>
 <main id="main-content" class="content-page" style="min-height:70vh;display:flex;align-items:center;">
   <div class="container" style="text-align:center;">
-    <div style="font-size:6rem;margin-bottom:16px;">🃏</div>
-    <h1>Page Not Found</h1>
-    <p class="page-subtitle" style="margin-bottom:32px;">Looks like this card isn't in the deck. The page you're looking for doesn't exist or has been moved.</p>
+    <!-- The one small moment of personality: a card misdealt off the table -->
+    <div class="card-404" aria-hidden="true">
+      <span class="corner corner--tl">404</span>
+      <span class="pip">404</span>
+      <span class="corner corner--br">404</span>
+    </div>
+    <div class="card-404-shadow" aria-hidden="true"></div>
+    <h1>Misdeal!</h1>
+    <p class="page-subtitle" style="margin-bottom:32px;">This card slid off the table — the page you're looking for doesn't exist or has been moved.</p>
     <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
       <a href="/" class="btn btn-hero-secondary">← Back to Home</a>
-      <a href="/play" class="btn btn-hero">▶ Play UNO</a>
+      <a href="/play" class="btn btn-hero">Play UNO</a>
     </div>
     <div style="margin-top:48px;">
       <p style="color:var(--text-muted);font-size:0.9rem;">Looking for something specific?</p>

@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="description" content="Play UNO free online with friends — real-time multiplayer card game for 2-20 players. No download, no signup. Always free." />
-  <meta name="theme-color" content="#0f0f1a" />
+  <meta name="theme-color" content="#05070d" />
   <meta name="color-scheme" content="dark" />
 
   <!-- Nicer link previews when a room invite link gets pasted into chat apps -->
@@ -17,21 +17,22 @@
 
   <title>Play UNO Free — Multiplayer Card Game</title>
 
-  <!-- Stops the browser firing a wasted, blocking favicon.ico 404 request -->
-  <link rel="icon" href="data:," />
+  <link rel="icon" type="image/svg+xml" href="/images/favicon.svg?v=30" />
+  <link rel="apple-touch-icon" href="/images/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.json" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <!-- Non-blocking font load: media="print" makes the browser fetch it at low
        priority without blocking first paint; onload swaps it live. Text renders
        immediately in the fallback font (display=swap) either way. -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600;700&display=swap"
     rel="stylesheet" media="print" onload="this.media='all'" />
   <noscript>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600;700&display=swap"
       rel="stylesheet" />
   </noscript>
-  <link rel="stylesheet" href="style.css?v=29" />
+  <link rel="stylesheet" href="style.css?v=30" />
 
   <!--
     Game scripts: moved to <head> with `defer` instead of the old runtime loader
@@ -50,10 +51,10 @@
       deploy, matching the pattern already used for style.css above.
   -->
   <script defer src="/socket.io/socket.io.js"></script>
-  <script defer src="assets/cards.js?v=29"></script>
-  <script defer src="renderer.js?v=29"></script>
-  <script defer src="game.js?v=29"></script>
-  <script defer src="main.js?v=29"></script>
+  <script defer src="assets/cards.js?v=30"></script>
+  <script defer src="renderer.js?v=30"></script>
+  <script defer src="game.js?v=30"></script>
+  <script defer src="main.js?v=30"></script>
 
   <style>
     /* Visually hides labels for sighted users while keeping them for screen readers */
@@ -240,6 +241,8 @@
       <span class="ping-ms">-- ms</span>
     </div>
     <button id="btn-manage-players" class="btn-manage-players" style="display: none;" title="Manage Players">👥</button>
+    <button id="btn-surrender" class="btn-surrender" title="Surrender and leave the game"
+      aria-label="Surrender and leave the game">🏳️</button>
     <button id="btn-fullscreen" class="btn-fullscreen" title="Fullscreen / Landscape"
       aria-label="Toggle fullscreen">⛶</button>
   </div>

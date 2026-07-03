@@ -3,25 +3,25 @@
 
 <main id="main-content">
 
-  <!-- ══════════ HERO SECTION ══════════ -->
+  <!-- ══════════ HERO SECTION — the game itself is the thesis ══════════ -->
   <section class="hero" id="hero">
-    <div class="hero-bg-shapes" aria-hidden="true">
-      <div class="hero-shape hero-shape--1"></div>
-      <div class="hero-shape hero-shape--2"></div>
-      <div class="hero-shape hero-shape--3"></div>
-    </div>
-    <div class="container hero-inner">
-      <h1 class="hero-title">Play UNO Free<br>with <span class="text-gradient">Friends</span></h1>
-      <p class="hero-subtitle">Free multiplayer UNO for up to <strong>20 players</strong>. No download. No signup. Always free.</p>
-      <div class="hero-ctas">
-        <a href="/play" class="btn btn-hero" id="hero-play-btn">▶ Play Now — It's Free</a>
-        <a href="/play#browse" class="btn btn-hero-secondary" id="hero-browse-btn">Browse Public Rooms</a>
-      </div>
-      <div class="hero-badges">
-        <span class="hero-badge">✓ 20 Players</span>
-        <span class="hero-badge">✓ Mobile Ready</span>
-        <span class="hero-badge">✓ Instant Play</span>
-        <span class="hero-badge">✓ Private Rooms</span>
+    <div class="hero-stage">
+      <!-- Live render of a holo-foil hand fanning out; CTAs sit on top of it -->
+      <canvas id="hero-canvas" aria-hidden="true"></canvas>
+      <div class="container hero-inner">
+        <p class="hero-eyebrow">2–20 players <span class="dot">·</span> in the browser <span class="dot">·</span> always free</p>
+        <h1 class="hero-title">Play UNO Free<br>with <span class="text-gradient">Friends</span></h1>
+        <p class="hero-subtitle">Free multiplayer UNO for up to <strong>20 players</strong>. No download. No signup. Always free.</p>
+        <div class="hero-ctas">
+          <a href="/play" class="btn btn-hero" id="hero-play-btn">Play Now — It's Free</a>
+          <a href="/play" class="btn btn-hero-secondary" id="hero-bots-btn">Play vs Bots</a>
+        </div>
+        <div class="hero-badges">
+          <span class="hero-badge">✓ 20 Players</span>
+          <span class="hero-badge">✓ Mobile Ready</span>
+          <span class="hero-badge">✓ Instant Play</span>
+          <span class="hero-badge">✓ Private Rooms</span>
+        </div>
       </div>
     </div>
   </section>
@@ -30,22 +30,22 @@
   <section class="proof-bar" aria-label="Statistics">
     <div class="container proof-bar-inner">
       <div class="proof-stat">
-        <span class="proof-icon">🎮</span>
+        <span class="proof-icon proof-icon--blue" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="11" rx="4"/><path d="M7 11v3"/><path d="M5.5 12.5h3"/><path d="M15.5 13.5h.01"/><path d="M18 11.5h.01"/></svg></span>
         <span class="proof-number" data-count="2500">0</span>
         <span class="proof-label">Games Played</span>
       </div>
       <div class="proof-stat">
-        <span class="proof-icon">👥</span>
+        <span class="proof-icon proof-icon--purple" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
         <span class="proof-number" data-count="500">0</span>
         <span class="proof-label">Players Joined</span>
       </div>
       <div class="proof-stat">
-        <span class="proof-icon">⚡</span>
+        <span class="proof-icon proof-icon--green" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
         <span class="proof-number" data-count="20">0</span>
         <span class="proof-label">Max Players Per Room</span>
       </div>
       <div class="proof-stat">
-        <span class="proof-icon">⭐</span>
+        <span class="proof-icon proof-icon--yellow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2.5 14.9 8.6 21.5 9.5 16.7 14.1 17.9 20.7 12 17.5 6.1 20.7 7.3 14.1 2.5 9.5 9.1 8.6 12 2.5"/></svg></span>
         <span class="proof-number proof-number--static">4.8/5</span>
         <span class="proof-label">Fun Rating</span>
       </div>
@@ -60,32 +60,32 @@
 
       <div class="features-grid">
         <div class="feature-card">
-          <div class="feature-icon">👥</div>
+          <div class="feature-icon icon-chip icon-chip--blue" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
           <h3>Up to 20 Players</h3>
           <p>Play UNO with massive groups. Perfect for parties, classrooms, and game nights. No other browser UNO supports this many players.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon">⚡</div>
+          <div class="feature-icon icon-chip icon-chip--yellow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
           <h3>Always Free</h3>
           <p>100% free to play. No downloads, no signups, no hidden costs. Open your browser and start playing in under 10 seconds.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon">📱</div>
+          <div class="feature-icon icon-chip icon-chip--green" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg></div>
           <h3>Any Device</h3>
           <p>Full touch support on phones and tablets, keyboard shortcuts on desktop. Your game works beautifully on any screen size.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon">🔒</div>
+          <div class="feature-icon icon-chip icon-chip--red" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
           <h3>Private & Public Rooms</h3>
           <p>Create a private room for friends with a shareable invite link, or browse public rooms to jump into a game with strangers.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon">🎨</div>
+          <div class="feature-icon icon-chip icon-chip--purple" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"/></svg></div>
           <h3>Smooth Animations</h3>
           <p>Card dealing, drawing, stacking — every action has polished, fluid animations. Feels like a native app, runs in your browser.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon">🏆</div>
+          <div class="feature-icon icon-chip icon-chip--yellow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a3 3 0 0 0 3 3"/><path d="M17 6h3a3 3 0 0 1-3 3"/><path d="M12 14v4"/><path d="M8 21h8"/></svg></div>
           <h3>Real UNO Rules</h3>
           <p>UNO catch, stacking +2/+4/+8, reverse, skip, color wild — all the rules you know. Free forever.</p>
         </div>
@@ -133,14 +133,14 @@
 
       <div class="modes-grid">
         <div class="mode-card">
-          <div class="mode-icon">🎲</div>
+          <div class="mode-icon icon-chip icon-chip--blue icon-chip--center" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1" fill="currentColor" stroke="none"/></svg></div>
           <h3>Classic UNO</h3>
           <p>Standard UNO rules. 2–20 players. Draw cards are applied immediately — no stacking. Perfect for purists and beginners.</p>
           <a href="/play" class="btn btn-outline-sm">Play Classic</a>
         </div>
         <div class="mode-card mode-card--hot">
           <div class="mode-badge">Popular</div>
-          <div class="mode-icon">🔥</div>
+          <div class="mode-icon icon-chip icon-chip--red icon-chip--center" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></div>
           <h3>Stacking Mode</h3>
           <p>Stack +2 on +2, +4 on +4, and the devastating +8 on +8. Cards pile up, stakes go higher, and someone draws a mountain.</p>
           <a href="/play" class="btn btn-outline-sm">Play Stacking</a>
@@ -158,21 +158,21 @@
           <h2>The Only UNO for <span class="text-gradient">20 Players</span></h2>
           <p class="big-mp-desc">Most online UNO games max out at 4 players. We support up to <strong>20 in a single room</strong>. That changes everything.</p>
           <ul class="big-mp-list">
-            <li>🎉 Party with your entire friend group</li>
-            <li>🏫 Classroom games with 20 students</li>
-            <li>💬 Discord community game nights</li>
-            <li>👨‍👩‍👧‍👦 Family reunions across the globe</li>
-            <li>🏢 Team building with remote coworkers</li>
+            <li>Party with your entire friend group</li>
+            <li>Classroom games with 20 students</li>
+            <li>Discord community game nights</li>
+            <li>Family reunions across the globe</li>
+            <li>Team building with remote coworkers</li>
           </ul>
           <a href="/play" class="btn btn-hero">Start a Big Game</a>
         </div>
         <div class="big-mp-visual">
-          <div class="big-mp-card-fan" aria-hidden="true">
-            <div class="fan-card fan-card--1"></div>
-            <div class="fan-card fan-card--2"></div>
-            <div class="fan-card fan-card--3"></div>
-            <div class="fan-card fan-card--4"></div>
-            <div class="fan-card fan-card--5"></div>
+          <div class="big-mp-card-fan" id="big-mp-fan" aria-hidden="true">
+            <div class="fan-card fan-card--1"><span class="fan-pip" data-pip="7">7</span><span class="fan-sheen"></span></div>
+            <div class="fan-card fan-card--2"><span class="fan-pip" data-pip="9">9</span><span class="fan-sheen"></span></div>
+            <div class="fan-card fan-card--3"><span class="fan-pip" data-pip="3">3</span><span class="fan-sheen"></span></div>
+            <div class="fan-card fan-card--4"><span class="fan-pip" data-pip="+2">+2</span><span class="fan-sheen"></span></div>
+            <div class="fan-card fan-card--5 fan-card--wild"><span class="fan-pip" data-pip="★">★</span><span class="fan-sheen"></span></div>
           </div>
         </div>
       </div>
@@ -185,17 +185,17 @@
       <h2 class="section-title">Play Anywhere, on <span class="text-gradient">Any Device</span></h2>
       <div class="devices-grid">
         <div class="device-card">
-          <div class="device-icon">📱</div>
+          <div class="device-icon icon-chip icon-chip--blue icon-chip--center" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg></div>
           <h3>Phone</h3>
           <p>iPhone, Android — full touch support with optimized mobile layout.</p>
         </div>
         <div class="device-card">
-          <div class="device-icon">📟</div>
+          <div class="device-icon icon-chip icon-chip--purple icon-chip--center" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M12 18h.01"/></svg></div>
           <h3>Tablet</h3>
           <p>iPad, Android tablets — larger cards, better visibility for group viewing.</p>
         </div>
         <div class="device-card">
-          <div class="device-icon">💻</div>
+          <div class="device-icon icon-chip icon-chip--green icon-chip--center" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
           <h3>Desktop</h3>
           <p>Chrome, Firefox, Safari, Edge — keyboard shortcuts and full-screen mode.</p>
         </div>
@@ -243,11 +243,197 @@
     <div class="container final-cta-inner">
       <h2>Ready to Play?</h2>
       <p>Create a room and invite your friends. It takes less than 10 seconds. Always free.</p>
-      <a href="/play" class="btn btn-hero btn-hero--large">▶ Play UNO Free Now</a>
+      <a href="/play" class="btn btn-hero btn-hero--large">Play UNO Free Now</a>
     </div>
   </section>
 
 </main>
+
+<!-- Hero holo-card fan: a live canvas render of the game's card material -->
+<script>
+  (function () {
+    var canvas = document.getElementById('hero-canvas');
+    if (!canvas || !canvas.getContext) return;
+    var ctx = canvas.getContext('2d');
+    var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Logical stage: 920 x 400, cards fan up from the bottom edge
+    var LW = 920, LH = 400;
+    var CARDS = [
+      { color: '#ff3b5c', hot: '#ff8fa3', pip: '7'  },
+      { color: '#ffd23f', hot: '#ffe37e', pip: '+2' },
+      { color: '#2ee88a', hot: '#7df2b8', pip: '3'  },
+      { color: '#3d9dff', hot: '#8ec4ff', pip: '9'  },
+      { color: null,      hot: '#ffffff', pip: '★'  } // wild
+    ];
+    var FAN = [-26, -13, 0, 13, 26]; // final rotation per card (degrees)
+    var CW = 148, CH = 216, RAD = 16;
+    var DEAL_MS = 520, STAGGER = 90, FOIL_MS = 5200;
+    var start = performance.now();
+
+    function size() {
+      var dpr = Math.min(window.devicePixelRatio || 1, 2);
+      var w = Math.min(920, canvas.parentElement.clientWidth * 1.3);
+      var h = w * (LH / LW);
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      canvas.style.height = h + 'px';
+    }
+
+    function rr(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+    }
+    function hexA(hex, a) {
+      var n = parseInt(hex.slice(1), 16);
+      return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+    }
+    function easeOut(p) { return 1 - Math.pow(1 - p, 3); }
+
+    function drawCard(card, idx, now) {
+      var t = REDUCED ? 1 : Math.min(Math.max((now - start - idx * STAGGER) / DEAL_MS, 0), 1);
+      if (t <= 0) return;
+      var e = easeOut(t);
+      var rot = FAN[idx] * e * Math.PI / 180;
+      // Rest high enough that even the tilted outer cards' corners clear the
+      // canvas bottom (they swing ~32px below the center card when rotated)
+      var lift = 200 * e;
+
+      ctx.save();
+      ctx.translate(LW / 2, LH + CH * 0.72 - lift);
+      ctx.rotate(rot);
+      ctx.translate(-CW / 2, -CH);
+      ctx.globalAlpha = 0.35 + 0.65 * e;
+
+      // Obsidian slab
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6;
+      var body = ctx.createLinearGradient(0, 0, 0, CH);
+      body.addColorStop(0, '#1a2237'); body.addColorStop(1, '#0a0e1c');
+      rr(0, 0, CW, CH, RAD); ctx.fillStyle = body; ctx.fill();
+      ctx.restore();
+
+      // Emissive core + foil sheen, clipped to the card
+      ctx.save();
+      rr(0, 0, CW, CH, RAD); ctx.clip();
+      if (card.color) {
+        var core = ctx.createRadialGradient(CW / 2, CH * 0.46, 0, CW / 2, CH * 0.46, CH * 0.6);
+        core.addColorStop(0, hexA(card.color, 0.34));
+        core.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = core; ctx.fillRect(0, 0, CW, CH);
+      } else {
+        // Wild: four-corner prism glow
+        var qs = [['#ff3b5c', 0.22, 0.2], ['#ffd23f', 0.78, 0.2], ['#3d9dff', 0.22, 0.8], ['#2ee88a', 0.78, 0.8]];
+        for (var q = 0; q < 4; q++) {
+          var qg = ctx.createRadialGradient(CW * qs[q][1], CH * qs[q][2], 0, CW * qs[q][1], CH * qs[q][2], CW * 0.6);
+          qg.addColorStop(0, hexA(qs[q][0], 0.3)); qg.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = qg; ctx.fillRect(0, 0, CW, CH);
+        }
+      }
+      // The signature holo-foil sweep. The sweep overshoots far past both
+      // edges so the band's diagonal projection is fully off-card when the
+      // loop wraps — otherwise the highlight visibly teleports.
+      var p = REDUCED ? 0.38 : (((now % FOIL_MS) / FOIL_MS) + idx * 0.13) % 1;
+      var bx = (-2.4 + p * 4.9) * CW;
+      var sheen = ctx.createLinearGradient(bx, 0, bx + CW * 0.9, CH);
+      sheen.addColorStop(0.3, 'rgba(255,255,255,0)');
+      sheen.addColorStop(0.5, hexA(card.color || '#e8ebf3', 0.13));
+      sheen.addColorStop(0.7, 'rgba(255,255,255,0)');
+      ctx.fillStyle = sheen; ctx.fillRect(0, 0, CW, CH);
+      ctx.restore();
+
+      // Pip
+      ctx.fillStyle = card.hot;
+      ctx.font = "700 " + Math.round(CW * 0.45) + "px 'Space Grotesk', 'Inter', sans-serif";
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(card.pip, CW / 2, CH / 2);
+      ctx.font = "700 " + Math.round(CW * 0.17) + "px 'Space Grotesk', 'Inter', sans-serif";
+      ctx.fillText(card.pip, CW * 0.19, CH * 0.14);
+
+      // Emissive border
+      if (card.color) {
+        rr(0.5, 0.5, CW - 1, CH - 1, RAD);
+        ctx.strokeStyle = hexA(card.color, 0.5); ctx.lineWidth = 1.5; ctx.stroke();
+      } else {
+        var pg = ctx.createLinearGradient(0, 0, CW, CH);
+        pg.addColorStop(0, 'rgba(255,59,92,0.7)'); pg.addColorStop(0.33, 'rgba(255,210,63,0.7)');
+        pg.addColorStop(0.66, 'rgba(46,232,138,0.7)'); pg.addColorStop(1, 'rgba(61,157,255,0.7)');
+        rr(0.5, 0.5, CW - 1, CH - 1, RAD);
+        ctx.strokeStyle = pg; ctx.lineWidth = 1.5; ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    var running = false, rafId = null, lastFrame = 0;
+    function frame(now) {
+      if (!running) return;
+      // ~30fps is plenty for a slow sheen — halves the paint cost
+      if (now - lastFrame >= 33) {
+        lastFrame = now;
+        var scale = canvas.width / LW;
+        ctx.setTransform(scale, 0, 0, scale, 0, 0);
+        ctx.clearRect(0, 0, LW, LH);
+        // Table glow pool under the fan
+        var pool = ctx.createRadialGradient(LW / 2, LH, 0, LW / 2, LH, LW * 0.42);
+        pool.addColorStop(0, 'rgba(61,157,255,0.10)');
+        pool.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = pool; ctx.fillRect(0, 0, LW, LH);
+        for (var i = 0; i < CARDS.length; i++) drawCard(CARDS[i], i, now);
+      }
+      rafId = requestAnimationFrame(frame);
+    }
+    function startLoop() {
+      if (running) return;
+      running = true;
+      rafId = requestAnimationFrame(frame);
+    }
+    function stopLoop() {
+      running = false;
+      if (rafId) cancelAnimationFrame(rafId);
+    }
+
+    size();
+    window.addEventListener('resize', function () { size(); });
+
+    if (REDUCED) {
+      // One static frame — cards in place, sheen frozen
+      startLoop();
+      setTimeout(stopLoop, 100);
+    } else {
+      // Animate only while the hero is on screen and the tab is visible
+      if ('IntersectionObserver' in window) {
+        new IntersectionObserver(function (entries) {
+          entries[0].isIntersecting && !document.hidden ? startLoop() : stopLoop();
+        }, { threshold: 0.05 }).observe(canvas);
+      } else {
+        startLoop();
+      }
+      document.addEventListener('visibilitychange', function () {
+        document.hidden ? stopLoop() : startLoop();
+      });
+    }
+  })();
+</script>
+
+<!-- 20-player fan: deal the cards out when the section scrolls into view -->
+<script>
+  (function () {
+    var fan = document.getElementById('big-mp-fan');
+    if (!fan) return;
+    var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (REDUCED || !('IntersectionObserver' in window)) return; // cards stay in their final fanned state
+    fan.classList.add('fan-armed'); // collapse the fan only once we know we can deal it back out
+    var io = new IntersectionObserver(function (entries) {
+      if (entries[0].isIntersecting) {
+        fan.classList.remove('fan-armed');
+        io.disconnect();
+      }
+    }, { threshold: 0.35 });
+    io.observe(fan);
+  })();
+</script>
 
 <!-- Counter animation script -->
 <script>

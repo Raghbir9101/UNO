@@ -41,6 +41,7 @@ const Game = (() => {
   };
 
   let _flyingCardId    = null;  // card hidden from canvas while it flies
+  let _prevDiscardTop  = null;  // shown on the pile while our played card is in flight
 
   let hitRegions = { cardRects: [], pileRects: {}, buttonRects: {}, colorRects: [], winRects: {} };
   let touchStartX = 0, scrollStartOffset = 0, isDragging = false, dragDist = 0;
@@ -123,12 +124,17 @@ const Game = (() => {
     // Direction
     Renderer.drawDirectionArrow(ctx, state.direction, W, H);
 
-    // Piles
-    hitRegions.pileRects = Renderer.drawPiles(ctx, state.discardTop, state.activeColor, state.drawPileCount, W, H);
+    // Piles — while our played card is still flying, keep drawing the card it
+    // is landing ON, so the new top doesn't pop in before the flight arrives
+    let discardToDraw = state.discardTop;
+    if (_flyingCardId && state.discardTop && state.discardTop.id === _flyingCardId) {
+      discardToDraw = _prevDiscardTop;
+    }
+    hitRegions.pileRects = Renderer.drawPiles(ctx, discardToDraw, state.activeColor, state.drawPileCount, W, H);
 
-    // Turn indicator
+    // Turn indicator (pulses in the active-turn color)
     const isMyTurn = state.currentPlayer === state.myId;
-    Renderer.drawTurnIndicator(ctx, isMyTurn, W, H);
+    Renderer.drawTurnIndicator(ctx, isMyTurn, W, H, state.activeColor);
 
     // Buttons
     hitRegions.buttonRects = Renderer.drawActionButtons(ctx, {
@@ -138,8 +144,11 @@ const Game = (() => {
       spectatingPlayerName: state.spectatingPlayerName, players: state.players
     }, W, H);
 
-    // Hand — skip the card currently in-flight
-    const hr = Renderer.drawPlayerHand(ctx, state.myHand, -1, state.scrollOffset, W, H, _flyingCardId);
+    // Hand — skip the card currently in-flight; playable cards breathe
+    const playableFlags = (isMyTurn && !state.showColorPicker && !Game.isSpectator)
+      ? state.myHand.map(clientIsPlayable)
+      : null;
+    const hr = Renderer.drawPlayerHand(ctx, state.myHand, -1, state.scrollOffset, W, H, _flyingCardId, playableFlags);
     hitRegions.cardRects = hr.cardRects || [];
     _prevCardPositions = {};
     hr.cardRects.forEach(r => { _prevCardPositions[r.cardId] = { x: r.x, y: r.y, w: r.w, h: r.h }; });
@@ -344,6 +353,11 @@ const Game = (() => {
     flyEl.style.zIndex        = '620';
     flyEl.style.willChange    = 'transform, opacity';
     flyEl.style.pointerEvents = 'none';
+    // Motion trail in the card's color while it travels to the discard core
+    const trailColor = (card && typeof CardColors !== 'undefined' && CardColors[card.color])
+      ? CardColors[card.color].fill
+      : 'rgba(232,235,243,0.8)';
+    flyEl.style.boxShadow = `0 0 22px ${trailColor}, 0 0 44px 6px ${trailColor}55`;
     animOverlay.appendChild(flyEl);
 
     // Land on the exact discard pile position the renderer draws
@@ -397,6 +411,11 @@ const Game = (() => {
 
           // Un-hide canvas card + fade out flyEl
           setTimeout(() => {
+            // Ripple now that the card has physically landed on the pile
+            // (only if the server confirmed it as the new discard top)
+            if (card && state.discardTop && state.discardTop.id === card.id) {
+              showDomAnim('anim-card-played', '', 900);
+            }
             _flyingCardId = null; // canvas draws it again (now as discardTop)
             flyEl.style.opacity = '0';
             setTimeout(() => { if (flyEl.parentNode) flyEl.parentNode.removeChild(flyEl); }, 130);
@@ -514,6 +533,7 @@ const Game = (() => {
   function updateGameState(gs) {
     const discardChanged = gs.discardTop?.id !== state.discardTop?.id;
     const playerChanged  = gs.currentPlayer !== state.currentPlayer;
+    if (discardChanged) _prevDiscardTop = state.discardTop; // pile shows this while our card flies
     state.discardTop = gs.discardTop; state.activeColor = gs.activeColor;
     state.currentPlayer = gs.currentPlayer; state.direction = gs.direction;
     state.drawPileCount = gs.drawPileCount;
@@ -545,7 +565,11 @@ const Game = (() => {
         state.myHand = [];
     }
 
-    if (discardChanged) showDomAnim('anim-card-played', '', 900);
+    if (discardChanged) {
+      // Our own play: the ripple fires when the flight lands, not on server-confirm
+      const isOurFlight = _flyingCardId && gs.discardTop && gs.discardTop.id === _flyingCardId;
+      if (!isOurFlight) showDomAnim('anim-card-played', '', 900);
+    }
   }
 
   function setWinner(id, name) { state.winner = id; state.winnerName = name; }
@@ -649,9 +673,11 @@ const Game = (() => {
       if (t < FLIGHT_MS) {
         requestAnimationFrame(frame);
       } else {
-        // Card has landed — remove the flying element
-        if (snap.parentNode) snap.parentNode.removeChild(snap);
+        // Card has landed — fire onLand immediately (deal chain timing depends
+        // on it), then leave the element briefly for a holo-sheen land flash.
         onLand?.();
+        snap.classList.add('holo-land');
+        setTimeout(() => { if (snap.parentNode) snap.parentNode.removeChild(snap); }, 200);
       }
     }
     requestAnimationFrame(frame);

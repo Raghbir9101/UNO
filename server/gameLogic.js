@@ -443,6 +443,10 @@ function getPublicState(state) {
     drawPileCount: state.drawPile.length,
     pendingDraw: state.pendingDraw,
     pendingDrawType: state.pendingDrawType,
+    // Winner rides along in every state snapshot so clients that missed the
+    // transient player_won event (disconnected tab during an AFK auto-play,
+    // refresh right at game end) still learn the game is over on reconnect.
+    winner: state.winner || null,
     unoState: Object.fromEntries(
       Object.entries(state.unoState).map(([k, v]) => [k, { called: v.called }])
     ),

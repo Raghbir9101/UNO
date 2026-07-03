@@ -142,7 +142,7 @@ function releaseRoomLock(roomCode) {
 // ─── Auto-play: AFK players (after 30s) and bots (after a short delay) ───────
 const _autoPlayTimers = {};  // roomCode → timeout handle
 
-const AFK_TIMEOUT_MS = 30000;
+const AFK_TIMEOUT_MS = Number(process.env.AFK_TIMEOUT_MS) || 30000; // env override is for tests
 // Bots think for a moment so the game has a human rhythm instead of instant replies
 function botDelayMs() {
   return 1100 + Math.floor(Math.random() * 1400); // 1.1–2.5s
@@ -537,7 +537,44 @@ io.on('connection', (socket) => {
 
     const nickname = player?.nickname || spectator?.nickname || 'Player';
 
-    // Remove player
+    // ── Surrender: leaving during an active game ──
+    // Mirror the kick flow: pull them out of the game state (their hand is
+    // reshuffled into the draw pile), free their slot immediately (no
+    // reconnect window — they quit on purpose), and the game continues.
+    const isActiveGamePlayer = room.status === 'playing' && room.gameState &&
+      player && room.gameState.playerIds.includes(playerId);
+
+    if (isActiveGamePlayer) {
+      clearTimeout(_autoPlayTimers[roomCode]);
+      const result = gameLogic.removePlayerFromGame(room.gameState, playerId);
+
+      roomManager.forceRemovePlayer(roomCode, playerId);
+      socket.leave(roomCode);
+      socket.data = {};
+
+      io.to(roomCode).emit('player_left', { nickname, playerId, surrendered: true });
+      console.log(`[surrender] ${nickname} (${playerId}) surrendered in ${roomCode}`);
+
+      if (result.winner) {
+        // Only one player left standing — they win
+        const winner = room.players.find(p => p.id === result.winner);
+        io.to(roomCode).emit('player_won', {
+          playerId: result.winner,
+          nickname: winner ? winner.nickname : 'Unknown',
+        });
+        clearTimeout(_autoPlayTimers[roomCode]);
+        room.status = 'lobby';
+        broadcastRoomUpdate(roomCode);
+      } else {
+        // broadcastGameState also reschedules the auto-play/bot timer
+        broadcastGameState(roomCode);
+        broadcastRoomUpdate(roomCode);
+      }
+
+      return callback?.({ success: true });
+    }
+
+    // ── Normal leave (lobby, or a spectator) ──
     roomManager.removePlayer(roomCode, playerId);
 
     // Leave socket room

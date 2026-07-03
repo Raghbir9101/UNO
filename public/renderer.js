@@ -2,6 +2,14 @@ const Renderer = (() => {
   const VW = 980, VH = 600;
   let s = 1;
   const font = "'Inter', sans-serif";
+  const displayFont = "'Space Grotesk', 'Inter', sans-serif";
+  const dataFont = "'JetBrains Mono', 'Courier New', monospace";
+
+  // Reduced-motion: freeze sheens/pulses to a pleasant static state
+  const REDUCED = (typeof window !== 'undefined' && window.matchMedia)
+    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    : false;
+
   function updateScale(c) { s = Math.min(c.width / VW, c.height / VH); }
 
   function vs(v) { return v * s; }
@@ -14,154 +22,203 @@ const Renderer = (() => {
     ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
   }
 
+  // '#rrggbb' + alpha → 'rgba(...)'
+  function hexA(hex, a) {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  }
+
+  // 0..1 oscillator; `ms` = half-period. REDUCED freezes it mid-swing.
+  function osc(ms) { return REDUCED ? 0.5 : (Math.sin(Date.now() / ms) + 1) / 2; }
+
+  // Truncate a name ONLY if it doesn't fit in maxW pixels (ctx.font must be
+  // set by the caller first). Full names show whenever there's room.
+  function fitName(ctx, name, maxW) {
+    if (ctx.measureText(name).width <= maxW) return name;
+    let n = name;
+    while (n.length > 1 && ctx.measureText(n + '…').width > maxW) n = n.slice(0, -1);
+    return n + '…';
+  }
+
   function drawBackground(ctx, W, H) {
-    const t = Date.now() / 1000;
-    
-    // 1. Rich dark gradient base (Premium Casino Navy)
-    const g = ctx.createRadialGradient(W / 2, H * 0.4, 0, W / 2, H * 0.4, Math.max(W, H) * 0.8);
-    g.addColorStop(0, '#122544'); 
-    g.addColorStop(0.6, '#091221');
-    g.addColorStop(1, '#03060b');
-    ctx.fillStyle = g; 
+    const t = REDUCED ? 0 : Date.now() / 1000;
+
+    // 1. Obsidian base — a single pool of light on a black table
+    const g = ctx.createRadialGradient(W / 2, H * 0.42, 0, W / 2, H * 0.42, Math.max(W, H) * 0.75);
+    g.addColorStop(0, '#0c1220');
+    g.addColorStop(0.55, '#070a13');
+    g.addColorStop(1, '#04060b');
+    ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
-    // 2. Animated floating diamonds in the background
+    // 2. Projection grid — fine static steel lines (the holo surface)
     ctx.save();
-    for (let i = 0; i < 24; i++) {
-        const seed = i * 11.7;
-        const speedX = Math.sin(seed) * vs(18);
-        const speedY = Math.cos(seed) * vs(12);
-        
-        // Continuous wrapping movement
-        const wx = ((speedX * t + W/2 + Math.sin(seed)*W) % W + W) % W;
-        const wy = ((speedY * t + H/2 + Math.cos(seed)*H) % H + H) % H;
-        
-        const sz = vs(15 + (i % 35));
-        ctx.save();
-        ctx.translate(wx, wy);
-        ctx.rotate(t * 0.15 * (i % 2 === 0 ? 1 : -1) + seed);
-        ctx.beginPath();
-        rr(ctx, -sz/2, -sz/2, sz, sz, vs(6));
-        ctx.fillStyle = `rgba(255,255,255,${0.008 + (i%5)*0.003})`;
-        ctx.fill();
-        ctx.strokeStyle = `rgba(255,255,255,${0.015 + (i%5)*0.006})`;
-        ctx.lineWidth = vs(1.5);
-        ctx.stroke();
-        ctx.restore();
-    }
-    ctx.restore();
-
-    // 3. Subtle diamond grid pattern (matches UI theme)
-    ctx.save(); 
-    ctx.globalAlpha = 0.025; 
-    ctx.strokeStyle = '#8ab4f8'; 
+    ctx.globalAlpha = 0.045;
+    ctx.strokeStyle = '#8b93a8';
     ctx.lineWidth = vs(1);
-    const gridSize = vs(45);
-    ctx.translate(W/2, H/2);
-    ctx.rotate(Math.PI/4); // Rotate 45deg for diamond grid
-    const diag = Math.max(W, H) * 1.5;
+    const grid = vs(52);
     ctx.beginPath();
-    for (let i = -diag; i < diag; i += gridSize) {
-      ctx.moveTo(i, -diag); ctx.lineTo(i, diag);
-      ctx.moveTo(-diag, i); ctx.lineTo(diag, i);
-    }
+    for (let gx = (W / 2) % grid; gx < W; gx += grid) { ctx.moveTo(gx, 0); ctx.lineTo(gx, H); }
+    for (let gy = (H / 2) % grid; gy < H; gy += grid) { ctx.moveTo(0, gy); ctx.lineTo(W, gy); }
     ctx.stroke();
     ctx.restore();
 
-    // 4. Center Spotlight / Glow for the play area
-    ctx.save();
+    // 3. Projection rings radiating from the play area
     const _TH = H * 0.26, _HH = H * 0.26;
-    const _CY = _TH + (H - _TH - _HH)/2;
+    const _CY = _TH + (H - _TH - _HH) / 2;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(61,157,255,0.06)';
+    ctx.lineWidth = vs(1);
+    for (let i = 1; i <= 3; i++) {
+      ctx.beginPath();
+      ctx.ellipse(W / 2, _CY, vs(140) * i, vs(78) * i, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // 4. Center spotlight with a very slow breath
+    ctx.save();
     const spotSize = Math.max(W, H) * 0.45;
-    const spot = ctx.createRadialGradient(W/2, _CY, 0, W/2, _CY, spotSize);
-    spot.addColorStop(0, 'rgba(66, 165, 245, 0.15)'); // Soft bright blue glow
-    spot.addColorStop(0.5, 'rgba(66, 165, 245, 0.04)');
+    const spot = ctx.createRadialGradient(W / 2, _CY, 0, W / 2, _CY, spotSize);
+    spot.addColorStop(0, 'rgba(61, 157, 255, 0.10)');
+    spot.addColorStop(0.5, 'rgba(61, 157, 255, 0.03)');
     spot.addColorStop(1, 'transparent');
     ctx.fillStyle = spot;
-    // Breathing glow effect
-    ctx.globalAlpha = 0.85 + Math.sin(t*2)*0.15;
+    ctx.globalAlpha = 0.8 + Math.sin(t * 0.8) * 0.2;
     ctx.fillRect(0, 0, W, H);
     ctx.restore();
   }
 
+  // ── Signature element: holo-foil sheen ─────────────────────────────────────
+  // A slow diagonal light band sweeping across the card face, keyed to the
+  // card's color. Caller must have clipped to the card silhouette already.
+  const FOIL_MS = 5200;
+  function _foilSheen(ctx, x, y, w, h, phase, colorHex) {
+    const p = REDUCED ? 0.38 : (((Date.now() % FOIL_MS) / FOIL_MS) + phase) % 1;
+    // Sweep range must overshoot far enough that the band's diagonal
+    // projection is fully off-card at p=0 and p=1 — otherwise the loop
+    // wrap visibly teleports the highlight (the gradient axis is steep,
+    // so the band "reaches" much further than its x offset suggests).
+    const bx = x + (-2.4 + p * 4.9) * w;
+    const grad = ctx.createLinearGradient(bx, y, bx + w * 0.9, y + h);
+    grad.addColorStop(0.3, 'rgba(255,255,255,0)');
+    grad.addColorStop(0.42, 'rgba(255,255,255,0.055)');
+    grad.addColorStop(0.5, hexA(colorHex, 0.11));
+    grad.addColorStop(0.58, 'rgba(255,255,255,0.045)');
+    grad.addColorStop(0.7, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, y, w, h);
+  }
+
   function drawCard(ctx, card, x, y, w, h, opts = {}) {
-    const { selected, faceUp = true } = opts;
+    const { selected, faceUp = true, playable = false, foilPhase = 0 } = opts;
     const rd = w * 0.12;
     ctx.save();
     if (selected) y -= vs(20);
 
     if (!faceUp) { _cardBack(ctx, x, y, w, h); ctx.restore(); return; }
 
-    const ci = isWildCard(card) ? CardColors.wild : (CardColors[card.color] || CardColors.wild);
+    const wild = isWildCard(card);
+    const ci = wild ? CardColors.wild : (CardColors[card.color] || CardColors.wild);
+    const accent = wild ? '#e8ebf3' : ci.fill;
 
-    // Shadow
-    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = vs(8);
+    // Drop shadow onto the table
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = vs(8);
     ctx.shadowOffsetY = vs(3);
-    rr(ctx, x, y, w, h, rd); ctx.fillStyle = '#fff'; ctx.fill();
+    rr(ctx, x, y, w, h, rd); ctx.fillStyle = '#0b0f1a'; ctx.fill();
     ctx.restore();
 
-    // Color fill
-    const m = w * 0.05;
-    rr(ctx, x + m, y + m, w - m * 2, h - m * 2, rd * 0.7);
-    ctx.fillStyle = ci.fill; ctx.fill();
+    // Obsidian slab body
+    const body = ctx.createLinearGradient(x, y, x, y + h);
+    body.addColorStop(0, '#1a2237');
+    body.addColorStop(0.5, '#10162a');
+    body.addColorStop(1, '#0a0e1c');
+    rr(ctx, x, y, w, h, rd); ctx.fillStyle = body; ctx.fill();
 
-    // Wild stripes
-    if (isWildCard(card)) {
-      ctx.save();
-      rr(ctx, x + m, y + m, w - m * 2, h - m * 2, rd * 0.7); ctx.clip();
-      const cols = ['#E53935', '#FDD835', '#43A047', '#1E88E5'];
-      const sw = w * 0.35;
-      for (let i = 0; i < 4; i++) {
-        ctx.save(); ctx.fillStyle = cols[i]; ctx.globalAlpha = 0.55;
-        ctx.translate(x + w * 0.1 + i * sw * 0.6, y + h / 2);
-        ctx.rotate(0.45);
-        ctx.fillRect(-sw / 2, -h, sw, h * 2.2);
-        ctx.restore();
+    // Emissive energy core + foil sheen (clipped to the card)
+    ctx.save();
+    rr(ctx, x, y, w, h, rd); ctx.clip();
+    if (wild) {
+      // Four-corner prism glow
+      const quads = [
+        ['#ff3b5c', x + w * 0.22, y + h * 0.2], ['#ffd23f', x + w * 0.78, y + h * 0.2],
+        ['#3d9dff', x + w * 0.22, y + h * 0.8], ['#2ee88a', x + w * 0.78, y + h * 0.8],
+      ];
+      for (const [qc, qx, qy] of quads) {
+        const qg = ctx.createRadialGradient(qx, qy, 0, qx, qy, w * 0.6);
+        qg.addColorStop(0, hexA(qc, 0.3));
+        qg.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = qg; ctx.fillRect(x, y, w, h);
       }
-      ctx.restore();
+    } else {
+      const core = ctx.createRadialGradient(x + w / 2, y + h * 0.48, 0, x + w / 2, y + h * 0.48, h * 0.62);
+      core.addColorStop(0, hexA(ci.fill, 0.32));
+      core.addColorStop(0.65, hexA(ci.fill, 0.1));
+      core.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = core; ctx.fillRect(x, y, w, h);
     }
-
-    // White ellipse center
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(x + w / 2, y + h / 2, w * 0.32, h * 0.28, -0.3, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fill();
+    _foilSheen(ctx, x, y, w, h, foilPhase, accent);
     ctx.restore();
 
-    // Center text
+    // Center symbol — the light source of the card
     const txt = getCardDisplayText(card);
-    const fs = card.type === 'number' ? w * 0.5 : w * 0.38;
-    ctx.fillStyle = ci.text || '#fff';
-    ctx.font = `900 ${fs}px ${font}`;
+    const fs = card.type === 'number' ? w * 0.52 : w * 0.4;
+    ctx.fillStyle = wild ? '#fff' : ci.light;
+    ctx.font = `700 ${fs}px ${displayFont}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.shadowColor = isWildCard(card) ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.25)';
-    ctx.shadowBlur = vs(4);
     ctx.fillText(txt, x + w / 2, y + h / 2);
-    ctx.shadowBlur = 0;
 
-    // Corners
-    const cs = w * 0.24;
-    ctx.font = `800 ${cs}px ${font}`;
+    // Corner pips
+    const cs = w * 0.2;
+    ctx.font = `700 ${cs}px ${displayFont}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ctx.fillStyle = ci.text || '#fff';
-    ctx.fillText(txt, x + w * 0.22, y + h * 0.06);
+    ctx.fillStyle = wild ? 'rgba(232,235,243,0.85)' : hexA(ci.fill, 0.85);
+    ctx.fillText(txt, x + w * 0.2, y + h * 0.06);
     ctx.save();
-    ctx.translate(x + w * 0.78, y + h * 0.94);
+    ctx.translate(x + w * 0.8, y + h * 0.94);
     ctx.rotate(Math.PI);
     ctx.textBaseline = 'top';
     ctx.fillText(txt, 0, 0);
     ctx.restore();
 
-    // Border
-    rr(ctx, x, y, w, h, rd);
-    ctx.strokeStyle = selected ? '#FFD700' : 'rgba(255,255,255,0.2)';
-    ctx.lineWidth = selected ? vs(3) : vs(1);
-    ctx.stroke();
+    // Thin emissive border — wild gets the prism, colors get their own light
+    if (wild) {
+      const pg = ctx.createLinearGradient(x, y, x + w, y + h);
+      pg.addColorStop(0, 'rgba(255,59,92,0.7)');
+      pg.addColorStop(0.33, 'rgba(255,210,63,0.7)');
+      pg.addColorStop(0.66, 'rgba(46,232,138,0.7)');
+      pg.addColorStop(1, 'rgba(61,157,255,0.7)');
+      rr(ctx, x, y, w, h, rd);
+      ctx.strokeStyle = pg;
+      ctx.lineWidth = vs(1.4);
+      ctx.stroke();
+    } else {
+      rr(ctx, x, y, w, h, rd);
+      ctx.strokeStyle = hexA(ci.fill, selected ? 0.9 : 0.4);
+      ctx.lineWidth = selected ? vs(2) : vs(1.2);
+      ctx.stroke();
+    }
+
+    // Breathing glow on playable cards (~2s cycle) — the "you can move" cue.
+    // shadowBlur is spent here only: a handful of cards at most.
+    if (playable && !selected) {
+      const breathe = osc(318);
+      ctx.save();
+      ctx.globalAlpha = 0.3 + breathe * 0.5;
+      ctx.shadowColor = accent; ctx.shadowBlur = vs(10);
+      rr(ctx, x, y, w, h, rd);
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = vs(1.6);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     if (selected) {
-      ctx.save(); ctx.shadowColor = '#FFD700'; ctx.shadowBlur = vs(18);
+      ctx.save();
+      ctx.shadowColor = '#ffd23f'; ctx.shadowBlur = vs(16);
       rr(ctx, x - vs(2), y - vs(2), w + vs(4), h + vs(4), rd + vs(2));
-      ctx.strokeStyle = 'rgba(255,215,0,0.7)'; ctx.lineWidth = vs(2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,210,63,0.75)'; ctx.lineWidth = vs(2); ctx.stroke();
       ctx.restore();
     }
     ctx.restore();
@@ -169,38 +226,51 @@ const Renderer = (() => {
 
   function _cardBack(ctx, x, y, w, h) {
     const rd = w * 0.12;
+    const mini = w < vs(34); // opponent minis skip the expensive touches
+
     ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = vs(6); ctx.shadowOffsetY = vs(2);
-    rr(ctx, x, y, w, h, rd); ctx.fillStyle = '#1b1b35'; ctx.fill();
-    ctx.restore();
-
-    // Crosshatch
-    ctx.save(); rr(ctx, x, y, w, h, rd); ctx.clip();
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = vs(1);
-    for (let i = -h; i < w + h; i += vs(5)) {
-      ctx.beginPath(); ctx.moveTo(x + i, y); ctx.lineTo(x + i - h, y + h); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x + i, y); ctx.lineTo(x + i + h, y + h); ctx.stroke();
+    if (!mini) {
+      ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = vs(6); ctx.shadowOffsetY = vs(2);
     }
+    rr(ctx, x, y, w, h, rd);
+    const g = ctx.createLinearGradient(x, y, x, y + h);
+    g.addColorStop(0, '#1a2237');
+    g.addColorStop(1, '#0c1120');
+    ctx.fillStyle = g; ctx.fill();
     ctx.restore();
 
-    // Red border inset
-    const m = w * 0.1;
-    rr(ctx, x + m, y + m, w - m * 2, h - m * 2, rd * 0.5);
-    ctx.strokeStyle = '#D32F2F'; ctx.lineWidth = vs(2.5); ctx.stroke();
+    if (!mini) {
+      // Holo etch + sheen, clipped to the card
+      ctx.save(); rr(ctx, x, y, w, h, rd); ctx.clip();
+      ctx.strokeStyle = 'rgba(139,147,168,0.07)'; ctx.lineWidth = vs(1);
+      for (let i = -h; i < w + h; i += vs(6)) {
+        ctx.beginPath(); ctx.moveTo(x + i, y); ctx.lineTo(x + i - h, y + h); ctx.stroke();
+      }
+      _foilSheen(ctx, x, y, w, h, ((x * 7 + y * 13) % 97) / 97, '#8b93a8');
+      ctx.restore();
+    }
 
-    // UNO text
+    // Prism inset ring — the deck's identity mark
+    const m = w * 0.1;
+    const pg = ctx.createLinearGradient(x + m, y + m, x + w - m, y + h - m);
+    pg.addColorStop(0, 'rgba(255,59,92,0.6)');
+    pg.addColorStop(0.33, 'rgba(255,210,63,0.6)');
+    pg.addColorStop(0.66, 'rgba(46,232,138,0.6)');
+    pg.addColorStop(1, 'rgba(61,157,255,0.6)');
+    rr(ctx, x + m, y + m, w - m * 2, h - m * 2, rd * 0.5);
+    ctx.strokeStyle = pg; ctx.lineWidth = vs(mini ? 1 : 1.5); ctx.stroke();
+
     ctx.save(); ctx.translate(x + w / 2, y + h / 2); ctx.rotate(-0.25);
-    ctx.fillStyle = '#FFCA28'; ctx.font = `900 ${w * 0.28}px ${font}`;
+    ctx.fillStyle = 'rgba(232,235,243,0.9)'; ctx.font = `700 ${w * 0.26}px ${displayFont}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = vs(3);
     ctx.fillText('UNO', 0, 0);
     ctx.restore();
 
     rr(ctx, x, y, w, h, rd);
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = vs(1); ctx.stroke();
+    ctx.strokeStyle = 'rgba(139,147,168,0.22)'; ctx.lineWidth = vs(1); ctx.stroke();
   }
 
-  function drawPlayerHand(ctx, cards, selIdx, scrollOff, W, H, flyingCardId) {
+  function drawPlayerHand(ctx, cards, selIdx, scrollOff, W, H, flyingCardId, playableFlags) {
     if (!cards || !cards.length) return { cardRects: [] };
     const SIDE_W = W * 0.16;
     const HAND_H = H * 0.26;
@@ -216,12 +286,18 @@ const Renderer = (() => {
     for (let i = 0; i < cards.length; i++) {
       const cx2 = sx + i * ov;
       const isFlying = flyingCardId && cards[i].id === flyingCardId;
+      const opts = {
+        selected: i === selIdx,
+        faceUp: true,
+        playable: !!(playableFlags && playableFlags[i]),
+        foilPhase: (i * 0.13) % 1, // stagger the shimmer across the fan
+      };
       if (isFlying) {
         ctx.save(); ctx.globalAlpha = 0.0;
         drawCard(ctx, cards[i], cx2, baseY, cw, ch, { selected: false, faceUp: true });
         ctx.restore();
       } else {
-        drawCard(ctx, cards[i], cx2, baseY, cw, ch, { selected: i === selIdx, faceUp: true });
+        drawCard(ctx, cards[i], cx2, baseY, cw, ch, opts);
       }
       rects.push({ x: cx2, y: baseY, w: cw, h: ch, index: i, cardId: cards[i].id });
     }
@@ -287,33 +363,58 @@ const Renderer = (() => {
     const rightOps = opps.slice(n - nRight);
     const topOps = opps.slice(nLeft, n - (nRight || 0));
 
-    const COLORS = ['#E53935', '#1E88E5', '#43A047', '#FB8C00', '#8E24AA', '#00ACC1', '#D81B60', '#F4511E', '#7B1FA2', '#00897B'];
+    // Emissive seat colors (assigned by table position, stable per player)
+    const COLORS = ['#ff3b5c', '#3d9dff', '#2ee88a', '#ffb03f', '#b06bff',
+                    '#2ed3e8', '#ff5c9e', '#ff7a45', '#8f7bff', '#4fe0c2'];
     function pColor(p) { return COLORS[players.findIndex(pl => pl.id === p.id) % COLORS.length]; }
 
-    const pulse = (Math.sin(Date.now() / 300) + 1) / 2;
+    const pulse = osc(300);
+    // Active-turn ring: thin emissive gold outline around the seat's fan
     function glowBox(x, y, w, h) {
       ctx.save();
-      ctx.strokeStyle = `rgba(255,215,0,${0.5 + pulse * 0.4})`;
-      ctx.lineWidth = vs(2); ctx.shadowColor = '#FFD700'; ctx.shadowBlur = vs(12);
+      ctx.strokeStyle = `rgba(255,210,63,${0.5 + pulse * 0.4})`;
+      ctx.lineWidth = vs(1.5); ctx.shadowColor = '#ffd23f'; ctx.shadowBlur = vs(10);
       rr(ctx, x, y, w, h, vs(5)); ctx.stroke();
       ctx.restore();
     }
+    // Card-count counter: dark glass core with an emissive ring; red at UNO
     function badge(bx, by, cc) {
       ctx.save();
       ctx.beginPath(); ctx.arc(bx, by, vs(9), 0, Math.PI * 2);
-      ctx.fillStyle = cc === 1 ? '#E53935' : 'rgba(8,20,50,0.9)'; ctx.fill();
-      ctx.strokeStyle = cc === 1 ? '#ff6b6b' : 'rgba(255,255,255,0.3)';
-      ctx.lineWidth = vs(1.5); ctx.stroke();
-      ctx.fillStyle = '#fff'; ctx.font = `800 ${vs(8)}px ${font}`;
+      ctx.fillStyle = 'rgba(5,7,13,0.85)'; ctx.fill();
+      if (cc === 1) { ctx.shadowColor = '#ff3b5c'; ctx.shadowBlur = vs(7); }
+      ctx.strokeStyle = cc === 1 ? '#ff3b5c' : 'rgba(139,147,168,0.5)';
+      ctx.lineWidth = vs(1.4); ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = cc === 1 ? '#ff8fa3' : '#e8ebf3';
+      ctx.font = `700 ${vs(8)}px ${dataFont}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(cc, bx, by); ctx.restore();
     }
     function unoTag(x, y) {
-      const p2 = (Math.sin(Date.now() / 180) + 1) / 2;
-      ctx.save(); ctx.fillStyle = `rgba(229,57,53,${0.8 + p2 * 0.2})`;
-      ctx.font = `900 ${vs(9)}px ${font}`;
+      const p2 = osc(180);
+      ctx.save();
+      ctx.fillStyle = `rgba(255,59,92,${0.8 + p2 * 0.2})`;
+      ctx.shadowColor = '#ff3b5c'; ctx.shadowBlur = vs(6);
+      ctx.font = `700 ${vs(9)}px ${displayFont}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('UNO!', x, y); ctx.restore();
+    }
+    // Seat avatar: dark glass core with a thin emissive ring in the seat color
+    function seatAvatar(ax, ay, r, color, isCur) {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(ax, ay, r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(11,15,26,0.82)'; ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = vs(1.5); ctx.stroke();
+      if (isCur) {
+        ctx.beginPath(); ctx.arc(ax, ay, r + vs(2), 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255,210,63,${0.5 + pulse * 0.4})`;
+        ctx.lineWidth = vs(1); ctx.stroke();
+      }
+      // color dot at the core — the "player light"
+      ctx.beginPath(); ctx.arc(ax, ay, r * 0.35, 0, Math.PI * 2);
+      ctx.fillStyle = color; ctx.fill();
+      ctx.restore();
     }
 
     // ── TOP opponents ─────────────────────────────────────────────────────────
@@ -339,28 +440,32 @@ const Renderer = (() => {
       if (ms === 0) {
         ctx.save(); ctx.globalAlpha = 0.12;
         rr(ctx, slotCX - tcw / 2, fy, tcw, tch, vs(5));
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = vs(1); ctx.stroke(); ctx.restore();
+        ctx.strokeStyle = '#e8ebf3'; ctx.lineWidth = vs(1); ctx.stroke(); ctx.restore();
       }
 
-      // Name row below cards
+      // Name row below cards — glass chip behind avatar + name.
+      // Name only truncates if it can't fit in the slot's actual width.
       const nameRowY = fy + tch + vs(4);
       const avR = vs(7);
       const avX = slotCX;
-      // Avatar circle
+      ctx.font = `600 ${vs(9)}px ${font}`;
+      const nm = fitName(ctx, p.nickname, topSlotW / 2 - vs(12));
+      const nmW = ctx.measureText(nm).width;
+      const chipX = avX - avR * 2 - vs(6);
+      const chipW = avR * 2 + vs(8) + nmW + vs(8);
       ctx.save();
-      ctx.beginPath(); ctx.arc(avX - avR - vs(2), nameRowY + avR, avR, 0, Math.PI * 2);
-      ctx.fillStyle = pColor(p); ctx.fill();
-      if (isCur) { ctx.strokeStyle = '#FFD700'; ctx.lineWidth = vs(1.5); ctx.stroke(); }
+      rr(ctx, chipX, nameRowY - vs(2), chipW, avR * 2 + vs(4), vs(9));
+      ctx.fillStyle = 'rgba(11,15,26,0.6)'; ctx.fill();
+      ctx.strokeStyle = isCur ? `rgba(255,210,63,${0.35 + pulse * 0.25})` : 'rgba(139,147,168,0.18)';
+      ctx.lineWidth = vs(1); ctx.stroke();
       ctx.restore();
-      // Name - truncate aggressively based on player count
-      const maxLen = nTop >= 7 ? 5 : (nTop >= 5 ? 6 : 8);
-      const nm = p.nickname.length > maxLen ? p.nickname.slice(0, maxLen - 1) + '…' : p.nickname;
-      ctx.fillStyle = isCur ? '#FFD700' : '#fff';
-      ctx.font = `700 ${vs(9)}px ${font}`;
+
+      seatAvatar(avX - avR - vs(2), nameRowY + avR, avR, pColor(p), isCur);
+
+      ctx.fillStyle = isCur ? '#ffd23f' : '#e8ebf3';
+      ctx.font = `600 ${vs(9)}px ${font}`;
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = vs(3);
-      ctx.fillText(nm, avX - vs(2) + vs(2), nameRowY + avR);
-      ctx.shadowBlur = 0;
+      ctx.fillText(nm, avX + vs(2), nameRowY + avR);
 
       badge(fx + fanW + vs(3), fy + vs(3), cc);
       if (cc === 1) unoTag(slotCX, fy + tch + nameRowH + vs(3));
@@ -396,7 +501,7 @@ const Renderer = (() => {
       if (ms === 0) {
         ctx.save(); ctx.globalAlpha = 0.12;
         rr(ctx, fx, cy2 - sch / 2, scw, sch, vs(5));
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = vs(1); ctx.stroke(); ctx.restore();
+        ctx.strokeStyle = '#e8ebf3'; ctx.lineWidth = vs(1); ctx.stroke(); ctx.restore();
       }
 
       // Name and avatar below cards - compact for many players
@@ -404,18 +509,12 @@ const Renderer = (() => {
       const nameY = fy + fanH + vs(3);
       const avR = vs(6);
 
-      // Avatar
-      ctx.save();
-      ctx.beginPath(); ctx.arc(pileCX, nameY + avR, avR, 0, Math.PI * 2);
-      ctx.fillStyle = pColor(p); ctx.fill();
-      if (isCur) { ctx.strokeStyle = '#FFD700'; ctx.lineWidth = vs(1.5); ctx.stroke(); }
-      ctx.restore();
+      seatAvatar(pileCX, nameY + avR, avR, pColor(p), isCur);
 
-      // Name below avatar - very compact
-      const maxLen = nSlots >= 5 ? 4 : (nSlots >= 4 ? 5 : 6);
-      const nm = p.nickname.length > maxLen ? p.nickname.slice(0, maxLen - 1) + '…' : p.nickname;
-      ctx.fillStyle = isCur ? '#FFD700' : '#fff';
-      ctx.font = `700 ${vs(8)}px ${font}`;
+      // Name below avatar — full width of the side column before truncating
+      ctx.font = `600 ${vs(8)}px ${font}`;
+      const nm = fitName(ctx, p.nickname, SIDE_W - vs(10));
+      ctx.fillStyle = isCur ? '#ffd23f' : '#e8ebf3';
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = vs(2);
       ctx.fillText(nm, pileCX, nameY + avR * 2 + vs(1));
@@ -444,39 +543,43 @@ const Renderer = (() => {
 
     const rects = {};
 
-    // ── Background Diamond ──
+    // ── Projection core: the holographic diamond the piles sit on ──
     ctx.save();
     ctx.translate(_CX, _CY);
     ctx.rotate(Math.PI / 4);
     const bgSize = _cw * 1.8;
-    ctx.fillStyle = 'rgba(255,255,255,0.04)';
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-    ctx.lineWidth = vs(2);
+    ctx.fillStyle = 'rgba(19,26,43,0.35)';
+    ctx.strokeStyle = 'rgba(139,147,168,0.18)';
+    ctx.lineWidth = vs(1.5);
     rr(ctx, -bgSize / 2, -bgSize / 2, bgSize, bgSize, vs(16));
     ctx.fill(); ctx.stroke();
+    // Inner prism trace
     const inSize = bgSize * 0.8;
-    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+    const ppg = ctx.createLinearGradient(-inSize / 2, -inSize / 2, inSize / 2, inSize / 2);
+    ppg.addColorStop(0, 'rgba(255,59,92,0.12)');
+    ppg.addColorStop(0.33, 'rgba(255,210,63,0.12)');
+    ppg.addColorStop(0.66, 'rgba(46,232,138,0.12)');
+    ppg.addColorStop(1, 'rgba(61,157,255,0.12)');
+    ctx.strokeStyle = ppg;
     rr(ctx, -inSize / 2, -inSize / 2, inSize, inSize, vs(12));
     ctx.stroke();
     ctx.restore();
 
     const sideBtnSz = _cw * 0.45;
 
-    // ── Special Mode (Top Left) ──
+    // ── Special Mode (Top Left) — glass diamond, blue emissive edge ──
     const smCX = _dx - vs(15) - sideBtnSz / 2;
     const smCY = _CY - vs(30);
     ctx.save();
     ctx.translate(smCX, smCY);
     ctx.rotate(Math.PI / 4);
-    ctx.shadowColor = '#1E88E5'; ctx.shadowBlur = vs(6);
+    ctx.shadowColor = '#3d9dff'; ctx.shadowBlur = vs(6);
     rr(ctx, -sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz, sideBtnSz, vs(6));
-    const sg = ctx.createLinearGradient(-sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz / 2, sideBtnSz / 2);
-    sg.addColorStop(0, '#42A5F5'); sg.addColorStop(1, '#1565C0');
-    ctx.fillStyle = sg; ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = vs(2); ctx.stroke();
+    ctx.fillStyle = 'rgba(61,157,255,0.12)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(61,157,255,0.55)'; ctx.lineWidth = vs(1.5); ctx.stroke();
     ctx.restore();
     ctx.save();
-    ctx.fillStyle = '#fff'; ctx.font = `800 ${vs(8)}px ${font}`;
+    ctx.fillStyle = '#cfe5ff'; ctx.font = `700 ${vs(8)}px ${displayFont}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = vs(2);
     ctx.fillText('SPECIAL', smCX, smCY - vs(5));
@@ -487,13 +590,13 @@ const Renderer = (() => {
     for (let i = 2; i >= 0; i--) _cardBack(ctx, _dx + i * vs(1.5), _dy - i * vs(1.5), _cw, _ch);
     rects.draw = { x: _dx, y: _dy, w: _cw, h: _ch };
 
-    // Draw Deck Count Badge
+    // Draw Deck Count — glass counter in the data face
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.beginPath();
     ctx.arc(_dx + _cw / 2, _dy + _ch + vs(12), vs(10), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = `700 ${vs(10)}px ${font}`;
+    ctx.fillStyle = 'rgba(5,7,13,0.8)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(139,147,168,0.4)'; ctx.lineWidth = vs(1); ctx.stroke();
+    ctx.fillStyle = '#e8ebf3'; ctx.font = `600 ${vs(9)}px ${dataFont}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(drawCount, _dx + _cw / 2, _dy + _ch + vs(12));
     ctx.restore();
@@ -508,16 +611,26 @@ const Renderer = (() => {
         ctx.rotate((e.rot || 0) * Math.PI / 180);
         _cardBack(ctx, -_cw / 2, -_ch / 2, _cw, _ch); ctx.restore();
       }
+      // Active color halo under the top discard — the table's "current light"
+      if (activeColor && activeColor !== 'wild' && CardColors[activeColor]) {
+        ctx.save();
+        const halo = ctx.createRadialGradient(_dcx + _cw / 2, _CY, _cw * 0.2, _dcx + _cw / 2, _CY, _cw * 1.1);
+        halo.addColorStop(0, hexA(CardColors[activeColor].fill, 0.22));
+        halo.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = halo;
+        ctx.fillRect(_dcx - _cw * 0.6, _dy - _cw * 0.4, _cw * 2.2, _ch + _cw * 0.8);
+        ctx.restore();
+      }
       ctx.save(); ctx.translate(_dcx + _cw / 2, _dy + _ch / 2);
-      drawCard(ctx, discardTop, -_cw / 2, -_ch / 2, _cw, _ch, { faceUp: true });
+      drawCard(ctx, discardTop, -_cw / 2, -_ch / 2, _cw, _ch, { faceUp: true, foilPhase: 0.5 });
       ctx.restore();
     }
     rects.discard = { x: _dcx, y: _dy, w: _cw, h: _ch };
 
     // Direction arrow below piles (center between them)
-    const _pulse = (Math.sin(Date.now() / 500) + 1) / 2;
+    const _pulse = osc(500);
     ctx.save(); ctx.globalAlpha = 0.45 + _pulse * 0.25;
-    ctx.fillStyle = '#fff'; ctx.font = `400 ${vs(20)}px ${font}`;
+    ctx.fillStyle = '#e8ebf3'; ctx.font = `400 ${vs(20)}px ${font}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(dir_global === 1 ? '↻' : '↺', _CX, _dy + _ch + vs(24));
     ctx.restore();
@@ -542,7 +655,7 @@ const Renderer = (() => {
 
     const rects = {};
     const hasDrawn = state.hasDrawnThisTurn || false;
-    const pulse3 = (Math.sin(Date.now() / 180) + 1) / 2;
+    const pulse3 = osc(180);
 
     const sideBtnSz = _cw * 0.45;
 
@@ -557,13 +670,13 @@ const Renderer = (() => {
     ctx.beginPath();
     rr(ctx, -sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz, sideBtnSz, vs(6));
     ctx.clip();
-    const gOp = state.unoHighlight ? 1.0 : 0.4;
-    ctx.fillStyle = `rgba(67, 160, 71, ${gOp})`; ctx.fillRect(-sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz / 2, sideBtnSz / 2);
-    ctx.fillStyle = `rgba(229, 57, 53, ${gOp})`; ctx.fillRect(0, -sideBtnSz / 2, sideBtnSz / 2, sideBtnSz / 2);
-    ctx.fillStyle = `rgba(30, 136, 229, ${gOp})`; ctx.fillRect(0, 0, sideBtnSz / 2, sideBtnSz / 2);
-    ctx.fillStyle = `rgba(253, 216, 53, ${gOp})`; ctx.fillRect(-sideBtnSz / 2, 0, sideBtnSz / 2, sideBtnSz / 2);
+    const gOp = state.unoHighlight ? 0.95 : 0.35;
+    ctx.fillStyle = `rgba(46, 232, 138, ${gOp})`; ctx.fillRect(-sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz / 2, sideBtnSz / 2);
+    ctx.fillStyle = `rgba(255, 59, 92, ${gOp})`; ctx.fillRect(0, -sideBtnSz / 2, sideBtnSz / 2, sideBtnSz / 2);
+    ctx.fillStyle = `rgba(61, 157, 255, ${gOp})`; ctx.fillRect(0, 0, sideBtnSz / 2, sideBtnSz / 2);
+    ctx.fillStyle = `rgba(255, 210, 63, ${gOp})`; ctx.fillRect(-sideBtnSz / 2, 0, sideBtnSz / 2, sideBtnSz / 2);
     rr(ctx, -sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz, sideBtnSz, vs(6));
-    ctx.strokeStyle = state.unoHighlight ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.6)';
+    ctx.strokeStyle = state.unoHighlight ? 'rgba(255,255,255,0.9)' : 'rgba(5,7,13,0.7)';
     ctx.lineWidth = vs(3); ctx.stroke();
     ctx.restore();
 
@@ -577,14 +690,14 @@ const Renderer = (() => {
       ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = vs(6);
     }
     rr(ctx, -sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz, sideBtnSz, vs(6));
-    ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.lineWidth = vs(2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(5,7,13,0.8)'; ctx.lineWidth = vs(2); ctx.stroke();
     ctx.restore();
 
     ctx.save();
     ctx.translate(unoCX, unoCY);
     if (state.unoClickTime && Date.now() - state.unoClickTime < 200) ctx.scale(0.7, 0.7);
     ctx.fillStyle = state.unoHighlight ? '#fff' : 'rgba(255,255,255,0.6)';
-    ctx.font = `900 ${vs(14)}px ${font}`;
+    ctx.font = `700 ${vs(14)}px ${displayFont}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = vs(3);
     ctx.fillText('UNO!', 0, 0);
@@ -592,7 +705,7 @@ const Renderer = (() => {
 
     rects.uno = { x: unoCX - sideBtnSz / 2, y: unoCY - sideBtnSz / 2, w: sideBtnSz, h: sideBtnSz };
 
-    // ── Color indicator (Top Right) ───────────────────────────────
+    // ── Color indicator (Top Right) — the active light source ─────────────
     const cix = _dcx + _cw + vs(15) + sideBtnSz / 2;
     const ciy = _CY - vs(30);
 
@@ -601,14 +714,14 @@ const Renderer = (() => {
       ctx.save();
       ctx.translate(cix, ciy);
       ctx.rotate(Math.PI / 4);
-      ctx.shadowColor = ci.fill; ctx.shadowBlur = vs(8);
+      ctx.shadowColor = ci.fill; ctx.shadowBlur = vs(10);
       rr(ctx, -sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz, sideBtnSz, vs(6));
       ctx.fillStyle = ci.fill; ctx.fill();
       const gl = ctx.createLinearGradient(-sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz / 2, sideBtnSz / 2);
       gl.addColorStop(0, 'rgba(255,255,255,0.4)');
       gl.addColorStop(1, 'rgba(0,0,0,0.1)');
       ctx.fillStyle = gl; ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = vs(2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(5,7,13,0.45)'; ctx.lineWidth = vs(2); ctx.stroke();
       ctx.restore();
     }
 
@@ -621,36 +734,36 @@ const Renderer = (() => {
     const pSide = sideBtnSz;
     const pg = ctx.createLinearGradient(-pSide / 2, -pSide / 2, pSide / 2, pSide / 2);
     if (state.isMyTurn && hasDrawn && !state.isSpectator) {
-      ctx.shadowColor = '#7E57C2'; ctx.shadowBlur = vs(12);
-      pg.addColorStop(0, '#9575CD'); pg.addColorStop(1, '#512DA8');
+      ctx.shadowColor = '#3d9dff'; ctx.shadowBlur = vs(12);
+      pg.addColorStop(0, '#5fb0ff'); pg.addColorStop(1, '#1d64c4');
     } else if (state.isMyTurn && state.pendingDraw > 0 && !state.isSpectator) {
-      ctx.shadowColor = '#E53935'; ctx.shadowBlur = vs(12 + pulse3 * 8);
-      pg.addColorStop(0, `rgba(229,57,53,${0.7 + pulse3 * 0.25})`);
-      pg.addColorStop(1, `rgba(150,10,10,${0.7 + pulse3 * 0.25})`);
+      ctx.shadowColor = '#ff3b5c'; ctx.shadowBlur = vs(12 + pulse3 * 8);
+      pg.addColorStop(0, `rgba(255,59,92,${0.7 + pulse3 * 0.25})`);
+      pg.addColorStop(1, `rgba(140,10,35,${0.7 + pulse3 * 0.25})`);
     } else if (state.isMyTurn && !state.isSpectator) {
-      ctx.shadowColor = '#7E57C2'; ctx.shadowBlur = vs(12);
-      pg.addColorStop(0, '#9575CD'); pg.addColorStop(1, '#512DA8');
+      ctx.shadowColor = '#3d9dff'; ctx.shadowBlur = vs(12);
+      pg.addColorStop(0, '#5fb0ff'); pg.addColorStop(1, '#1d64c4');
     } else {
-      pg.addColorStop(0, 'rgba(255,255,255,0.08)');
-      pg.addColorStop(1, 'rgba(255,255,255,0.04)');
+      pg.addColorStop(0, 'rgba(232,235,243,0.07)');
+      pg.addColorStop(1, 'rgba(232,235,243,0.03)');
     }
     ctx.fillStyle = pg;
     rr(ctx, -pSide / 2, -pSide / 2, pSide, pSide, vs(6));
     ctx.fill();
-    ctx.strokeStyle = (state.isMyTurn && !state.isSpectator) ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.1)';
+    ctx.strokeStyle = (state.isMyTurn && !state.isSpectator) ? 'rgba(5,7,13,0.4)' : 'rgba(139,147,168,0.15)';
     ctx.lineWidth = vs(2); ctx.stroke();
     ctx.restore();
 
     // Pass arrow text
     ctx.save();
-    ctx.fillStyle = (state.isMyTurn && !state.isSpectator) ? '#fff' : 'rgba(255,255,255,0.25)';
+    ctx.fillStyle = (state.isMyTurn && !state.isSpectator) ? '#fff' : 'rgba(232,235,243,0.25)';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = vs(3);
     if (state.pendingDraw > 0 && state.isMyTurn && !state.isSpectator) {
-      ctx.font = `900 ${vs(14)}px ${font}`;
+      ctx.font = `700 ${vs(14)}px ${displayFont}`;
       ctx.fillText(`+${state.pendingDraw}`, passCX, passCY);
     } else {
-      ctx.font = `900 ${vs(24)}px ${font}`;
+      ctx.font = `700 ${vs(24)}px ${displayFont}`;
       ctx.fillText('›', passCX + vs(2), passCY - vs(2));
     }
     ctx.restore();
@@ -661,25 +774,27 @@ const Renderer = (() => {
       const HAND_H = H * 0.26;
       const handTopY = H - HAND_H - vs(4);
       const gmY = handTopY - vs(55); // Position just above the YOUR TURN indicator
-      
+
       ctx.save();
-      ctx.font = `800 ${vs(14)}px ${font}`;
+      ctx.font = `700 ${vs(14)}px ${displayFont}`;
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.shadowColor = '#000'; ctx.shadowBlur = vs(4);
       ctx.fillText(`👁 God Mode: ${state.spectatingPlayerName}`, _CX, gmY);
-      
+
       const arrW = vs(40);
       const arrH = vs(30);
       const leftX = _CX - vs(100);
       ctx.beginPath(); rr(ctx, leftX - arrW/2, gmY - arrH/2, arrW, arrH, vs(5));
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fill();
+      ctx.fillStyle = 'rgba(5,7,13,0.6)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(139,147,168,0.3)'; ctx.lineWidth = vs(1); ctx.stroke();
       ctx.fillStyle = '#fff'; ctx.fillText('◀', leftX, gmY);
       rects.godLeft = { x: leftX - arrW/2, y: gmY - arrH/2, w: arrW, h: arrH };
 
       const rightX = _CX + vs(100);
       ctx.beginPath(); rr(ctx, rightX - arrW/2, gmY - arrH/2, arrW, arrH, vs(5));
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fill();
+      ctx.fillStyle = 'rgba(5,7,13,0.6)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(139,147,168,0.3)'; ctx.lineWidth = vs(1); ctx.stroke();
       ctx.fillStyle = '#fff'; ctx.fillText('▶', rightX, gmY);
       rects.godRight = { x: rightX - arrW/2, y: gmY - arrH/2, w: arrW, h: arrH };
       ctx.restore();
@@ -688,76 +803,73 @@ const Renderer = (() => {
     return rects;
   }
 
-  function drawTurnIndicator(ctx, isMyTurn, W, H) {
+  function drawTurnIndicator(ctx, isMyTurn, W, H, activeColor) {
     if (!isMyTurn) return;
-    const pulse = (Math.sin(Date.now() / 350) + 1) / 2; // 0..1 oscillates
+    const pulse = osc(318); // ~2s emissive breath
     const HAND_H = H * 0.26;
     const handTopY = H - HAND_H - vs(4);
+    const colHex = (activeColor && activeColor !== 'wild' && CardColors[activeColor])
+      ? CardColors[activeColor].fill
+      : '#e8ebf3';
 
-    // ── Glowing border along the bottom (hand area top edge) ──
+    // ── Emissive line along the hand area's top edge, in the active color ──
     const glow = ctx.createLinearGradient(W * 0.1, 0, W * 0.9, 0);
     glow.addColorStop(0, 'transparent');
-    glow.addColorStop(0.5, `rgba(253,216,53,${0.55 + pulse * 0.35})`);
+    glow.addColorStop(0.5, hexA(colHex, 0.4 + pulse * 0.3));
     glow.addColorStop(1, 'transparent');
     ctx.save();
-    ctx.shadowColor = `rgba(253,216,53,${0.6 + pulse * 0.4})`;
-    ctx.shadowBlur = vs(12 + pulse * 8);
+    ctx.shadowColor = hexA(colHex, 0.5 + pulse * 0.4);
+    ctx.shadowBlur = vs(10 + pulse * 6);
     ctx.fillStyle = glow;
-    ctx.fillRect(0, handTopY, W, vs(3));
+    ctx.fillRect(0, handTopY, W, vs(2));
     ctx.restore();
 
-    // ── "YOUR TURN" pill badge centered above the hand ──
+    // ── "YOUR TURN" glass pill centered above the hand (same position/size) ──
     const label = 'YOUR TURN';
     ctx.save();
-    ctx.font = `800 ${vs(13)}px ${font}`;
+    ctx.font = `700 ${vs(13)}px ${displayFont}`;
     const tw = ctx.measureText(label).width;
     const ph = vs(22), pw = tw + vs(24);
     const px = W / 2 - pw / 2;
     const py = handTopY - ph - vs(10);
 
-    // Pill background (pulsing opacity)
-    const alpha = 0.72 + pulse * 0.28;
-    const bg = ctx.createLinearGradient(px, py, px + pw, py + ph);
-    bg.addColorStop(0, `rgba(253,180,20,${alpha})`);
-    bg.addColorStop(1, `rgba(229,57,53,${alpha})`);
-    ctx.shadowColor = `rgba(253,216,53,${0.7 + pulse * 0.3})`;
-    ctx.shadowBlur = vs(10 + pulse * 8);
+    // Glass body
     rr(ctx, px, py, pw, ph, vs(11));
-    ctx.fillStyle = bg;
+    ctx.fillStyle = 'rgba(11,15,26,0.82)';
     ctx.fill();
 
-    // Pill border
-    ctx.shadowBlur = 0;
+    // Emissive pulsing border in the active-turn color
+    ctx.shadowColor = colHex;
+    ctx.shadowBlur = vs(6 + pulse * 8);
     rr(ctx, px, py, pw, ph, vs(11));
-    ctx.strokeStyle = `rgba(255,255,255,${0.35 + pulse * 0.25})`;
-    ctx.lineWidth = vs(1.5);
+    ctx.strokeStyle = hexA(colHex, 0.5 + pulse * 0.45);
+    ctx.lineWidth = vs(1.3);
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
     // Label text
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.shadowBlur = vs(3);
     ctx.fillText(label, W / 2, py + ph / 2);
     ctx.restore();
   }
 
 
   function drawColorPicker(ctx, W, H) {
-    ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(5,7,13,0.85)'; ctx.fillRect(0, 0, W, H);
 
     // Title
-    ctx.fillStyle = '#fff'; ctx.font = `700 ${vs(18)}px ${font}`;
+    ctx.fillStyle = '#e8ebf3'; ctx.font = `700 ${vs(18)}px ${displayFont}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('Pick a color', W / 2, H * 0.33);
 
     const sz = vs(60), gap = vs(12);
     const cols = [
-      { k: 'red', f: '#E53935', l: 'Red' },
-      { k: 'blue', f: '#1E88E5', l: 'Blue' },
-      { k: 'green', f: '#43A047', l: 'Green' },
-      { k: 'yellow', f: '#FDD835', l: 'Yellow' },
+      { k: 'red', f: '#ff3b5c', l: 'Red' },
+      { k: 'blue', f: '#3d9dff', l: 'Blue' },
+      { k: 'green', f: '#2ee88a', l: 'Green' },
+      { k: 'yellow', f: '#ffd23f', l: 'Yellow' },
     ];
     const tw = sz * 4 + gap * 3;
     const sx = (W - tw) / 2, sy = H * 0.40;
@@ -768,12 +880,15 @@ const Renderer = (() => {
       ctx.save();
       ctx.shadowColor = c.f; ctx.shadowBlur = vs(14);
       rr(ctx, bx, sy, sz, sz, vs(14));
-      ctx.fillStyle = c.f; ctx.fill();
+      const bg = ctx.createLinearGradient(bx, sy, bx, sy + sz);
+      bg.addColorStop(0, c.f);
+      bg.addColorStop(1, hexA(c.f, 0.75));
+      ctx.fillStyle = bg; ctx.fill();
       rr(ctx, bx, sy, sz, sz, vs(14));
-      ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = vs(2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = vs(1.5); ctx.stroke();
       ctx.restore();
 
-      ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = `600 ${vs(10)}px ${font}`;
+      ctx.fillStyle = 'rgba(232,235,243,0.8)'; ctx.font = `600 ${vs(10)}px ${font}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       ctx.fillText(c.l, bx + sz / 2, sy + sz + vs(6));
 
@@ -783,47 +898,47 @@ const Renderer = (() => {
   }
 
   function drawWinScreen(ctx, name, isHost, W, H) {
-    ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(5,7,13,0.9)'; ctx.fillRect(0, 0, W, H);
 
     // Animated confetti
-    const t = Date.now() / 1000;
+    const t = REDUCED ? 0 : Date.now() / 1000;
     ctx.save();
     for (let i = 0; i < 50; i++) {
       const seed = i * 137.5;
       const cx = (seed * 3.7 + t * 30 * ((i % 3) + 1)) % W;
       const cy = (seed * 2.3 + t * 50 * ((i % 2) + 1)) % (H * 0.7);
       const sz = vs(2 + (i % 4));
-      ctx.fillStyle = ['#E53935', '#FDD835', '#43A047', '#1E88E5', '#AB47BC', '#FF9800'][i % 6];
+      ctx.fillStyle = ['#ff3b5c', '#ffd23f', '#2ee88a', '#3d9dff', '#b06bff', '#ff7a45'][i % 6];
       ctx.globalAlpha = 0.5 + Math.sin(t + i) * 0.3;
       ctx.fillRect(cx, cy, sz, sz * 0.6);
     }
     ctx.restore();
 
     ctx.save();
-    ctx.shadowColor = '#FDD835'; ctx.shadowBlur = vs(25);
-    ctx.fillStyle = '#FDD835'; ctx.font = `900 ${vs(32)}px ${font}`;
+    ctx.shadowColor = '#ffd23f'; ctx.shadowBlur = vs(25);
+    ctx.fillStyle = '#ffd23f'; ctx.font = `700 ${vs(32)}px ${displayFont}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('🎉 WINNER!', W / 2, H * 0.34);
     ctx.restore();
 
-    ctx.fillStyle = '#fff'; ctx.font = `700 ${vs(22)}px ${font}`;
+    ctx.fillStyle = '#fff'; ctx.font = `700 ${vs(22)}px ${displayFont}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(name, W / 2, H * 0.42);
 
     if (isHost) {
       const bw = vs(160), bh = vs(48), bx = W / 2 - bw / 2, by = H * 0.52;
-      ctx.save(); ctx.shadowColor = '#E53935'; ctx.shadowBlur = vs(12);
+      ctx.save(); ctx.shadowColor = '#ff3b5c'; ctx.shadowBlur = vs(14);
       rr(ctx, bx, by, bw, bh, vs(14));
-      const g = ctx.createLinearGradient(bx, by, bx, by + bh);
-      g.addColorStop(0, '#E53935'); g.addColorStop(1, '#C62828');
-      ctx.fillStyle = g; ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.font = `700 ${vs(16)}px ${font}`;
+      ctx.fillStyle = 'rgba(255,59,92,0.16)'; ctx.fill();
+      rr(ctx, bx, by, bw, bh, vs(14));
+      ctx.strokeStyle = 'rgba(255,59,92,0.75)'; ctx.lineWidth = vs(1.5); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = `700 ${vs(16)}px ${displayFont}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.shadowBlur = 0; ctx.fillText('Play Again', W / 2, by + bh / 2);
       ctx.restore();
       return { playAgain: { x: bx, y: by, w: bw, h: bh } };
     }
-    ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = `500 ${vs(13)}px ${font}`;
+    ctx.fillStyle = 'rgba(232,235,243,0.4)'; ctx.font = `500 ${vs(13)}px ${font}`;
     ctx.textAlign = 'center'; ctx.fillText('Waiting for host...', W / 2, H * 0.54);
     return {};
   }
@@ -851,8 +966,8 @@ const Renderer = (() => {
     const isMe = playerId === myId;
     const DANGER = fraction < 0.33;
     const color = DANGER
-      ? ('rgba(229,57,53,' + (0.75 + Math.sin(Date.now() / 150) * 0.25) + ')')
-      : 'rgba(255,215,0,0.9)';
+      ? hexA('#ff3b5c', REDUCED ? 0.9 : 0.75 + Math.sin(Date.now() / 150) * 0.25)
+      : 'rgba(255,210,63,0.9)';
 
     // Position: exact center above the cards
     const timerX = _CX;
@@ -862,16 +977,16 @@ const Renderer = (() => {
     const endAngle = startAngle + 2 * Math.PI * fraction;
 
     ctx.save();
-    // Track
+    // Track — a faint glass ring
     ctx.beginPath(); ctx.arc(timerX, timerY, r, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = vs(3); ctx.stroke();
-    // Arc
+    ctx.strokeStyle = 'rgba(139,147,168,0.15)'; ctx.lineWidth = vs(2.5); ctx.stroke();
+    // Arc — thin glowing sweep
     ctx.beginPath(); ctx.arc(timerX, timerY, r, startAngle, endAngle);
-    ctx.strokeStyle = color; ctx.shadowColor = color; ctx.shadowBlur = vs(10);
-    ctx.lineWidth = vs(3); ctx.lineCap = 'round'; ctx.stroke();
-    // Secs
-    ctx.fillStyle = DANGER ? color : 'rgba(255,255,255,0.85)';
-    ctx.font = `700 ${vs(10)}px ${font}`;
+    ctx.strokeStyle = color; ctx.shadowColor = color; ctx.shadowBlur = vs(8);
+    ctx.lineWidth = vs(2.5); ctx.lineCap = 'round'; ctx.stroke();
+    // Secs — data face readout
+    ctx.fillStyle = DANGER ? color : 'rgba(232,235,243,0.85)';
+    ctx.font = `600 ${vs(10)}px ${dataFont}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.shadowBlur = 0;
     ctx.fillText(secs + 's', timerX, timerY);
@@ -1019,4 +1134,3 @@ const Renderer = (() => {
     getDeckPosition, getDiscardPosition, getOpponentPositions, getHandTarget,
   };
 })();
-

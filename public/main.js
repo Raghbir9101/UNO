@@ -32,6 +32,7 @@
   let stackingEnabled = false;   // track room stacking setting
   let _autoDrawTimer = null;     // pending auto-draw timeout
   let _lastServerSeq = 0;        // last server-issued room_updated seq; rejects stale events
+  let _winnerFallbackTimer = null; // shows winner from game_state if player_won was missed
 
   // ── Ping measurement ───────────────────────────────────────────────────────
   let _pingLatency = null;
@@ -517,6 +518,10 @@
   $btnCopyLink.addEventListener('click', () => {
     const url = `${location.origin}${location.pathname}?room=${currentRoomCode}`;
     navigator.clipboard.writeText(url).then(() => {
+      // Scan-line shimmer across the room code — the "holo" share moment
+      $displayCode.classList.remove('code-copied');
+      void $displayCode.offsetWidth; // restart the animation on repeat copies
+      $displayCode.classList.add('code-copied');
       $btnCopyLink.textContent = '✓ Link Copied!';
       $btnCopyLink.classList.add('copied');
       setTimeout(() => {
@@ -1002,7 +1007,15 @@
   });
 
   socket.on('player_left', (data) => {
-    showToast(`${data.nickname} left the room`);
+    showToast(data.surrendered ? `🏳️ ${data.nickname} surrendered` : `${data.nickname} left the room`);
+    // Surrendered mid-game: prune them from the canvas immediately so no
+    // ghost seat remains (same eager prune as player_kicked).
+    if (data.playerId && Game.state?.players?.length) {
+      const pruned = Game.state.players.filter(p => p.id !== data.playerId);
+      if (pruned.length !== Game.state.players.length) {
+        Game.setPlayers(pruned);
+      }
+    }
   });
 
   socket.on('kicked_from_room', () => {
@@ -1162,8 +1175,28 @@
     // direct player-count increments in the deal loop aren't overwritten.
     Game.updateGameState(_dealInProgress ? { ...data, cardCounts: null } : data);
 
-    // Show 30s turn timer in UI
-    if (data.currentPlayer) {
+    // Winner fallback: the live player_won event drives the normal win
+    // sequence (confetti, then winner screen 600ms later). But that event is
+    // transient — a client that was disconnected when the game ended (hidden
+    // mobile tab while AFK auto-play finished their hand, refresh at game
+    // end) never gets it, and used to rejoin a finished game as a frozen
+    // table. game_state now carries `winner`, so honor it after a grace
+    // period that lets the live sequence win the race when both arrive.
+    if (data.winner && !Game.state.winner) {
+      const wp = Game.state.players.find(p => p.id === data.winner) ||
+                 players.find(p => p.id === data.winner);
+      const wname = wp ? wp.nickname : 'Winner';
+      clearTimeout(_winnerFallbackTimer);
+      _winnerFallbackTimer = setTimeout(() => {
+        if (!Game.state.winner) {
+          Game.setWinner(data.winner, wname);
+          showToast(`🎉 ${wname} wins!`);
+        }
+      }, 900);
+    }
+
+    // Show 30s turn timer in UI (not once the game is decided)
+    if (data.currentPlayer && !data.winner) {
       Game.setTurnTimer(data.currentPlayer, 30000);
     }
 
@@ -1207,27 +1240,33 @@
       }
     }
 
-    // Show label + flash effects
-    if (cardType === 'draw2') {
-      Game.showDomAnim('anim-plus', '+2', 2000);
-      Game.showDomAnim('anim-red-flash', '', 1000);
-    } else if (cardType === 'wild4') {
-      Game.showDomAnim('anim-plus', '+4', 2000);
-      Game.showDomAnim('anim-red-flash', '', 1000);
-    } else if (cardType === 'wild8') {
-      Game.showDomAnim('anim-plus', '+8', 2000);
-      Game.showDomAnim('anim-red-flash', '', 1000);
-    } else if (cardType === 'reverse') {
-      Game.triggerAnimation('reverse');
-    } else if (cardType === 'skip') {
-      Game.triggerAnimation('skip');
-    } else if (cardType === 'wild') {
-      Game.triggerAnimation('color_change', { color: chosenColor });
-    } else {
-      Game.triggerAnimation('card_played');
-    }
-    // Build the discard pile visual stack
-    Game.triggerAnimation('discard_land');
+    // Show label + flash effects. For OUR own play the card is still flying
+    // to the pile (~700ms flight) — hold the effects until it visually lands
+    // so the +N/skip/reverse callout doesn't fire while the card is mid-air.
+    const effectDelay = playedBy === myPlayerId ? 620 : 0;
+    setTimeout(() => {
+      if (cardType === 'draw2') {
+        Game.showDomAnim('anim-plus', '+2', 2000);
+        Game.showDomAnim('anim-red-flash', '', 1000);
+      } else if (cardType === 'wild4') {
+        Game.showDomAnim('anim-plus', '+4', 2000);
+        Game.showDomAnim('anim-red-flash', '', 1000);
+      } else if (cardType === 'wild8') {
+        Game.showDomAnim('anim-plus', '+8', 2000);
+        Game.showDomAnim('anim-red-flash', '', 1000);
+      } else if (cardType === 'reverse') {
+        Game.triggerAnimation('reverse');
+      } else if (cardType === 'skip') {
+        Game.triggerAnimation('skip');
+      } else if (cardType === 'wild') {
+        Game.triggerAnimation('color_change', { color: chosenColor });
+      } else if (playedBy !== myPlayerId) {
+        // Own number-card ripple is fired by the flight's landing instead
+        Game.triggerAnimation('card_played');
+      }
+      // Build the discard pile visual stack
+      Game.triggerAnimation('discard_land');
+    }, effectDelay);
   });
 
 
@@ -1439,6 +1478,33 @@
     Game.onShowToast = showToast;
     updateManagePlayersButton();
   }
+
+  // ── Surrender (in-game leave; the rest of the table keeps playing) ────────
+  const $btnSurrender = document.getElementById('btn-surrender');
+  $btnSurrender.addEventListener('click', () => {
+    if (!currentRoomCode) return;
+    const msg = Game.isSpectator
+      ? 'Stop spectating and leave the room?'
+      : 'Surrender and leave the game? Your cards go back to the deck and the others keep playing.';
+    if (!confirm(msg)) return;
+
+    socket.emit('leave_room', { roomCode: currentRoomCode }, (res) => {
+      if (res?.success) {
+        Game.resetGame();
+        Game.destroy();
+        currentRoomCode = null;
+        myPlayerId = null;
+        players = [];
+        _lastServerSeq = 0;
+        sessionStorage.removeItem('uno_session');
+        history.replaceState({}, '', window.location.pathname);
+        showScreen($lobby);
+        showToast(Game.isSpectator ? 'Left the room' : '🏳️ You surrendered');
+      } else {
+        showToast(res?.error || 'Could not leave the game', true);
+      }
+    });
+  });
 
   // ── Manage Players Modal ───────────────────────────────────────────────────
 

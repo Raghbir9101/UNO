@@ -232,8 +232,8 @@ router.get('/manifest.json', (req, res) => {
     description: 'Play UNO free with up to 20 friends in your browser',
     start_url: '/play',
     display: 'standalone',
-    background_color: '#0f0f1a',
-    theme_color: '#0f0f1a',
+    background_color: '#05070d',
+    theme_color: '#05070d',
     orientation: 'any',
     icons: [
       { src: '/images/icon-192.png', sizes: '192x192', type: 'image/png' },

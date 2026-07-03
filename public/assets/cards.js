@@ -3,12 +3,15 @@
 // No image files — everything is drawn programmatically on canvas.
 // ──────────────────────────────────────────────────────────────────────────────
 
+/* Holo-arena palette: the four UNO colors as emissive light sources on an
+   obsidian table. `fill` is the light color; `dark` grounds gradients;
+   `light` is the hot core used for glows and pips. */
 const CardColors = {
-  red:    { fill: '#E53935', dark: '#B71C1C', light: '#EF5350', name: 'Red',    text: '#fff' },
-  blue:   { fill: '#1E88E5', dark: '#0D47A1', light: '#42A5F5', name: 'Blue',   text: '#fff' },
-  green:  { fill: '#43A047', dark: '#1B5E20', light: '#66BB6A', name: 'Green',  text: '#fff' },
-  yellow: { fill: '#FDD835', dark: '#F57F17', light: '#FFEE58', name: 'Yellow', text: '#5a3e00' },
-  wild:   { fill: '#212121', dark: '#111111', light: '#424242', name: 'Wild',   text: '#fff' },
+  red:    { fill: '#ff3b5c', dark: '#7a1029', light: '#ff8fa3', name: 'Red',    text: '#fff' },
+  blue:   { fill: '#3d9dff', dark: '#123d73', light: '#8ec4ff', name: 'Blue',   text: '#fff' },
+  green:  { fill: '#2ee88a', dark: '#0b5e39', light: '#7df2b8', name: 'Green',  text: '#fff' },
+  yellow: { fill: '#ffd23f', dark: '#8a6c0e', light: '#ffe37e', name: 'Yellow', text: '#4a3800' },
+  wild:   { fill: '#131a2b', dark: '#05070d', light: '#2a3550', name: 'Wild',   text: '#fff' },
 };
 
 const CardTypeDisplay = {
@@ -38,13 +41,13 @@ function isWildCard(card) {
   return card.type === 'wild' || card.type === 'wild4' || card.type === 'wild8';
 }
 
-// Avatar color palette for player circles
+// Avatar color palette for player chips — emissive hues that read on obsidian
 const AvatarColors = [
-  '#E53935', '#1E88E5', '#43A047', '#FDD835',
-  '#AB47BC', '#FF7043', '#26C6DA', '#EC407A',
-  '#7E57C2', '#66BB6A', '#FFA726', '#29B6F6',
-  '#EF5350', '#5C6BC0', '#8D6E63', '#78909C',
-  '#D4E157', '#FF8A65', '#4DB6AC', '#9575CD',
+  '#ff3b5c', '#3d9dff', '#2ee88a', '#ffd23f',
+  '#b06bff', '#ff7a45', '#2ed3e8', '#ff5c9e',
+  '#8f7bff', '#7df2b8', '#ffb03f', '#5fb8ff',
+  '#ff6b81', '#7a8cff', '#c9a17a', '#9fb2cc',
+  '#d8e85c', '#ff9a70', '#4fe0c2', '#a98fff',
 ];
 
 function getAvatarColor(index) {
