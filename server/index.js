@@ -82,7 +82,7 @@ app.use(ogImage);
 // generated preview image so pasting the link into WhatsApp/Discord shows
 // a personalized card. The <!--OG_TAGS--> placeholder lives in index.html.
 const PLAY_HTML = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
-const ROOM_CODE_RE = /^[A-Z0-9]{3,10}$/;
+const ROOM_CODE_RE = /^[A-Z0-9-]{3,12}$/;
 
 app.get('/play', (req, res) => {
   const base = res.locals.baseUrl;

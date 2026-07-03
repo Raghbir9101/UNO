@@ -9,7 +9,7 @@ const express = require('express');
 const sharp = require('sharp');
 const router = express.Router();
 
-const CODE_RE = /^[A-Z0-9]{3,10}$/;
+const CODE_RE = /^[A-Z0-9-]{3,12}$/;
 const cache = new Map(); // code → PNG buffer
 const MAX_CACHE = 300;
 
