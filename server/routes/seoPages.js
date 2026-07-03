@@ -198,17 +198,19 @@ router.get('/cookie-policy', (req, res) => {
 
 // ── robots.txt ──
 router.get('/robots.txt', (req, res) => {
+  const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
   res.type('text/plain');
   res.send(`User-agent: *
 Allow: /
 Disallow: /play?room=*
 Disallow: /api/
 
-Sitemap: ${BASE_URL}/sitemap.xml`);
+Sitemap: ${base}/sitemap.xml`);
 });
 
 // ── sitemap.xml ──
 router.get('/sitemap.xml', (req, res) => {
+  const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
   const pages = [
     { url: '/', changefreq: 'weekly', priority: '1.0' },
     { url: '/play', changefreq: 'monthly', priority: '0.9' },
@@ -229,7 +231,7 @@ router.get('/sitemap.xml', (req, res) => {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${pages.map(p => `  <url>
-    <loc>${BASE_URL}${p.url}</loc>
+    <loc>${base}${p.url}</loc>
     <changefreq>${p.changefreq}</changefreq>
     <priority>${p.priority}</priority>
   </url>`).join('\n')}
