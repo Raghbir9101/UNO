@@ -35,6 +35,8 @@ function saveState(rooms) {
         nickname: p.nickname,
         connected: p.connected,
         isBot: !!p.isBot,
+        uid: p.uid || null, // anonymous stats identity
+        picture: p.picture || null,
         // Don't persist socketId — it will be reassigned on reconnect
       })),
       spectators: room.spectators ? room.spectators.map(s => ({
@@ -104,6 +106,8 @@ function loadState() {
         connected: !!p.isBot,
         socketId: null,
         isBot: !!p.isBot,
+        uid: p.uid || null,
+        picture: p.picture || null,
       }));
 
       const spectators = roomData.spectators ? roomData.spectators.map(s => ({
@@ -153,6 +157,8 @@ function loadState() {
               connected: !!p.isBot,
               socketId: null,
               isBot: !!p.isBot,
+              uid: p.uid || null,
+              picture: p.picture || null,
             }));
             const spectators = roomData.spectators ? roomData.spectators.map(s => ({
               id: s.id,

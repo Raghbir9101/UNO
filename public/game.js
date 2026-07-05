@@ -38,6 +38,7 @@ const Game = (() => {
     winner: null, winnerName: null,
     hasDrawnThisTurn: false,  // true after drawing → shows Pass button
     turnTimer: null,          // { playerId, startTime, durationMs }
+    settings: {},             // room house rules (stacking, jumpIn, sevenZero, drawToMatch)
   };
 
   let _flyingCardId    = null;  // card hidden from canvas while it flies
@@ -118,7 +119,7 @@ const Game = (() => {
     }
 
     // Opponents
-    const oppData = state.players.map(p => ({ id: p.id, nickname: p.nickname, cardCount: p.cardCount }));
+    const oppData = state.players.map(p => ({ id: p.id, nickname: p.nickname, cardCount: p.cardCount, picture: p.picture }));
     Renderer.drawOpponents(ctx, oppData, state.myId, state.currentPlayer, state.direction, W, H);
 
     // Direction
@@ -442,9 +443,24 @@ const Game = (() => {
     return false;
   }
 
+  // Jump-in rule: only an EXACT copy of the top card (mirrors server isExactMatch)
+  function clientIsExactMatch(card) {
+    const top = state.discardTop;
+    if (!top || card.color === 'wild' || top.color === 'wild') return false;
+    if (card.color !== top.color) return false;
+    if (card.type === 'number') return top.type === 'number' && card.value === top.value;
+    return card.type === top.type;
+  }
+
   function tryPlayCard(idx) {
     const card = state.myHand[idx]; if (!card) return;
-    if (state.currentPlayer !== state.myId) { Game.onShowToast?.('Not your turn', true); return; }
+    const rules = state.settings || {};
+
+    if (state.currentPlayer !== state.myId) {
+      // Jump-in: identical card may be slammed out of turn
+      const canJumpIn = rules.jumpIn && state.pendingDraw === 0 && clientIsExactMatch(card);
+      if (!canJumpIn) { Game.onShowToast?.('Not your turn', true); return; }
+    }
     if (_actionInFlight) return; // debounce: discard rapid duplicate taps
 
     // Client-side validation — skip animation and show toast for invalid cards
@@ -456,11 +472,30 @@ const Game = (() => {
     if (card.type === 'wild' || card.type === 'wild4' || card.type === 'wild8') {
       state.showColorPicker = true; state.pendingWildCardId = card.id; return;
     }
+
+    // Seven-Zero: playing a 7 (not as the winning card) needs a swap target —
+    // hand off to the DOM picker; playSevenWithSwap finishes the play.
+    if (rules.sevenZero && card.type === 'number' && card.value === 7 && state.myHand.length > 1) {
+      Game.onSevenSwap?.(card.id);
+      return;
+    }
+
     // Snapshot + fly the real card — must happen BEFORE hand state changes
     const cr = hitRegions.cardRects.find(r => r.index === idx);
     if (cr) flyCardToDiscard(cr, card);
     lockAction();
     Game.onPlayCard?.(card.id, null);
+  }
+
+  // Called by the seven-swap modal once a target is chosen
+  function playSevenWithSwap(cardId, swapTargetId) {
+    const idx = state.myHand.findIndex(c => c.id === cardId);
+    if (idx === -1 || _actionInFlight) return;
+    const card = state.myHand[idx];
+    const cr = hitRegions.cardRects.find(r => r.cardId === cardId);
+    if (cr) flyCardToDiscard(cr, card);
+    lockAction();
+    Game.onPlayCard?.(cardId, null, swapTargetId);
   }
 
   // Public API
@@ -609,6 +644,7 @@ const Game = (() => {
 
     // ── Target: exact player position ──
     let targetCX, targetCY, targetRot;
+    let oppSlot = null;
     if (toSelf) {
       const hand = Renderer.getHandTarget(W, H);
       targetCX = cRect.left + hand.cx * scaleX;
@@ -618,6 +654,7 @@ const Game = (() => {
       // Find opponent slot
       const oppPositions = Renderer.getOpponentPositions(state.players, state.myId, W, H);
       const slot = oppPositions.find(o => o.id === targetPlayerId);
+      oppSlot = slot || null;
       if (slot) {
         targetCX  = cRect.left + slot.cx * scaleX;
         targetCY  = cRect.top  + slot.cy * scaleY;
@@ -653,8 +690,8 @@ const Game = (() => {
     const dy = targetT - startT;
     // Subtle arc: 25px upward
     const arcH = toSelf ? -25 : -25;
-    // Target scale: full size for self, ~40% for opponents
-    const targetScale = toSelf ? 1.0 : 0.4;
+    // Target scale: full size for self, actual seat card size for opponents
+    const targetScale = toSelf ? 1.0 : (oppSlot ? oppSlot.w / deck.w : 0.4);
 
     function frame(now) {
       const t = Math.min(now - startTime, FLIGHT_MS);
@@ -681,6 +718,51 @@ const Game = (() => {
       }
     }
     requestAnimationFrame(frame);
+  }
+
+  // ── Quick Emote: speech bubble anchored to the sender's seat ────────────────
+  // Uses the same Renderer layout helpers as flyCardToPlayer so the bubble
+  // appears exactly above the drawn seat (or above your own hand).
+  function showEmoteBubble(playerId, emote) {
+    if (!animOverlay || !canvas) return;
+    const W = canvas.width, H = canvas.height;
+    const cRect  = canvas.getBoundingClientRect();
+    const scaleX = cRect.width  / W;
+    const scaleY = cRect.height / H;
+
+    let cx, cy, below = false;
+    if (playerId === state.myId) {
+      const hand = Renderer.getHandTarget(W, H);
+      cx = hand.cx;
+      cy = hand.cy - H * 0.10; // sit clear of the hand fan
+    } else {
+      const slot = Renderer.getOpponentPositions(state.players, state.myId, W, H)
+        .find(o => o.id === playerId);
+      if (slot) {
+        cx = slot.cx; cy = slot.cy;
+        // Top-row seats hug the top edge — a bubble drawn above them clips off
+        // screen, so drop it below the seat instead.
+        below = slot.side === 'top';
+      } else {
+        cx = W * 0.5; cy = H * 0.12; below = true; // spectator sender — top center
+      }
+    }
+
+    const el = document.createElement('div');
+    el.className = 'anim-el emote-bubble' + (below ? ' emote-bubble--below' : '');
+    el.textContent = emote;
+    const screenX = cRect.left + cx * scaleX;
+    el.style.top  = (cRect.top + cy * scaleY) + 'px';
+    animOverlay.appendChild(el);
+
+    // Clamp horizontally so seats near the left/right edge don't overflow the
+    // viewport. offsetWidth forces layout, so the width is known synchronously.
+    const half = el.offsetWidth / 2;
+    const minX = cRect.left + half + 4;
+    const maxX = cRect.left + cRect.width - half - 4;
+    el.style.left = Math.max(minX, Math.min(maxX, screenX)) + 'px';
+
+    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 2600);
   }
 
   // Animate a card-back flying FROM an opponent's seat TO the discard pile.
@@ -721,8 +803,8 @@ const Game = (() => {
       srcCY = cRect.top  + cRect.height * 0.10;
     }
 
-    // Start small (opponents' cards are drawn small at their seats), grow to pile size
-    const START_SCALE = 0.45;
+    // Start at the seat's actual card size, grow to pile size
+    const START_SCALE = slot ? slot.w / discard.w : 0.45;
     const startL = srcCX - screenW / 2;
     const startT = srcCY - screenH / 2;
     const endL   = tgtCX - screenW / 2;
@@ -877,8 +959,8 @@ const Game = (() => {
   return {
     init, destroy, state, setPlayers, setHand, updateGameState,
     setWinner, resetGame, triggerAnimation, resizeCanvas, discardStack, showDomAnim,
-    setTurnTimer, flyCardToPlayer,
+    setTurnTimer, flyCardToPlayer, showEmoteBubble, playSevenWithSwap,
     onPlayCard: null, onDrawCard: null, onPassTurn: null, onCallUno: null,
-    onCatchUno: null, onRestartGame: null, onShowToast: null,
+    onCatchUno: null, onRestartGame: null, onShowToast: null, onSevenSwap: null,
   };
 })();

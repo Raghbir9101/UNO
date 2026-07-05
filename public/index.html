@@ -28,7 +28,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600;700&display=swap"
       rel="stylesheet" />
   </noscript>
-  <link rel="stylesheet" href="style.css?v=30" />
+  <link rel="stylesheet" href="style.css?v=38" />
 
   <!--
     Game scripts: moved to <head> with `defer` instead of the old runtime loader
@@ -48,9 +48,10 @@
   -->
   <script defer src="/socket.io/socket.io.js"></script>
   <script defer src="assets/cards.js?v=30"></script>
-  <script defer src="renderer.js?v=30"></script>
-  <script defer src="game.js?v=30"></script>
-  <script defer src="main.js?v=30"></script>
+  <script defer src="sounds.js?v=1"></script>
+  <script defer src="renderer.js?v=38"></script>
+  <script defer src="game.js?v=37"></script>
+  <script defer src="main.js?v=38"></script>
 
   <style>
     /* Visually hides labels for sighted users while keeping them for screen readers */
@@ -85,12 +86,30 @@
         <p class="tagline">Play with friends — anywhere, anytime</p>
       </div>
 
+      <!-- Account: optional sign-in; the game never requires it -->
+      <div class="account-bar">
+        <button id="btn-open-auth" class="btn-account">👤 Sign in to save your stats</button>
+        <div id="account-chip" class="account-chip" hidden>
+          <img id="account-avatar" class="account-avatar" alt="" hidden />
+          <span id="account-name"></span>
+          <button id="btn-logout" class="btn-logout">Sign out</button>
+        </div>
+      </div>
+
       <div class="form-card">
         <div class="input-group">
           <label for="nickname" class="input-label">Your Nickname</label>
           <input type="text" id="nickname" placeholder="Enter your nickname" maxlength="16" autocomplete="off"
             aria-label="Your nickname" />
         </div>
+
+        <!-- Hero action: the zero-thought way in -->
+        <button id="btn-quick-match" class="btn btn-quick-hero">
+          <span class="quick-hero-main">⚡ Play Now</span>
+          <span class="quick-hero-sub">Instant match — join an open table</span>
+        </button>
+
+        <div class="lobby-divider"><span>or set up your own game</span></div>
 
         <!-- Tab switcher -->
         <div id="create-section" class="lobby-tabs">
@@ -136,14 +155,15 @@
           </div>
         </div>
 
-        <div class="button-group">
-          <button id="btn-play-bots" class="btn btn-outline btn-large">
-            <span class="btn-icon">🤖</span> Play vs Bots
+        <div class="secondary-actions">
+          <button id="btn-play-bots" class="btn btn-outline">
+            🤖 Play vs Bots
           </button>
-          <button id="btn-browse" class="btn btn-outline btn-large">
-            <span class="btn-icon">🔍</span> Browse Public Rooms
+          <button id="btn-browse" class="btn btn-outline">
+            🔍 Browse Rooms
           </button>
         </div>
+        <a href="/leaderboard" class="leaderboard-link">🏆 View Leaderboard</a>
       </div>
     </div>
   </div>
@@ -205,13 +225,56 @@
       </div>
 
       <div class="settings-card" id="host-settings" style="display:none;">
-        <label class="toggle-label">
-          <span>Allow card stacking (+2/+4/+8)</span>
-          <div class="toggle-switch">
+        <h3 class="settings-title">House Rules</h3>
+
+        <div class="rule-row">
+          <div class="rule-label">
+            <span class="rule-name">➕ Stacking</span>
+            <button type="button" class="rule-info-btn" aria-expanded="false" aria-label="About Stacking">i</button>
+          </div>
+          <label class="toggle-switch">
             <input type="checkbox" id="stacking-toggle" />
             <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <p class="rule-desc" hidden>Got hit with a +2? Play your own +2/+4/+8 on top to pass the whole growing pile to the next player instead of drawing.</p>
+
+        <div class="rule-row">
+          <div class="rule-label">
+            <span class="rule-name">⚡ Jump-In</span>
+            <button type="button" class="rule-info-btn" aria-expanded="false" aria-label="About Jump-In">i</button>
           </div>
-        </label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="jumpin-toggle" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <p class="rule-desc" hidden>Holding the exact same card as the top of the pile? Slam it down instantly — even when it's not your turn.</p>
+
+        <div class="rule-row">
+          <div class="rule-label">
+            <span class="rule-name">🔄 Seven-Zero</span>
+            <button type="button" class="rule-info-btn" aria-expanded="false" aria-label="About Seven-Zero">i</button>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="sevenzero-toggle" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <p class="rule-desc" hidden>Play a 7 to swap hands with any player you choose. Play a 0 and everyone passes their hand to the next player.</p>
+
+        <div class="rule-row">
+          <div class="rule-label">
+            <span class="rule-name">🎯 Draw to Match</span>
+            <button type="button" class="rule-info-btn" aria-expanded="false" aria-label="About Draw to Match">i</button>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="drawtomatch-toggle" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <p class="rule-desc" hidden>No playable card? Keep drawing until you find one, instead of drawing once and passing your turn.</p>
+
         <button id="btn-add-bot" class="btn btn-outline btn-add-bot" title="Add a bot player">
           🤖 Add Bot
         </button>
@@ -239,6 +302,9 @@
     <button id="btn-manage-players" class="btn-manage-players" style="display: none;" title="Manage Players">👥</button>
     <button id="btn-surrender" class="btn-surrender" title="Surrender and leave the game"
       aria-label="Surrender and leave the game">🏳️</button>
+    <button id="btn-emote" class="btn-emote" title="Send a reaction" aria-label="Send a reaction">😀</button>
+    <div id="emote-picker" class="emote-picker" hidden></div>
+    <button id="btn-sound" class="btn-sound" title="Toggle sound" aria-label="Toggle sound">🔊</button>
     <button id="btn-fullscreen" class="btn-fullscreen" title="Fullscreen / Landscape"
       aria-label="Toggle fullscreen">⛶</button>
   </div>
@@ -251,6 +317,114 @@
         <button id="btn-close-manage" class="btn-close">✕</button>
       </div>
       <ul id="manage-player-list"></ul>
+    </div>
+  </div>
+
+  <!-- Auth: sign in / register (optional — playing never requires an account) -->
+  <div id="auth-modal" class="modal" style="display: none;">
+    <div class="modal-content auth-modal-content">
+      <div class="modal-header">
+        <h3 id="auth-title">Account</h3>
+        <button id="btn-close-auth" class="btn-close">✕</button>
+      </div>
+
+      <p class="auth-pitch" id="auth-pitch">Save your wins, keep your leaderboard name, and carry stats across devices.</p>
+
+      <div class="tab-bar auth-tabs" role="tablist">
+        <button type="button" class="tab-btn tab-btn--active" id="auth-tab-login" role="tab">Sign In</button>
+        <button type="button" class="tab-btn" id="auth-tab-register" role="tab">Register</button>
+      </div>
+
+      <div id="google-signin-wrap" hidden>
+        <div id="google-signin-btn" class="google-signin-btn"></div>
+        <div class="auth-divider"><span>or use email</span></div>
+      </div>
+
+      <form id="auth-form" novalidate>
+        <div class="input-group" id="auth-username-group" hidden>
+          <label class="input-label" for="auth-username">Username</label>
+          <input type="text" id="auth-username" maxlength="16" autocomplete="nickname" placeholder="Shown on the leaderboard" />
+        </div>
+        <div class="input-group">
+          <label class="input-label" for="auth-email">Email</label>
+          <input type="email" id="auth-email" autocomplete="email" placeholder="you@example.com" />
+        </div>
+        <div class="input-group">
+          <label class="input-label" for="auth-password">Password</label>
+          <div class="password-wrap">
+            <input type="password" id="auth-password" autocomplete="current-password" placeholder="At least 6 characters" />
+            <button type="button" id="auth-eye" class="password-eye" aria-label="Show password">👁</button>
+          </div>
+        </div>
+        <p id="auth-error" class="auth-error" hidden></p>
+        <button type="submit" id="auth-submit" class="btn btn-primary btn-large auth-submit">Sign In</button>
+        <a href="/forgot-password" id="auth-forgot" class="auth-forgot">Forgot password?</a>
+      </form>
+    </div>
+  </div>
+
+  <!-- Profile: avatar picker, username, lifetime stats, achievements -->
+  <div id="profile-modal" class="modal" style="display: none;">
+    <div class="modal-content profile-modal-content">
+      <div class="modal-header">
+        <h3>👤 Your Profile</h3>
+        <button id="btn-close-profile" class="btn-close">✕</button>
+      </div>
+
+      <div class="profile-top">
+        <div id="profile-avatar-preview" class="profile-avatar-preview"></div>
+        <div class="profile-identity">
+          <input type="text" id="profile-username" maxlength="16" aria-label="Username"
+            placeholder="Username" autocomplete="off" />
+          <span id="profile-email" class="profile-email"></span>
+          <span id="profile-google-badge" class="profile-google-badge" hidden>🔗 Google linked</span>
+        </div>
+      </div>
+
+      <p class="profile-section-title">Avatar</p>
+      <div id="avatar-grid" class="avatar-grid"></div>
+
+      <p class="profile-section-title">Lifetime Stats</p>
+      <div id="profile-stats" class="profile-stats"></div>
+
+      <p class="profile-section-title">Achievements</p>
+      <div id="profile-achievements" class="profile-achievements"></div>
+
+      <p id="profile-error" class="auth-error" hidden></p>
+      <button id="btn-save-profile" class="btn btn-primary btn-large" style="width:100%;">Save Changes</button>
+    </div>
+  </div>
+
+  <!-- Seven-Zero: choose who to swap hands with when playing a 7 -->
+  <div id="seven-swap-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>🔄 Swap hands with…</h3>
+        <button id="btn-close-seven-swap" class="btn-close">✕</button>
+      </div>
+      <ul id="seven-swap-list"></ul>
+    </div>
+  </div>
+
+  <!-- Post-game match stats + achievements -->
+  <div id="postgame-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="postgame-title">📊 Match Stats</h3>
+        <button id="btn-close-postgame" class="btn-close">✕</button>
+      </div>
+      <div id="postgame-achievements"></div>
+      <div class="postgame-table-wrap">
+        <table id="postgame-table">
+          <thead>
+            <tr><th>Player</th><th>Played</th><th>Drawn</th><th>Wilds</th><th>Wins</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <button id="btn-share-result" class="btn btn-primary" style="width:100%;margin-top:14px;">
+        📣 Share Result
+      </button>
     </div>
   </div>
 

@@ -1,13 +1,31 @@
+// ─── MongoDB Connection ───────────────────────────────────────────────────────
+// Accounts and analytics live in Mongo, but the game itself must never depend
+// on it: if the DB is down or MONGODB_URI is missing, gameplay continues and
+// the account/analytics features simply report themselves unavailable.
+// ──────────────────────────────────────────────────────────────────────────────
+
 const mongoose = require('mongoose');
 
-const connectDB = async () => {
-  try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.01:27017/uno-game');
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
-  } catch (error) {
-    console.error(`Error connecting to MongoDB: ${error.message}`);
-    process.exit(1);
+async function connectDB() {
+  if (!process.env.MONGODB_URI) {
+    console.warn('[db] MONGODB_URI not set — accounts & analytics disabled');
+    return false;
   }
-};
+  try {
+    await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 8000,
+    });
+    console.log(`[db] MongoDB connected: ${mongoose.connection.host}`);
+    return true;
+  } catch (error) {
+    // Do NOT exit — the game runs fine without the database
+    console.error(`[db] MongoDB connection failed (accounts/analytics disabled): ${error.message}`);
+    return false;
+  }
+}
 
-module.exports = connectDB;
+function dbReady() {
+  return mongoose.connection.readyState === 1;
+}
+
+module.exports = { connectDB, dbReady };

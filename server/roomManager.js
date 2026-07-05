@@ -86,7 +86,7 @@ function createRoom(nickname, options = {}) {
     code: roomCode,
     hostId: playerId,
     status: 'lobby', // 'lobby' | 'playing'
-    settings: { stacking: false },
+    settings: { stacking: false, jumpIn: false, sevenZero: false, drawToMatch: false },
     players: [player],
     gameState: null,
     isPrivate: options.isPrivate || false,

@@ -31,6 +31,12 @@ const Renderer = (() => {
   // 0..1 oscillator; `ms` = half-period. REDUCED freezes it mid-swing.
   function osc(ms) { return REDUCED ? 0.5 : (Math.sin(Date.now() / ms) + 1) / 2; }
 
+  // Seat scale by opponent count: fewer opponents → bigger seats.
+  // 1 opp ≈ 1.9x, tapering down to 1x at 6+ where space gets tight.
+  function seatScaleFor(n) {
+    return n <= 1 ? 1.9 : n === 2 ? 1.6 : n === 3 ? 1.45 : n === 4 ? 1.3 : n === 5 ? 1.15 : 1;
+  }
+
   // Truncate a name ONLY if it doesn't fit in maxW pixels (ctx.font must be
   // set by the caller first). Full names show whenever there's room.
   function fitName(ctx, name, maxW) {
@@ -324,6 +330,30 @@ const Renderer = (() => {
     }
   }
 
+  // ── Avatar photo cache ──────────────────────────────────────────────────────
+  // Signed-in players have a Google profile photo (player.picture). Images load
+  // async; until loaded the seat falls back to the color-dot avatar and the
+  // photo simply appears on a later frame (canvas redraws every RAF).
+  const _avatarImgs = {}; // playerId → { url, img, ok }
+
+  function avatarImage(p) {
+    if (!p || !p.picture || !p.picture.startsWith('https://')) return null;
+    const cached = _avatarImgs[p.id];
+    if (cached && cached.url === p.picture) return cached.ok ? cached.img : null;
+    const img = new Image();
+    img.referrerPolicy = 'no-referrer'; // Google's CDN rejects some referrers
+    const entry = { url: p.picture, img, ok: false };
+    img.onload = () => { entry.ok = true; };
+    img.src = p.picture;
+    _avatarImgs[p.id] = entry;
+    return null;
+  }
+
+  // 'emoji:X' avatars are drawn as text — no image loading needed
+  function avatarEmoji(p) {
+    return (p && p.picture && p.picture.startsWith('emoji:')) ? p.picture.slice(6) : null;
+  }
+
   // NOTE: getOpponentPositions() mirrors this function's seat geometry so fly
   // animations land on the exact drawn seats — change layout math in BOTH.
   function drawOpponents(ctx, players, myId, curPlayer, dir, W, H) {
@@ -339,6 +369,11 @@ const Renderer = (() => {
     }
     if (!opps.length) return;
     const n = opps.length;
+
+    // Dynamic seat scale — cards use the full factor; chrome (avatars, fonts,
+    // badges) uses a dampened one so text doesn't balloon at low player counts.
+    const sf = seatScaleFor(n);
+    const uiSf = 1 + (sf - 1) * 0.55;
 
     // ── Zone constants ────────────────────────────────────────────────────────
     const SIDE_W = W * 0.16;
@@ -380,14 +415,14 @@ const Renderer = (() => {
     // Card-count counter: dark glass core with an emissive ring; red at UNO
     function badge(bx, by, cc) {
       ctx.save();
-      ctx.beginPath(); ctx.arc(bx, by, vs(9), 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(bx, by, vs(9 * uiSf), 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(5,7,13,0.85)'; ctx.fill();
       if (cc === 1) { ctx.shadowColor = '#ff3b5c'; ctx.shadowBlur = vs(7); }
       ctx.strokeStyle = cc === 1 ? '#ff3b5c' : 'rgba(139,147,168,0.5)';
       ctx.lineWidth = vs(1.4); ctx.stroke();
       ctx.shadowBlur = 0;
       ctx.fillStyle = cc === 1 ? '#ff8fa3' : '#e8ebf3';
-      ctx.font = `700 ${vs(8)}px ${dataFont}`;
+      ctx.font = `700 ${vs(8 * uiSf)}px ${dataFont}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(cc, bx, by); ctx.restore();
     }
@@ -396,34 +431,50 @@ const Renderer = (() => {
       ctx.save();
       ctx.fillStyle = `rgba(255,59,92,${0.8 + p2 * 0.2})`;
       ctx.shadowColor = '#ff3b5c'; ctx.shadowBlur = vs(6);
-      ctx.font = `700 ${vs(9)}px ${displayFont}`;
+      ctx.font = `700 ${vs(9 * uiSf)}px ${displayFont}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('UNO!', x, y); ctx.restore();
     }
-    // Seat avatar: dark glass core with a thin emissive ring in the seat color
-    function seatAvatar(ax, ay, r, color, isCur) {
+    // Seat avatar: profile photo when the player has one (signed in with
+    // Google), otherwise dark glass core with the color "player light" dot.
+    // Both variants keep the emissive seat-color ring + gold active-turn ring.
+    function seatAvatar(ax, ay, r, color, isCur, p) {
+      const img = avatarImage(p);
+      const emoji = img ? null : avatarEmoji(p);
       ctx.save();
       ctx.beginPath(); ctx.arc(ax, ay, r, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(11,15,26,0.82)'; ctx.fill();
+      if (img) {
+        ctx.save();
+        ctx.beginPath(); ctx.arc(ax, ay, Math.max(r - vs(0.75), 1), 0, Math.PI * 2); ctx.clip();
+        ctx.drawImage(img, ax - r, ay - r, r * 2, r * 2);
+        ctx.restore();
+      }
       ctx.strokeStyle = color; ctx.lineWidth = vs(1.5); ctx.stroke();
       if (isCur) {
         ctx.beginPath(); ctx.arc(ax, ay, r + vs(2), 0, Math.PI * 2);
         ctx.strokeStyle = `rgba(255,210,63,${0.5 + pulse * 0.4})`;
         ctx.lineWidth = vs(1); ctx.stroke();
       }
-      // color dot at the core — the "player light"
-      ctx.beginPath(); ctx.arc(ax, ay, r * 0.35, 0, Math.PI * 2);
-      ctx.fillStyle = color; ctx.fill();
+      if (emoji) {
+        ctx.font = `${Math.round(r * 1.35)}px ${font}`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(emoji, ax, ay + r * 0.05);
+      } else if (!img) {
+        // color dot at the core — the "player light"
+        ctx.beginPath(); ctx.arc(ax, ay, r * 0.35, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill();
+      }
       ctx.restore();
     }
 
     // ── TOP opponents ─────────────────────────────────────────────────────────
     // Adapt card size and count based on player density
-    const maxCards = nTop >= 7 ? 3 : (nTop >= 5 ? 4 : 5);
-    const tcw = Math.min(CW / (Math.max(nTop, 1) * 4.0), TOP_H * 0.25, vs(24));
+    const maxCards = nTop >= 7 ? 3 : (nTop >= 5 ? 4 : (n <= 2 ? 7 : 5));
+    const tcw = Math.min(CW / (Math.max(nTop, 1) * 4.0), TOP_H * 0.25 * sf, vs(24 * sf));
     const tch = tcw * 1.45;
     const topSlotW = nTop > 0 ? CW / nTop : CW;
-    const nameRowH = vs(24);
+    const nameRowH = vs(24 * uiSf);
 
     topOps.forEach((p, i) => {
       const isCur = p.id === curPlayer;
@@ -446,9 +497,9 @@ const Renderer = (() => {
       // Name row below cards — glass chip behind avatar + name.
       // Name only truncates if it can't fit in the slot's actual width.
       const nameRowY = fy + tch + vs(4);
-      const avR = vs(7);
+      const avR = vs(7 * uiSf);
       const avX = slotCX;
-      ctx.font = `600 ${vs(9)}px ${font}`;
+      ctx.font = `600 ${vs(9 * uiSf)}px ${font}`;
       const nm = fitName(ctx, p.nickname, topSlotW / 2 - vs(12));
       const nmW = ctx.measureText(nm).width;
       const chipX = avX - avR * 2 - vs(6);
@@ -460,10 +511,10 @@ const Renderer = (() => {
       ctx.lineWidth = vs(1); ctx.stroke();
       ctx.restore();
 
-      seatAvatar(avX - avR - vs(2), nameRowY + avR, avR, pColor(p), isCur);
+      seatAvatar(avX - avR - vs(2), nameRowY + avR, avR, pColor(p), isCur, p);
 
       ctx.fillStyle = isCur ? '#ffd23f' : '#e8ebf3';
-      ctx.font = `600 ${vs(9)}px ${font}`;
+      ctx.font = `600 ${vs(9 * uiSf)}px ${font}`;
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       ctx.fillText(nm, avX + vs(2), nameRowY + avR);
 
@@ -474,7 +525,7 @@ const Renderer = (() => {
     // ── SIDE helper ───────────────────────────────────────────────────────────
     const maxSideSlots = Math.max(nLeft, nRight);
     // Smaller cards when many players
-    const scw = Math.min(SIDE_W * 0.42, CH / (maxSideSlots * 1.3), vs(24));
+    const scw = Math.min(SIDE_W * 0.42, CH / (Math.max(maxSideSlots, 1) * 1.3), vs(24 * sf));
     const sch = scw * 1.45;
     // Use extreme vertical space - extend into all available margins
     const sideAvailH = CH * 1.8; // Maximum extension for spacing
@@ -507,12 +558,12 @@ const Renderer = (() => {
       // Name and avatar below cards - compact for many players
       const pileCX = fx + scw / 2;
       const nameY = fy + fanH + vs(3);
-      const avR = vs(6);
+      const avR = vs(6 * uiSf);
 
-      seatAvatar(pileCX, nameY + avR, avR, pColor(p), isCur);
+      seatAvatar(pileCX, nameY + avR, avR, pColor(p), isCur, p);
 
       // Name below avatar — full width of the side column before truncating
-      ctx.font = `600 ${vs(8)}px ${font}`;
+      ctx.font = `600 ${vs(8 * uiSf)}px ${font}`;
       const nm = fitName(ctx, p.nickname, SIDE_W - vs(10));
       ctx.fillStyle = isCur ? '#ffd23f' : '#e8ebf3';
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
@@ -520,7 +571,7 @@ const Renderer = (() => {
       ctx.fillText(nm, pileCX, nameY + avR * 2 + vs(1));
       ctx.shadowBlur = 0;
 
-      badge(isLeft ? fx + scw + vs(8) : fx - vs(8), cy2 - fanH / 2 + vs(4), cc);
+      badge(isLeft ? fx + scw + vs(8 * uiSf) : fx - vs(8 * uiSf), cy2 - fanH / 2 + vs(4), cc);
       if (cc === 1) unoTag(pileCX, fy - vs(10));
     }
 
@@ -1094,8 +1145,11 @@ const Renderer = (() => {
     // Fly animations land on these points; any drift from the drawn layout makes
     // cards visually arrive at a neighboring player's seat.
 
+    // Dynamic seat scale — MUST match drawOpponents
+    const sf = seatScaleFor(n);
+
     // Top row (same as drawOpponents: fan is centered on slotCX at fy = vs(6))
-    const tcw = Math.min(CW / (Math.max(nTop, 1) * 4.0), TOP_H * 0.25, vs(24));
+    const tcw = Math.min(CW / (Math.max(nTop, 1) * 4.0), TOP_H * 0.25 * sf, vs(24 * sf));
     const tch = tcw * 1.45;
     const topSlotW = nTop > 0 ? CW / nTop : CW;
     topOps.forEach((p, i) => {
@@ -1106,7 +1160,7 @@ const Renderer = (() => {
     // Side columns (same as drawOpponents drawSide: slots spread over CH * 1.8
     // centered on the middle zone, left column reversed bottom-to-top)
     const maxSideSlots = Math.max(nLeft, nRight);
-    const scw = Math.min(SIDE_W * 0.42, CH / (maxSideSlots * 1.3), vs(24));
+    const scw = Math.min(SIDE_W * 0.42, CH / (Math.max(maxSideSlots, 1) * 1.3), vs(24 * sf));
     const sch = scw * 1.45;
     const sideAvailH = CH * 1.8;
     const startY = CY - (sideAvailH - CH) / 2;

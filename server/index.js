@@ -14,6 +14,10 @@ const gameLogic = require('./gameLogic');
 const seoPages = require('./routes/seoPages');
 const ogImage = require('./routes/ogImage');
 const statePersistence = require('./statePersistence');
+const statsStore = require('./statsStore');
+const { connectDB, dbReady } = require('./db');
+const analytics = require('./analytics');
+const authRoutes = require('./routes/auth');
 
 const app = express();
 const server = http.createServer(app);
@@ -49,6 +53,60 @@ app.use((req, res, next) => {
 // ── Compression ──
 app.use(compression());
 
+// ── JSON bodies (auth API) ──
+app.use(express.json({ limit: '50kb' }));
+
+// ── Visit analytics (page navigations only; fire-and-forget, never blocks) ──
+app.use(analytics.middleware);
+
+// ── Auth API (register / login / Google / me) ──
+app.use('/api/auth', authRoutes);
+
+// ── Password reset pages ──
+app.get('/forgot-password', (req, res) => {
+  res.render('forgot-password', {
+    title: 'Forgot Password — Play UNO Free',
+    description: 'Reset the password for your Play UNO Free account.',
+    canonical: `${res.locals.baseUrl}/forgot-password`,
+    extraHead: '<meta name="robots" content="noindex,nofollow">',
+  });
+});
+
+app.get('/reset-password', (req, res) => {
+  res.render('reset-password', {
+    title: 'Reset Password — Play UNO Free',
+    description: 'Choose a new password for your Play UNO Free account.',
+    canonical: `${res.locals.baseUrl}/reset-password`,
+    extraHead: '<meta name="robots" content="noindex,nofollow">',
+  });
+});
+
+// ── Admin analytics dashboard (ADMIN_KEY-gated; 404s without the key) ──
+app.get('/admin/analytics', async (req, res) => {
+  const key = process.env.ADMIN_KEY;
+  if (!key || req.query.key !== key) {
+    return res.status(404).render('404', {
+      title: 'Page Not Found — UNO Online',
+      description: 'The page you are looking for does not exist.',
+      canonical: (process.env.BASE_URL || 'https://playunofree.com') + req.path,
+    });
+  }
+  if (!dbReady()) return res.status(503).send('Database not connected — analytics unavailable');
+  try {
+    const data = await analytics.getDashboard();
+    res.render('analytics', {
+      title: 'Site Analytics — Admin',
+      description: 'Private analytics dashboard.',
+      canonical: (process.env.BASE_URL || 'https://playunofree.com') + '/admin/analytics',
+      extraHead: '<meta name="robots" content="noindex,nofollow">',
+      data,
+    });
+  } catch (err) {
+    console.error('[analytics] dashboard failed:', err.message);
+    res.status(500).send('Analytics query failed');
+  }
+});
+
 // Disable caching for HTML pages only (not static assets / socket.io)
 app.use((req, res, next) => {
   // Don't break socket.io or static asset caching
@@ -77,6 +135,17 @@ app.use(seoPages);
 // ── Dynamic OG images (/og/room/:code.png for room invite link previews) ──
 app.use(ogImage);
 
+// ── Leaderboard (server-rendered, SEO-indexable) ──
+app.get('/leaderboard', (req, res) => {
+  const base = res.locals.baseUrl;
+  res.render('leaderboard', {
+    title: 'UNO Leaderboard — Top Players This Week & All Time | Play UNO Free',
+    description: 'The best UNO players on Play UNO Free, ranked by wins. See the weekly and all-time leaderboards — then jump into a free game and climb the ranks.',
+    canonical: `${base}/leaderboard`,
+    board: statsStore.getLeaderboard(20),
+  });
+});
+
 // ── Game SPA at /play, with link-preview meta injected per request ──
 // Room invite links (/play?room=CODE) get room-specific OG tags and a
 // generated preview image so pasting the link into WhatsApp/Discord shows
@@ -95,7 +164,7 @@ app.get('/play', (req, res) => {
   const desc = isRoom
     ? `You're invited to a free online UNO game! Tap to join room ${room} — no download, no signup, up to 20 players.`
     : 'Play UNO free online with friends — real-time multiplayer card game for 2-20 players. 100% free forever.';
-  const image = isRoom ? `${base}/og/room/${room}.png` : `${base}/images/og-image.jpg?v=3`;
+  const image = isRoom ? `${base}/og/room/${room}.png` : `${base}/images/og-image.jpg?v=4`;
   const url = isRoom ? `${base}/play?room=${room}` : `${base}/play`;
 
   const ogTags = [
@@ -142,6 +211,7 @@ function broadcastRoomUpdate(roomCode) {
     nickname: p.nickname,
     connected: p.connected,
     isBot: !!p.isBot,
+    picture: p.picture || null,
   }));
 
   io.to(roomCode).emit('room_updated', {
@@ -245,10 +315,29 @@ function performAutoAction(roomCode, currentId, { isBot } = {}) {
   };
 
   const playCardAs = (card, chosenColor) => {
-    const result = gameLogic.playCard(gs, currentId, card.id, chosenColor);
+    // Seven-Zero: bots and AFK auto-play swap with whoever holds the fewest cards
+    let swapTargetId;
+    if (gs.settings.sevenZero && card.type === 'number' && card.value === 7 &&
+        (gs.hands[currentId] || []).length > 1) {
+      for (const pid of gs.playerIds) {
+        if (pid === currentId) continue;
+        if (!swapTargetId || (gs.hands[pid] || []).length < (gs.hands[swapTargetId] || []).length) {
+          swapTargetId = pid;
+        }
+      }
+    }
+
+    const result = gameLogic.playCard(gs, currentId, card.id, chosenColor, swapTargetId);
     if (result.error) return false;
 
     sendHandTo(currentId);
+    // Seven-Zero swaps/rotations reassign whole hands — resend everyone's
+    if (result.effects.some(e => e.type === 'hands_rotated' || e.type === 'hands_swapped')) {
+      for (const pl of r.players) {
+        if (!pl.isBot) sendHandTo(pl.id);
+      }
+      emitHandExchangeEvents(roomCode, r, result.effects);
+    }
     for (const effect of result.effects) {
       if (effect.type === 'draw' && effect.playerId) {
         // Same ordering contract as the play_card handler: player_drew (with
@@ -293,6 +382,7 @@ function performAutoAction(roomCode, currentId, { isBot } = {}) {
         playerId: result.winner,
         nickname: winner ? winner.nickname : 'Unknown',
       });
+      recordGameEnd(roomCode, result.winner);
     }
     return true;
   };
@@ -336,11 +426,26 @@ function performAutoAction(roomCode, currentId, { isBot } = {}) {
     if (playCardAs(card, chosenColor)) return;
   }
 
-  // ── Case 3: No playable card — draw 1, play it if possible (bots), else pass ──
+  // ── Case 3: No playable card — draw, play the drawn card if possible (bots),
+  // else pass. With draw-to-match ON the draw already ran until a playable card.
   const drawResult = gameLogic.playerDrawCard(gs, currentId);
   if (!drawResult.error) {
     sendHandTo(currentId);
     io.to(roomCode).emit('player_drew', { playerId: currentId, count: drawResult.drawn?.length || 1 });
+
+    // Bots play the card they just drew when it's playable (always true for the
+    // last card under draw-to-match, unless the deck ran dry)
+    const last = drawResult.drawn && drawResult.drawn[drawResult.drawn.length - 1];
+    if (isBot && last) {
+      const top = gs.discardPile[gs.discardPile.length - 1];
+      const lastPlayable = last.color === 'wild' || last.color === gs.activeColor ||
+        (top && last.type === 'number' && top.type === 'number' && last.value === top.value) ||
+        (top && last.type !== 'number' && last.type === top.type);
+      if (lastPlayable) {
+        const chosenColor = last.color === 'wild' ? bestWildColor(gs.hands[currentId] || []) : undefined;
+        if (playCardAs(last, chosenColor)) return;
+      }
+    }
 
     // Must explicitly pass turn after drawing (turn doesn't auto-advance for normal draw)
     gameLogic.passTurn(gs, currentId);
@@ -385,14 +490,113 @@ function sendHandToPlayer(socket, playerId, gameState) {
   socket.emit('hand_updated', { cards: hand });
 }
 
+// ─── Game-End Stats & Achievements ───────────────────────────────────────────
+
+// Definitions live in statsStore so the profile API can list them too
+const ACHIEVEMENTS = statsStore.ACHIEVEMENTS;
+
+// Anonymous stats identity from the client (localStorage) — never trusted raw
+function sanitizeUid(uid) {
+  return (typeof uid === 'string' && /^[\w-]{8,64}$/.test(uid)) ? uid : null;
+}
+
+// Avatar from the client: Google CDN photo URL or whitelisted 'emoji:X' —
+// a malicious client can't make everyone else's browser load an arbitrary URL
+const { sanitizePicture } = require('./avatars');
+
+// Called once per finished game, from every code path that emits player_won.
+// Updates lifetime stats for each human, computes achievement unlocks, and
+// broadcasts the post-game summary panel data.
+function recordGameEnd(roomCode, winnerId) {
+  const room = roomManager.getRoom(roomCode);
+  if (!room || !room.gameState) return;
+  const gs = room.gameState;
+  if (gs._statsRecorded) return; // several paths can reach a win — count once
+  gs._statsRecorded = true;
+
+  const durationMs = Date.now() - ((gs.stats && gs.stats.startedAt) || Date.now());
+  const winner = room.players.find(p => p.id === winnerId);
+  const summary = {
+    winnerId,
+    winnerName: winner ? winner.nickname : 'Unknown',
+    durationMs,
+    players: [],
+    achievements: [],
+  };
+
+  for (const p of room.players) {
+    const ps = (gs.stats && gs.stats.perPlayer[p.id]) || null;
+    if (!ps) continue; // never dealt into this game
+    const row = {
+      playerId: p.id,
+      nickname: p.nickname,
+      isBot: !!p.isBot,
+      won: p.id === winnerId,
+      cardsPlayed: ps.cardsPlayed || 0,
+      cardsDrawn: ps.cardsDrawn || 0,
+      wildsPlayed: ps.wildsPlayed || 0,
+    };
+
+    if (!p.isBot && p.uid) {
+      const rec = statsStore.recordGame({
+        uid: p.uid, nickname: p.nickname, won: row.won,
+        cardsPlayed: row.cardsPlayed, cardsDrawn: row.cardsDrawn, wildsPlayed: row.wildsPlayed,
+      });
+      row.totalWins = rec.wins;
+      row.totalGames = rec.gamesPlayed;
+
+      const earned = [];
+      if (row.won) {
+        if (rec.wins === 1) earned.push('first_win');
+        if (rec.wins === 10) earned.push('ten_wins');
+        if (gs.discardTop && gs.discardTop.type === 'wild4') earned.push('plus4_finish');
+        if (durationMs < 120000) earned.push('speed_win');
+        if ((ps.maxHand || 0) >= 12) earned.push('comeback');
+      }
+      if (row.cardsPlayed >= 20) earned.push('card_shark');
+
+      const fresh = statsStore.unlockAchievements(p.uid, earned);
+      for (const id of fresh) {
+        summary.achievements.push({ playerId: p.id, nickname: p.nickname, id, ...ACHIEVEMENTS[id] });
+      }
+    }
+    summary.players.push(row);
+  }
+
+  io.to(roomCode).emit('game_over_stats', summary);
+}
+
+// Toast/sound events for Seven-Zero hand exchanges
+function emitHandExchangeEvents(roomCode, room, effects) {
+  const rot = effects.find(e => e.type === 'hands_rotated');
+  const swp = effects.find(e => e.type === 'hands_swapped');
+  if (rot) io.to(roomCode).emit('hands_rotated', { direction: rot.direction });
+  if (swp) {
+    const nameOf = (id) => room.players.find(p => p.id === id)?.nickname || 'Player';
+    io.to(roomCode).emit('hands_swapped', {
+      a: swp.a, b: swp.b, aNickname: nameOf(swp.a), bNickname: nameOf(swp.b),
+    });
+  }
+}
+
 function getSocketById(socketId) {
   return io.sockets.sockets.get(socketId);
 }
+
+// ─── Quick Emotes ─────────────────────────────────────────────────────────────
+// Whitelisted reactions only — no free text, so no moderation surface.
+// Keep in sync with EMOTES in public/main.js.
+const EMOTES = ['👍', '😂', '😮', '😭', '😡', '🎉', '⏰', '🔥'];
+const EMOTE_COOLDOWN_MS = 1500;
 
 // ─── Socket.io Events ────────────────────────────────────────────────────────
 
 io.on('connection', (socket) => {
   console.log(`[connect] ${socket.id}`);
+
+  // Emote cooldown lives on the connection, not socket.data — join_room
+  // replaces socket.data wholesale, which would reset the cooldown.
+  let lastEmoteAt = 0;
 
   // ── Ping Measurement ──
   socket.on('ping_measure', () => {
@@ -406,12 +610,14 @@ io.on('connection', (socket) => {
   });
 
   // ── Create Room ──
-  socket.on('create_room', ({ nickname, isPrivate }, callback) => {
+  socket.on('create_room', ({ nickname, isPrivate, uid, picture }, callback) => {
     if (!nickname || nickname.trim().length === 0) {
       return callback({ error: 'Nickname is required' });
     }
     const name = nickname.trim().substring(0, 16);
     const { roomCode, playerId, player } = roomManager.createRoom(name, { isPrivate: !!isPrivate });
+    player.uid = sanitizeUid(uid);
+    player.picture = sanitizePicture(picture);
     roomManager.setPlayerSocket(roomCode, playerId, socket.id);
 
     socket.join(roomCode);
@@ -423,7 +629,7 @@ io.on('connection', (socket) => {
   });
 
   // ── Join Room ──
-  socket.on('join_room', ({ roomCode, nickname, playerId: existingPlayerId, spectator, godPassword }, callback) => {
+  socket.on('join_room', ({ roomCode, nickname, playerId: existingPlayerId, spectator, godPassword, uid, picture }, callback) => {
     if (!nickname || nickname.trim().length === 0) {
       return callback({ error: 'Nickname is required' });
     }
@@ -440,6 +646,9 @@ io.on('connection', (socket) => {
     }
 
     const { playerId, player, room, reconnected } = result;
+    if (!player.uid) player.uid = sanitizeUid(uid); // stats identity; keep original on reconnect
+    const pic = sanitizePicture(picture);
+    if (pic) player.picture = pic;
 
     if (reconnected) {
       console.log(`[reconnect] ${name} (${playerId}) rejoined ${code}`);
@@ -457,6 +666,7 @@ io.on('connection', (socket) => {
       nickname: p.nickname,
       connected: p.connected,
       isBot: !!p.isBot,
+      picture: p.picture || null,
     }));
 
     callback({
@@ -559,6 +769,7 @@ io.on('connection', (socket) => {
         playerId: kickWinner,
         nickname: winner ? winner.nickname : 'Unknown',
       });
+      recordGameEnd(roomCode, kickWinner);
       // End the game properly
       clearTimeout(_autoPlayTimers[roomCode]);
       room.status = 'lobby';
@@ -612,6 +823,7 @@ io.on('connection', (socket) => {
           playerId: result.winner,
           nickname: winner ? winner.nickname : 'Unknown',
         });
+        recordGameEnd(roomCode, result.winner);
         clearTimeout(_autoPlayTimers[roomCode]);
         room.status = 'lobby';
         broadcastRoomUpdate(roomCode);
@@ -665,6 +877,81 @@ io.on('connection', (socket) => {
     broadcastRoomUpdate(roomCode);
   });
 
+  // ── Set House Rule (host only, lobby only) ──
+  const RULE_KEYS = ['stacking', 'jumpIn', 'sevenZero', 'drawToMatch'];
+  socket.on('set_rule', ({ roomCode, rule, enabled }) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return socket.emit('error', { message: 'Room not found' });
+    if (room.status !== 'lobby') return socket.emit('error', { message: 'Cannot change settings during game' });
+    if (socket.data?.playerId !== room.hostId) return socket.emit('error', { message: 'Only host can change settings' });
+    if (!RULE_KEYS.includes(rule)) return;
+
+    room.settings[rule] = !!enabled;
+    broadcastRoomUpdate(roomCode);
+  });
+
+  // ── Quick Match: one tap into a game ──
+  // Joins the fullest open public lobby that still has a human; if none exists,
+  // creates a public room pre-seated with 3 bots so the player can start now.
+  socket.on('quick_match', ({ nickname, uid, picture }, callback) => {
+    if (!nickname || nickname.trim().length === 0) {
+      return callback({ error: 'Nickname is required' });
+    }
+    const name = nickname.trim().substring(0, 16);
+    const cleanUid = sanitizeUid(uid);
+    const cleanPic = sanitizePicture(picture);
+
+    let best = null;
+    for (const [, room] of roomManager.rooms) {
+      if (room.isPrivate || room.status !== 'lobby') continue;
+      if (room.players.length >= roomManager.MAX_PLAYERS) continue;
+      if (!room.players.some(p => !p.isBot && p.connected)) continue;
+      if (!best || room.players.length > best.players.length) best = room;
+    }
+
+    if (best) {
+      const result = roomManager.joinRoom(best.code, name, null, {});
+      if (!result.error) {
+        const { playerId, player, room } = result;
+        player.uid = cleanUid;
+        player.picture = cleanPic;
+        roomManager.setPlayerSocket(best.code, playerId, socket.id);
+        roomManager.cancelRoomCleanup(best.code);
+        socket.join(best.code);
+        socket.data = { roomCode: best.code, playerId };
+
+        console.log(`[quick-match] ${name} joined ${best.code}`);
+        callback({
+          success: true,
+          joined: true,
+          roomCode: best.code,
+          playerId,
+          nickname: player.nickname,
+          players: room.players.map(p => ({ id: p.id, nickname: p.nickname, connected: p.connected, isBot: !!p.isBot, picture: p.picture || null })),
+          settings: room.settings,
+          hostId: room.hostId,
+        });
+        broadcastRoomUpdate(best.code);
+        saveStateSoon();
+        return;
+      }
+    }
+
+    // No open room — create a public one with 3 bots
+    const { roomCode, playerId, player } = roomManager.createRoom(name, { isPrivate: false });
+    player.uid = cleanUid;
+    player.picture = cleanPic;
+    roomManager.setPlayerSocket(roomCode, playerId, socket.id);
+    socket.join(roomCode);
+    socket.data = { roomCode, playerId };
+    for (let i = 0; i < 3; i++) roomManager.addBot(roomCode);
+
+    console.log(`[quick-match] ${name} created ${roomCode} with 3 bots`);
+    callback({ success: true, created: true, roomCode, playerId, nickname: player.nickname });
+    broadcastRoomUpdate(roomCode);
+    saveStateSoon();
+  });
+
   // ── Reorder Players (host only, lobby only) ──
   socket.on('reorder_players', ({ roomCode, order }) => {
     const room = roomManager.getRoom(roomCode);
@@ -707,7 +994,7 @@ io.on('connection', (socket) => {
     const publicState = gameLogic.getPublicState(room.gameState);
     io.to(roomCode).emit('game_started', {
       ...publicState,
-      playerOrder: activePlayers.map(p => ({ id: p.id, nickname: p.nickname })),
+      playerOrder: activePlayers.map(p => ({ id: p.id, nickname: p.nickname, picture: p.picture || null })),
       settings: room.settings,
     });
 
@@ -722,14 +1009,14 @@ io.on('connection', (socket) => {
   });
 
   // ── Play Card ──
-  socket.on('play_card', ({ roomCode, cardId, chosenColor }) => {
+  socket.on('play_card', ({ roomCode, cardId, chosenColor, swapTargetId }) => {
     const room = roomManager.getRoom(roomCode);
     if (!room || !room.gameState) return socket.emit('error', { message: 'No active game' });
 
     const playerId = socket.data?.playerId;
 
     if (!acquireRoomLock(roomCode)) return;
-    const result = gameLogic.playCard(room.gameState, playerId, cardId, chosenColor);
+    const result = gameLogic.playCard(room.gameState, playerId, cardId, chosenColor, swapTargetId);
     releaseRoomLock(roomCode);
 
     if (result.error) {
@@ -738,6 +1025,26 @@ io.on('connection', (socket) => {
 
     // Send updated hand to the player who played
     sendHandToPlayer(socket, playerId, room.gameState);
+
+    // Seven-Zero swaps/rotations reassign whole hands — resend everyone's
+    if (result.effects.some(e => e.type === 'hands_rotated' || e.type === 'hands_swapped')) {
+      for (const pl of room.players) {
+        if (pl.isBot || !pl.socketId) continue;
+        const sock = getSocketById(pl.socketId);
+        if (sock) sendHandToPlayer(sock, pl.id, room.gameState);
+      }
+      emitHandExchangeEvents(roomCode, room, result.effects);
+    }
+
+    // Jump-in: announce the turn steal so other clients can toast it
+    const jumpEffect = result.effects.find(e => e.type === 'jump_in');
+    if (jumpEffect) {
+      const jumper = room.players.find(p => p.id === jumpEffect.playerId);
+      io.to(roomCode).emit('jumped_in', {
+        playerId: jumpEffect.playerId,
+        nickname: jumper ? jumper.nickname : 'Player',
+      });
+    }
 
     // If effects caused other players to draw, send them updated hands.
     // player_drew goes out BEFORE hand_updated: it carries causedBy, which the
@@ -788,6 +1095,7 @@ io.on('connection', (socket) => {
         playerId: result.winner,
         nickname: winner ? winner.nickname : 'Unknown',
       });
+      recordGameEnd(roomCode, result.winner);
     }
   });
 
@@ -876,6 +1184,25 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ── Send Emote (any room member incl. spectators; rate-limited) ──
+  socket.on('send_emote', ({ roomCode, emote }) => {
+    const playerId = socket.data?.playerId;
+    if (!playerId || socket.data?.roomCode !== roomCode) return;
+    if (!EMOTES.includes(emote)) return; // whitelist only — silently drop
+
+    const now = Date.now();
+    if (now - lastEmoteAt < EMOTE_COOLDOWN_MS) return;
+
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return;
+    const sender = room.players.find(p => p.id === playerId) ||
+      room.spectators?.find(p => p.id === playerId);
+    if (!sender) return;
+
+    lastEmoteAt = now;
+    io.to(roomCode).emit('emote', { playerId, nickname: sender.nickname, emote });
+  });
+
   // ── Restart Game ──
   socket.on('restart_game', ({ roomCode }) => {
     const room = roomManager.getRoom(roomCode);
@@ -962,6 +1289,7 @@ function gracefulShutdown(signal) {
   console.log(`\n[${signal}] Shutting down gracefully...`);
   clearInterval(saveInterval);
   statePersistence.saveState(roomManager.rooms);
+  statsStore.saveNow();
   server.close(() => {
     console.log('[shutdown] HTTP server closed');
     process.exit(0);
@@ -977,6 +1305,9 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
+
+// Mongo powers accounts + analytics; the game itself never waits on it
+connectDB();
 
 server.listen(PORT, () => {
   console.log(`🃏 UNO server running on http://localhost:${PORT}`);

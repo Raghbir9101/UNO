@@ -105,7 +105,6 @@
   const $displayCode = document.getElementById('display-code');
   const $playerList = document.getElementById('player-list');
   const $playerCount = document.getElementById('player-count');
-  const $stackingToggle = document.getElementById('stacking-toggle');
   const $hostSettings = document.getElementById('host-settings');
   const $canvas = document.getElementById('game-canvas');
   const $toastContainer = document.getElementById('toast-container');
@@ -118,6 +117,32 @@
   // ── Pre-fill nickname from last session ───────────────────────────────────
   const _savedNick = localStorage.getItem('uno_nickname');
   if (_savedNick) $nickname.value = _savedNick;
+
+  // ── Anonymous stats identity — powers the leaderboard without signup ──────
+  let myUid = localStorage.getItem('uno_uid');
+  if (!myUid || !/^[\w-]{8,64}$/.test(myUid)) {
+    myUid = crypto.randomUUID
+      ? crypto.randomUUID().replace(/-/g, '')
+      : Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('');
+    localStorage.setItem('uno_uid', myUid);
+  }
+
+  // ── House rules: one place to sync server settings → UI + game engine ─────
+  const $ruleToggles = {
+    stacking: document.getElementById('stacking-toggle'),
+    jumpIn: document.getElementById('jumpin-toggle'),
+    sevenZero: document.getElementById('sevenzero-toggle'),
+    drawToMatch: document.getElementById('drawtomatch-toggle'),
+  };
+
+  function applySettings(settings) {
+    const s = settings || {};
+    stackingEnabled = !!s.stacking;
+    Game.state.settings = { ...s };
+    for (const [rule, $el] of Object.entries($ruleToggles)) {
+      if ($el) $el.checked = !!s[rule];
+    }
+  }
 
   // ── Invite Link: pre-fill room code if ?room=CODE in URL ──────────────────
   const _urlParams = new URLSearchParams(window.location.search);
@@ -134,9 +159,16 @@
   }
 
   if (_inviteCode) {
+    // Invite arrivals came for ONE room — hide the quick-match hero and
+    // divider so the join flow is the only path in view.
+    const $hero = document.getElementById('btn-quick-match');
+    if ($hero) $hero.style.display = 'none';
+    const $div = document.querySelector('.lobby-divider');
+    if ($div) $div.style.display = 'none';
+
     // With the new tab layout, hide just the tab switcher bar and force the
     // Join panel visible — the room code and Join button must always show.
-    const $tabBar = document.querySelector('.tab-bar');
+    const $tabBar = document.querySelector('#create-section .tab-bar');
     if ($tabBar) $tabBar.style.display = 'none';
 
     const $panelCreate = document.getElementById('panel-create');
@@ -246,6 +278,26 @@
     setTimeout(() => toast.remove(), 4000);
   }
 
+  // ── Avatars: profile photo when the player is signed in, else letter disc ──
+  function makeAvatarEl(p, i) {
+    const el = document.createElement('div');
+    el.className = 'player-avatar';
+    if (p.picture && p.picture.startsWith('emoji:')) {
+      el.classList.add('player-avatar--emoji');
+      el.textContent = p.picture.slice(6);
+    } else if (p.picture) {
+      const img = document.createElement('img');
+      img.src = p.picture;
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer'; // Google's CDN rejects some referrers
+      el.appendChild(img);
+    } else {
+      el.style.background = getAvatarColor(i);
+      el.textContent = p.isBot ? '🤖' : p.nickname.charAt(0).toUpperCase();
+    }
+    return el;
+  }
+
   // ── Player List Rendering (drag-to-reorder) ────────────────────────────────
   let _dragSrcIndex = null;
 
@@ -342,12 +394,8 @@
         });
       }
 
-      // Avatar
-      const avatar = document.createElement('div');
-      avatar.className = 'player-avatar';
-      avatar.style.background = getAvatarColor(i);
-      avatar.textContent = p.isBot ? '🤖' : p.nickname.charAt(0).toUpperCase();
-      li.appendChild(avatar);
+      // Avatar (profile photo for signed-in players)
+      li.appendChild(makeAvatarEl(p, i));
 
       // Name
       const name = document.createElement('span');
@@ -423,7 +471,7 @@
     const isPrivate = $privateRoomToggle?.checked || false;
 
     $btnCreate.disabled = true;
-    socket.emit('create_room', { nickname: nick, isPrivate }, (res) => {
+    socket.emit('create_room', { nickname: nick, isPrivate, uid: myUid, picture: (authUser && authUser.picture) || null }, (res) => {
       $btnCreate.disabled = false;
       if (res.error) return showToast(res.error, true);
 
@@ -460,7 +508,7 @@
     }
 
     $btnPlayBots.disabled = true;
-    socket.emit('create_room', { nickname: nick, isPrivate: true }, (res) => {
+    socket.emit('create_room', { nickname: nick, isPrivate: true, uid: myUid, picture: (authUser && authUser.picture) || null }, (res) => {
       if (res.error) {
         $btnPlayBots.disabled = false;
         return showToast(res.error, true);
@@ -567,8 +615,7 @@
     history.replaceState({}, '', `?room=${code}&playerId=${res.playerId}&nickname=${encodeURIComponent(res.nickname)}`);
 
     $displayCode.textContent = code;
-    $stackingToggle.checked = res.settings?.stacking || false;
-    stackingEnabled = res.settings?.stacking || false;
+    applySettings(res.settings);
     renderPlayerList();
 
     if (res.gameInProgress && (res.reconnected || res.isSpectator)) {
@@ -576,7 +623,7 @@
       startGameUI();
 
       // Populate game players for spectators/reconnects using the guaranteed res.players from server
-      const playerOrder = (res.players || players).map(p => ({ id: p.id, nickname: p.nickname, cardCount: p.cardCount || 7 }));
+      const playerOrder = (res.players || players).map(p => ({ id: p.id, nickname: p.nickname, cardCount: p.cardCount || 7, picture: p.picture }));
       Game.setPlayers(playerOrder);
     } else {
       showScreen($waitingRoom);
@@ -591,14 +638,14 @@
     if (!code) { showToast('Please enter a room code', true); return; }
 
     $btnJoin.disabled = true;
-    socket.emit('join_room', { roomCode: code, nickname: nick, playerId: null }, (res) => {
+    socket.emit('join_room', { roomCode: code, nickname: nick, playerId: null, uid: myUid, picture: (authUser && authUser.picture) || null }, (res) => {
       $btnJoin.disabled = false;
       if (res.error) {
         if (res.canSpectate) {
           const pass = prompt("Game is in progress! Enter password for God Mode spectator, or leave blank for normal spectator. Click Cancel to abort.");
           if (pass === null) return;
           $btnJoin.disabled = true;
-          socket.emit('join_room', { roomCode: code, nickname: nick, playerId: null, spectator: true, godPassword: pass }, (spectateRes) => {
+          socket.emit('join_room', { roomCode: code, nickname: nick, playerId: null, spectator: true, godPassword: pass, uid: myUid, picture: (authUser && authUser.picture) || null }, (spectateRes) => {
             $btnJoin.disabled = false;
             if (spectateRes.error) return showToast(spectateRes.error, true);
             handleJoinSuccess(spectateRes, code);
@@ -639,12 +686,24 @@
     });
   });
 
-  // ── Lobby: Stacking Toggle ─────────────────────────────────────────────────
-  $stackingToggle.addEventListener('change', () => {
-    if (!isHost || !currentRoomCode) return;
-    socket.emit('toggle_stacking', {
-      roomCode: currentRoomCode,
-      enabled: $stackingToggle.checked,
+  // ── Lobby: House Rule Toggles (host only) ──────────────────────────────────
+  for (const [rule, $el] of Object.entries($ruleToggles)) {
+    if (!$el) continue;
+    $el.addEventListener('change', () => {
+      if (!isHost || !currentRoomCode) return;
+      socket.emit('set_rule', { roomCode: currentRoomCode, rule, enabled: $el.checked });
+    });
+  }
+
+  // ⓘ buttons reveal the rule explainer under the row
+  document.querySelectorAll('.rule-info-btn').forEach(($btn) => {
+    $btn.addEventListener('click', () => {
+      const $desc = $btn.closest('.rule-row')?.nextElementSibling;
+      if (!$desc || !$desc.classList.contains('rule-desc')) return;
+      const show = $desc.hidden;
+      $desc.hidden = !show;
+      $btn.classList.toggle('active', show);
+      $btn.setAttribute('aria-expanded', String(show));
     });
   });
 
@@ -751,7 +810,7 @@
 
           joinBtn.disabled = true;
           const spectator = room.status === 'playing';
-          socket.emit('join_room', { roomCode: room.code, nickname: nick, spectator }, (res) => {
+          socket.emit('join_room', { roomCode: room.code, nickname: nick, spectator, uid: myUid, picture: (authUser && authUser.picture) || null }, (res) => {
             joinBtn.disabled = false;
             if (res.error) {
               showToast(res.error, true);
@@ -928,7 +987,7 @@
     updateReconnectMessage('Rejoining your room...');
 
     // Attempt to re-join the saved room silently
-    socket.emit('join_room', { roomCode: saved.roomCode, nickname: saved.nickname, playerId: saved.playerId }, (res) => {
+    socket.emit('join_room', { roomCode: saved.roomCode, nickname: saved.nickname, playerId: saved.playerId, uid: myUid, picture: (authUser && authUser.picture) || null }, (res) => {
       hideReconnectOverlay();
 
       if (res.error) {
@@ -953,14 +1012,13 @@
       history.replaceState({}, '', `?room=${saved.roomCode}&playerId=${res.playerId}&nickname=${encodeURIComponent(res.nickname)}`);
 
       $displayCode.textContent = saved.roomCode;
-      $stackingToggle.checked = res.settings?.stacking || false;
-      stackingEnabled = res.settings?.stacking || false;
+      applySettings(res.settings);
 
       if (res.gameInProgress && res.reconnected) {
         showToast('✓ Reconnected successfully!');
         // Build player list with known card counts (will be updated by game_state)
         const playerOrder = res.players.map(p => ({
-          id: p.id, nickname: p.nickname, cardCount: 7,
+          id: p.id, nickname: p.nickname, cardCount: 7, picture: p.picture,
         }));
         startGameUI();
         Game.setPlayers(playerOrder);
@@ -985,10 +1043,7 @@
     players = data.players;      // exact order from server, no local mutation
     hostId = data.hostId;
     isHost = myPlayerId === hostId;
-    if (data.settings) {
-      $stackingToggle.checked = data.settings.stacking;
-      stackingEnabled = data.settings.stacking || false;
-    }
+    if (data.settings) applySettings(data.settings);
     renderPlayerList();
     updateManagePlayersButton();
   });
@@ -1031,7 +1086,7 @@
 
   socket.on('game_started', (data) => {
     showToast('Game started!');
-    if (data.settings) stackingEnabled = data.settings.stacking || false;
+    if (data.settings) applySettings(data.settings);
     startGameUI();
 
     // All players start at 0 cards — deal animation fills them up
@@ -1039,6 +1094,7 @@
       id: p.id,
       nickname: p.nickname,
       cardCount: 0,
+      picture: p.picture,
     }));
     Game.setPlayers(playerOrder);
     // Strip cardCounts so updateGameState doesn't instantly set everyone to 7.
@@ -1156,7 +1212,16 @@
   });
 
 
+  let _lastTurnPlayer = null; // for the "your turn" ding — ring once per turn change
+
   socket.on('game_state', (data) => {
+    // Your-turn ding (skip while dealing and once the game is decided)
+    if (!data.winner && !_dealInProgress &&
+        data.currentPlayer === myPlayerId && _lastTurnPlayer !== myPlayerId) {
+      Sound.play('turn');
+    }
+    _lastTurnPlayer = data.currentPlayer;
+
     // While deal animation is running, skip card count updates entirely —
     // the deal loop increments counts one-by-one in sync with the animations.
     if (data.cardCounts && Game.state.players.length > 0 && !_dealInProgress) {
@@ -1223,6 +1288,7 @@
 
   socket.on('card_effect', (data) => {
     const { cardType, chosenColor, playedBy } = data;
+    Sound.play('card');
 
     // If another player played this card, animate it flying from their zone to the discard pile
     if (playedBy && playedBy !== myPlayerId) {
@@ -1273,6 +1339,7 @@
   // ── player_drew: THE only place card-fly animations happen ──────────────
   // Direction: toSelf = fly to bottom (your hand). !toSelf = fly to opponent area.
   socket.on('player_drew', (data) => {
+    Sound.play('draw');
     const p = players.find(pl => pl.id === data.playerId);
     const name = p ? p.nickname : 'Player';
     if (data.playerId !== myPlayerId) {
@@ -1357,6 +1424,7 @@
     const p = players.find(pl => pl.id === data.playerId);
     showToast(`${p ? p.nickname : 'Someone'} called UNO! 🔴`);
     Game.triggerAnimation('uno');
+    Sound.play('uno');
   });
 
   socket.on('direction_changed', () => {
@@ -1372,6 +1440,7 @@
   socket.on('player_won', (data) => {
     // Confetti first, then winner screen after a brief delay
     Game.triggerAnimation('winner');
+    Sound.play('win');
     setTimeout(() => {
       Game.setWinner(data.playerId, data.nickname);
       showToast(`🎉 ${data.nickname} wins!`);
@@ -1381,6 +1450,8 @@
   socket.on('game_restarted', () => {
     Game.resetGame();
     Game.destroy();
+    _lastGameStats = null;
+    $postgameModal.style.display = 'none';
     showScreen($waitingRoom);
     showToast('Game ended — back to lobby');
   });
@@ -1417,7 +1488,7 @@
   // Mid-session reconnect (socket temporarily dropped)
   socket.on('connect', () => {
     if (!currentRoomCode || !myNickname) return; // handled by sessionStorage handler above
-    socket.emit('join_room', { roomCode: currentRoomCode, nickname: myNickname, playerId: myPlayerId, spectator: Game.isSpectator, godPassword: Game.isGodMode ? 'admin' : '' }, (res) => {
+    socket.emit('join_room', { roomCode: currentRoomCode, nickname: myNickname, playerId: myPlayerId, spectator: Game.isSpectator, godPassword: Game.isGodMode ? 'admin' : '', uid: myUid, picture: (authUser && authUser.picture) || null }, (res) => {
       if (res?.error) {
         showScreen($lobby);
         showToast('Could not reconnect: ' + res.error, true);
@@ -1427,7 +1498,7 @@
         players = res.players;
         Game.isSpectator = res.isSpectator;
         Game.isGodMode = res.isGodMode;
-        const playerOrder = players.map(p => ({ id: p.id, nickname: p.nickname, cardCount: 7 }));
+        const playerOrder = players.map(p => ({ id: p.id, nickname: p.nickname, cardCount: 7, picture: p.picture }));
         showToast(res.isSpectator ? 'Reconnected as Spectator!' : 'Reconnected!');
         startGameUI();
         Game.setPlayers(playerOrder);
@@ -1450,9 +1521,12 @@
     Game.init($canvas, myPlayerId, hostId);
 
     // Wire game callbacks → socket emits
-    Game.onPlayCard = (cardId, chosenColor) => {
-      socket.emit('play_card', { roomCode: currentRoomCode, cardId, chosenColor });
+    Game.onPlayCard = (cardId, chosenColor, swapTargetId) => {
+      socket.emit('play_card', { roomCode: currentRoomCode, cardId, chosenColor, swapTargetId });
     };
+
+    // Seven-Zero: canvas hands a played 7 to the DOM target picker
+    Game.onSevenSwap = (cardId) => openSevenSwapModal(cardId);
 
     Game.onDrawCard = () => {
       socket.emit('draw_card', { roomCode: currentRoomCode });
@@ -1506,6 +1580,615 @@
     });
   });
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── Accounts (optional sign-in; the game never requires it) ────────────────
+  // An account is a portable pointer to the anonymous stats uid: signing in
+  // adopts the account's uid so leaderboard stats follow the player across
+  // devices, and the account's username becomes their reserved display name.
+  // ═══════════════════════════════════════════════════════════════════════════
+  const AUTH_API = '/api/auth';
+  let authUser = null;
+  let _authMode = 'login';
+  let _googleReady = false;
+
+  const $btnOpenAuth = document.getElementById('btn-open-auth');
+  const $accountChip = document.getElementById('account-chip');
+  const $accountName = document.getElementById('account-name');
+  const $accountAvatar = document.getElementById('account-avatar');
+  const $btnLogout = document.getElementById('btn-logout');
+  const $authModal = document.getElementById('auth-modal');
+  const $authTabLogin = document.getElementById('auth-tab-login');
+  const $authTabRegister = document.getElementById('auth-tab-register');
+  const $authForm = document.getElementById('auth-form');
+  const $authEmail = document.getElementById('auth-email');
+  const $authUsername = document.getElementById('auth-username');
+  const $authUsernameGroup = document.getElementById('auth-username-group');
+  const $authPassword = document.getElementById('auth-password');
+  const $authError = document.getElementById('auth-error');
+  const $authSubmit = document.getElementById('auth-submit');
+  const $googleWrap = document.getElementById('google-signin-wrap');
+
+  function setAuthUI() {
+    if (authUser) {
+      $btnOpenAuth.hidden = true;
+      $accountChip.hidden = false;
+      const isEmoji = authUser.picture && authUser.picture.startsWith('emoji:');
+      $accountName.textContent = isEmoji
+        ? `${authUser.picture.slice(6)} ${authUser.username}`
+        : authUser.username;
+      if (authUser.picture && !isEmoji) {
+        $accountAvatar.src = authUser.picture;
+        $accountAvatar.hidden = false;
+      } else {
+        $accountAvatar.hidden = true;
+      }
+    } else {
+      $btnOpenAuth.hidden = false;
+      $accountChip.hidden = true;
+    }
+  }
+
+  function showAuthError(msg) {
+    $authError.textContent = msg;
+    $authError.hidden = false;
+  }
+
+  async function authApi(path, body) {
+    const res = await fetch(AUTH_API + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Something went wrong — try again');
+    return data;
+  }
+
+  function handleAuthSuccess(data) {
+    localStorage.setItem('uno_token', data.token);
+    authUser = data.user;
+    // Adopt the account's stats identity — stats now follow the account
+    if (authUser.uid && authUser.uid !== myUid) {
+      myUid = authUser.uid;
+      localStorage.setItem('uno_uid', myUid);
+    }
+    $nickname.value = authUser.username;
+    localStorage.setItem('uno_nickname', authUser.username);
+    setAuthUI();
+    $authModal.style.display = 'none';
+    showToast(`✓ Signed in as ${authUser.username}`);
+  }
+
+  function setAuthMode(mode) {
+    _authMode = mode;
+    const isLogin = mode === 'login';
+    $authTabLogin.classList.toggle('tab-btn--active', isLogin);
+    $authTabRegister.classList.toggle('tab-btn--active', !isLogin);
+    $authUsernameGroup.hidden = isLogin;
+    $authPassword.autocomplete = isLogin ? 'current-password' : 'new-password';
+    $authSubmit.textContent = isLogin ? 'Sign In' : 'Create Account';
+    $authError.hidden = true;
+    document.getElementById('auth-title').textContent = isLogin ? 'Welcome back' : 'Create your account';
+    document.getElementById('auth-pitch').textContent = isLogin
+      ? 'Sign in to keep your wins and leaderboard rank.'
+      : 'Save your wins, reserve your leaderboard name, and carry stats across devices.';
+    document.getElementById('auth-forgot').hidden = !isLogin;
+    // Focus the first field of the active mode
+    setTimeout(() => (isLogin ? $authEmail : $authUsername).focus(), 50);
+  }
+
+  $authTabLogin.addEventListener('click', () => setAuthMode('login'));
+  $authTabRegister.addEventListener('click', () => setAuthMode('register'));
+
+  // Password visibility toggle
+  document.getElementById('auth-eye').addEventListener('click', () => {
+    const hidden = $authPassword.type === 'password';
+    $authPassword.type = hidden ? 'text' : 'password';
+    document.getElementById('auth-eye').textContent = hidden ? '🙈' : '👁';
+  });
+
+  $authForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $authError.hidden = true;
+    $authSubmit.disabled = true;
+    try {
+      const body = {
+        email: $authEmail.value.trim(),
+        password: $authPassword.value,
+        uid: myUid,
+      };
+      if (_authMode === 'register') body.username = $authUsername.value.trim();
+      handleAuthSuccess(await authApi(_authMode === 'login' ? '/login' : '/register', body));
+    } catch (err) {
+      showAuthError(err.message);
+    } finally {
+      $authSubmit.disabled = false;
+    }
+  });
+
+  // Google Sign-In: load Google Identity Services only when the modal opens,
+  // and only if the server has a client id configured.
+  function initGoogleSignIn() {
+    if (_googleReady) return;
+    _googleReady = true;
+    fetch(AUTH_API + '/config')
+      .then(r => r.json())
+      .then(cfg => {
+        if (!cfg.googleClientId) return; // not configured — email auth only
+        const s = document.createElement('script');
+        s.src = 'https://accounts.google.com/gsi/client';
+        s.async = true;
+        s.onload = () => {
+          window.google.accounts.id.initialize({
+            client_id: cfg.googleClientId,
+            callback: async (resp) => {
+              try {
+                handleAuthSuccess(await authApi('/google', { credential: resp.credential, uid: myUid, picture: (authUser && authUser.picture) || null }));
+              } catch (err) {
+                showAuthError(err.message);
+              }
+            },
+          });
+          window.google.accounts.id.renderButton(
+            document.getElementById('google-signin-btn'),
+            { theme: 'filled_black', size: 'large', shape: 'pill', width: 280 }
+          );
+          $googleWrap.hidden = false;
+        };
+        document.head.appendChild(s);
+      })
+      .catch(() => {});
+  }
+
+  $btnOpenAuth.addEventListener('click', () => {
+    setAuthMode('login');
+    $authModal.style.display = 'flex';
+    initGoogleSignIn();
+  });
+
+  document.getElementById('btn-close-auth').addEventListener('click', () => {
+    $authModal.style.display = 'none';
+  });
+
+  $btnLogout.addEventListener('click', () => {
+    localStorage.removeItem('uno_token');
+    authUser = null;
+    // Keep the current uid — this device keeps playing under the same identity
+    setAuthUI();
+    showToast('Signed out');
+  });
+
+  // Restore session on load
+  (async () => {
+    const token = localStorage.getItem('uno_token');
+    if (!token) return;
+    try {
+      const res = await fetch(AUTH_API + '/me', { headers: { Authorization: 'Bearer ' + token } });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      authUser = data.user;
+      if (authUser.uid && authUser.uid !== myUid) {
+        myUid = authUser.uid;
+        localStorage.setItem('uno_uid', myUid);
+      }
+      setAuthUI();
+    } catch {
+      localStorage.removeItem('uno_token'); // expired/invalid — quiet cleanup
+    }
+  })();
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── Profile (open by tapping the account chip) ─────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Keep in sync with AVATAR_EMOJIS in server/avatars.js
+  const AVATAR_EMOJIS = [
+    '😀', '😎', '🤠', '🥳', '😈', '👻', '👽', '🤖',
+    '🐱', '🐶', '🦊', '🐼', '🦁', '🐸', '🐙', '🦄',
+    '🐯', '🐵', '🔥', '⚡', '🌟', '🎯', '🃏', '👑',
+  ];
+
+  const $profileModal = document.getElementById('profile-modal');
+  const $profileUsername = document.getElementById('profile-username');
+  const $profileEmail = document.getElementById('profile-email');
+  const $profileGoogleBadge = document.getElementById('profile-google-badge');
+  const $profilePreview = document.getElementById('profile-avatar-preview');
+  const $avatarGrid = document.getElementById('avatar-grid');
+  const $profileStats = document.getElementById('profile-stats');
+  const $profileAchievements = document.getElementById('profile-achievements');
+  const $profileError = document.getElementById('profile-error');
+  const $btnSaveProfile = document.getElementById('btn-save-profile');
+
+  // undefined = unchanged; null = default letter; 'google'; 'emoji:X'
+  let _selectedAvatar;
+
+  function renderProfilePreview(pictureVal) {
+    $profilePreview.innerHTML = '';
+    if (pictureVal && pictureVal.startsWith('emoji:')) {
+      $profilePreview.textContent = pictureVal.slice(6);
+    } else if (pictureVal) {
+      const img = document.createElement('img');
+      img.src = pictureVal;
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      $profilePreview.appendChild(img);
+    } else {
+      $profilePreview.textContent = (authUser?.username || 'P').charAt(0).toUpperCase();
+    }
+  }
+
+  function buildAvatarGrid() {
+    $avatarGrid.innerHTML = '';
+    const current = authUser.picture;
+
+    const addOption = (value, contentEl, title) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'avatar-option';
+      btn.title = title;
+      btn.appendChild(contentEl);
+      const isCurrent =
+        (value === null && !current) ||
+        (value === 'google' && current && current === authUser.googlePicture) ||
+        (value === current);
+      if (isCurrent && _selectedAvatar === undefined) btn.classList.add('selected');
+      btn.addEventListener('click', () => {
+        _selectedAvatar = value;
+        $avatarGrid.querySelectorAll('.avatar-option').forEach(el => el.classList.remove('selected'));
+        btn.classList.add('selected');
+        renderProfilePreview(value === 'google' ? authUser.googlePicture : value);
+      });
+      $avatarGrid.appendChild(btn);
+    };
+
+    // Google photo (only when the account has one)
+    if (authUser.googlePicture) {
+      const img = document.createElement('img');
+      img.src = authUser.googlePicture;
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      addOption('google', img, 'Your Google photo');
+    }
+    // Default letter disc
+    const letter = document.createElement('span');
+    letter.textContent = (authUser.username || 'P').charAt(0).toUpperCase();
+    addOption(null, letter, 'Default avatar');
+    // Emoji set
+    for (const e of AVATAR_EMOJIS) {
+      const span = document.createElement('span');
+      span.textContent = e;
+      addOption(`emoji:${e}`, span, e);
+    }
+  }
+
+  function renderProfileStats(data) {
+    $profileStats.innerHTML = '';
+    const s = data.stats;
+    if (!s || s.gamesPlayed === 0) {
+      $profileStats.innerHTML = '<span class="profile-muted">No games recorded yet — play one!</span>';
+    } else {
+      const winRate = s.gamesPlayed ? Math.round((s.wins / s.gamesPlayed) * 100) : 0;
+      [['🏆', s.wins, 'Wins'], ['🎮', s.gamesPlayed, 'Games'], ['📈', winRate + '%', 'Win rate'], ['🌈', s.wildsPlayed, 'Wilds']]
+        .forEach(([icon, val, label]) => {
+          const tile = document.createElement('div');
+          tile.className = 'profile-stat-tile';
+          tile.innerHTML = `<span class="stat-icon">${icon}</span><span class="stat-val">${val}</span><span class="stat-label">${label}</span>`;
+          $profileStats.appendChild(tile);
+        });
+    }
+
+    $profileAchievements.innerHTML = '';
+    const unlocked = new Set((s && s.achievements) || []);
+    for (const [id, def] of Object.entries(data.achievementDefs || {})) {
+      const chip = document.createElement('div');
+      chip.className = 'achievement-chip' + (unlocked.has(id) ? '' : ' achievement-chip--locked');
+      chip.textContent = `${def.emoji} ${def.title}`;
+      chip.title = def.desc + (unlocked.has(id) ? ' — unlocked!' : ' — locked');
+      $profileAchievements.appendChild(chip);
+    }
+  }
+
+  async function openProfile() {
+    if (!authUser) return;
+    _selectedAvatar = undefined;
+    $profileError.hidden = true;
+    $profileUsername.value = authUser.username;
+    $profileEmail.textContent = authUser.email;
+    $profileGoogleBadge.hidden = !authUser.hasGoogle;
+    renderProfilePreview(authUser.picture);
+    buildAvatarGrid();
+    $profileStats.innerHTML = '<span class="profile-muted">Loading…</span>';
+    $profileAchievements.innerHTML = '';
+    $profileModal.style.display = 'flex';
+
+    try {
+      const res = await fetch(AUTH_API + '/profile', {
+        headers: { Authorization: 'Bearer ' + localStorage.getItem('uno_token') },
+      });
+      if (!res.ok) throw new Error();
+      renderProfileStats(await res.json());
+    } catch {
+      $profileStats.innerHTML = '<span class="profile-muted">Could not load stats</span>';
+    }
+  }
+
+  // The account chip opens the profile (except the sign-out button inside it)
+  $accountChip.addEventListener('click', (e) => {
+    if (e.target.closest('#btn-logout')) return;
+    openProfile();
+  });
+
+  document.getElementById('btn-close-profile').addEventListener('click', () => {
+    $profileModal.style.display = 'none';
+  });
+
+  $btnSaveProfile.addEventListener('click', async () => {
+    const body = {};
+    const name = $profileUsername.value.trim();
+    if (name !== authUser.username) body.username = name;
+    if (_selectedAvatar !== undefined) body.picture = _selectedAvatar;
+    if (Object.keys(body).length === 0) {
+      $profileModal.style.display = 'none';
+      return;
+    }
+
+    $btnSaveProfile.disabled = true;
+    $profileError.hidden = true;
+    try {
+      const res = await fetch(AUTH_API + '/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + localStorage.getItem('uno_token'),
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not save — try again');
+
+      authUser = data.user;
+      setAuthUI();
+      $nickname.value = authUser.username;
+      localStorage.setItem('uno_nickname', authUser.username);
+      $profileModal.style.display = 'none';
+      showToast('✓ Profile updated');
+    } catch (err) {
+      $profileError.textContent = err.message;
+      $profileError.hidden = false;
+    } finally {
+      $btnSaveProfile.disabled = false;
+    }
+  });
+
+  // ── Quick Match: one tap into an open public game (or a fresh bot table) ──
+  const $btnQuickMatch = document.getElementById('btn-quick-match');
+  $btnQuickMatch.addEventListener('click', () => {
+    const nick = $nickname.value.trim();
+    if (!nick) {
+      showToast('Please enter a nickname', true);
+      $nickname.focus();
+      return;
+    }
+    $btnQuickMatch.disabled = true;
+    socket.emit('quick_match', { nickname: nick, uid: myUid, picture: (authUser && authUser.picture) || null }, (res) => {
+      $btnQuickMatch.disabled = false;
+      if (res.error) return showToast(res.error, true);
+
+      if (res.joined) {
+        handleJoinSuccess(res, res.roomCode);
+        showToast('⚡ Joined an open game!');
+        return;
+      }
+      // Created a new public room pre-seated with bots
+      myPlayerId = res.playerId;
+      myNickname = res.nickname;
+      currentRoomCode = res.roomCode;
+      sessionStorage.setItem('uno_session', JSON.stringify({
+        roomCode: res.roomCode, playerId: res.playerId, nickname: res.nickname,
+      }));
+      localStorage.setItem('uno_nickname', res.nickname);
+      $displayCode.textContent = res.roomCode;
+      history.replaceState({}, '', `?room=${res.roomCode}&playerId=${res.playerId}&nickname=${encodeURIComponent(res.nickname)}`);
+      showScreen($waitingRoom);
+      showToast('No open rooms — made you one with bots. Start now or wait for players!');
+    });
+  });
+
+  // ── Seven-Zero Swap Picker ─────────────────────────────────────────────────
+  const $sevenModal = document.getElementById('seven-swap-modal');
+  const $sevenList = document.getElementById('seven-swap-list');
+  document.getElementById('btn-close-seven-swap').addEventListener('click', () => {
+    $sevenModal.style.display = 'none';
+  });
+
+  function openSevenSwapModal(cardId) {
+    $sevenList.innerHTML = '';
+    const opponents = (Game.state.players || []).filter(p => p.id !== myPlayerId);
+    if (!opponents.length) return;
+
+    opponents.forEach((p, i) => {
+      const li = document.createElement('li');
+      li.className = 'manage-player-item seven-swap-item';
+
+      li.appendChild(makeAvatarEl(p, i));
+
+      const name = document.createElement('span');
+      name.className = 'manage-player-name';
+      name.textContent = p.nickname;
+      li.appendChild(name);
+
+      const count = document.createElement('span');
+      count.className = 'seven-swap-count';
+      count.textContent = `${p.cardCount ?? '?'} cards`;
+      li.appendChild(count);
+
+      li.addEventListener('click', () => {
+        $sevenModal.style.display = 'none';
+        Game.playSevenWithSwap(cardId, p.id);
+      });
+      $sevenList.appendChild(li);
+    });
+    $sevenModal.style.display = 'flex';
+  }
+
+  // ── House Rule Events ──────────────────────────────────────────────────────
+  socket.on('jumped_in', (data) => {
+    if (data.playerId !== myPlayerId) showToast(`⚡ ${data.nickname} jumped in!`);
+    Sound.play('card');
+  });
+
+  socket.on('hands_rotated', () => {
+    showToast('🔄 Zero played — all hands rotate!');
+    Sound.play('swap');
+  });
+
+  socket.on('hands_swapped', (data) => {
+    const involvesMe = data.a === myPlayerId || data.b === myPlayerId;
+    showToast(involvesMe
+      ? '🔄 Your hand was swapped!'
+      : `🔄 ${data.aNickname} ⇄ ${data.bNickname} swapped hands!`);
+    Sound.play('swap');
+  });
+
+  // ── Sound Toggle ───────────────────────────────────────────────────────────
+  const $btnSound = document.getElementById('btn-sound');
+  function refreshSoundBtn() {
+    $btnSound.textContent = Sound.muted ? '🔇' : '🔊';
+    $btnSound.title = Sound.muted ? 'Unmute sounds' : 'Mute sounds';
+  }
+  refreshSoundBtn();
+  $btnSound.addEventListener('click', () => {
+    Sound.toggleMute();
+    refreshSoundBtn();
+    if (!Sound.muted) Sound.play('card');
+  });
+
+  // ── Post-Game Stats Panel ──────────────────────────────────────────────────
+  let _lastGameStats = null;
+  const $postgameModal = document.getElementById('postgame-modal');
+  const $postgameTitle = document.getElementById('postgame-title');
+  const $postgameAchievements = document.getElementById('postgame-achievements');
+  const $postgameTbody = document.querySelector('#postgame-table tbody');
+
+  document.getElementById('btn-close-postgame').addEventListener('click', () => {
+    $postgameModal.style.display = 'none';
+  });
+
+  function formatDuration(ms) {
+    const s = Math.round(ms / 1000);
+    return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+  }
+
+  function showPostgameModal(data) {
+    $postgameTitle.textContent = `📊 ${data.winnerName} won in ${formatDuration(data.durationMs)}`;
+
+    $postgameAchievements.innerHTML = '';
+    let mineUnlocked = false;
+    for (const a of data.achievements || []) {
+      const chip = document.createElement('div');
+      chip.className = 'achievement-chip';
+      chip.textContent = `${a.emoji} ${a.title} — ${a.nickname}`;
+      $postgameAchievements.appendChild(chip);
+      if (a.playerId === myPlayerId) mineUnlocked = true;
+    }
+    if (mineUnlocked) Sound.play('achievement');
+
+    $postgameTbody.innerHTML = '';
+    const rows = [...(data.players || [])].sort((a, b) => (b.won ? 1 : 0) - (a.won ? 1 : 0));
+    for (const p of rows) {
+      const tr = document.createElement('tr');
+      const name = document.createElement('td');
+      name.textContent = `${p.won ? '👑 ' : ''}${p.nickname}${p.playerId === myPlayerId ? ' (you)' : ''}`;
+      tr.appendChild(name);
+      for (const v of [p.cardsPlayed, p.cardsDrawn, p.wildsPlayed, p.isBot ? '—' : (p.totalWins ?? '—')]) {
+        const td = document.createElement('td');
+        td.textContent = v;
+        tr.appendChild(td);
+      }
+      $postgameTbody.appendChild(tr);
+    }
+
+    $postgameModal.style.display = 'flex';
+  }
+
+  socket.on('game_over_stats', (data) => {
+    _lastGameStats = data;
+    // Let the confetti and winner banner land before the panel slides in
+    setTimeout(() => {
+      if (_lastGameStats === data && Game.state.winner) showPostgameModal(data);
+    }, 1600);
+  });
+
+  document.getElementById('btn-share-result').addEventListener('click', () => {
+    const d = _lastGameStats;
+    if (!d) return;
+    const won = d.winnerId === myPlayerId;
+    const n = Math.max((d.players?.length || 2) - 1, 1);
+    const text = won
+      ? `🃏 I just WON a game of UNO against ${n} opponent${n > 1 ? 's' : ''} on Play UNO Free! Think you can beat me? ${location.origin}`
+      : `🃏 Just played a game of UNO online — free, no signup, up to 20 players. Come play: ${location.origin}`;
+    if (navigator.share) {
+      navigator.share({ text }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(text)
+        .then(() => showToast('Result copied — paste it anywhere!'))
+        .catch(() => showToast(text));
+    }
+  });
+
+  // ── PWA: register the service worker (installable app + faster loads) ─────
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+  }
+
+  // ── Quick Emotes (in-game reactions) ───────────────────────────────────────
+  // Whitelisted reactions only — keep in sync with EMOTES in server/index.js.
+  const EMOTES = ['👍', '😂', '😮', '😭', '😡', '🎉', '⏰', '🔥'];
+  const EMOTE_COOLDOWN_MS = 1500; // matches server rate limit
+  const $btnEmote = document.getElementById('btn-emote');
+  const $emotePicker = document.getElementById('emote-picker');
+  let _emoteCooldownTimer = null;
+
+  EMOTES.forEach((emote) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'emote-option';
+    btn.textContent = emote;
+    btn.setAttribute('aria-label', `React with ${emote}`);
+    btn.addEventListener('click', () => {
+      if (!currentRoomCode) return;
+      socket.emit('send_emote', { roomCode: currentRoomCode, emote });
+      $emotePicker.hidden = true;
+      // Disable for the server's cooldown window so taps aren't silently dropped
+      $btnEmote.disabled = true;
+      clearTimeout(_emoteCooldownTimer);
+      _emoteCooldownTimer = setTimeout(() => { $btnEmote.disabled = false; }, EMOTE_COOLDOWN_MS);
+    });
+    $emotePicker.appendChild(btn);
+  });
+
+  $btnEmote.addEventListener('click', () => {
+    $emotePicker.hidden = !$emotePicker.hidden;
+  });
+
+  // Tapping anywhere else (including the canvas) closes the picker
+  document.addEventListener('pointerdown', (e) => {
+    if ($emotePicker.hidden) return;
+    if (e.target.closest('#btn-emote') || e.target.closest('#emote-picker')) return;
+    $emotePicker.hidden = true;
+  });
+
+  socket.on('emote', (data) => {
+    Sound.play('emote');
+    // In-game: bubble above the sender's seat. Waiting room: plain toast.
+    if ($gameScreen.classList.contains('active') && Game.state.active) {
+      Game.showEmoteBubble(data.playerId, data.emote);
+    } else {
+      showToast(`${data.nickname}: ${data.emote}`);
+    }
+  });
+
   // ── Manage Players Modal ───────────────────────────────────────────────────
 
   function updateManagePlayersButton() {
@@ -1527,10 +2210,7 @@
       const li = document.createElement('li');
       li.className = 'manage-player-item';
 
-      const avatar = document.createElement('div');
-      avatar.className = 'player-avatar';
-      avatar.textContent = p.nickname.charAt(0).toUpperCase();
-      li.appendChild(avatar);
+      li.appendChild(makeAvatarEl(p, 0));
 
       const infoWrap = document.createElement('div');
       infoWrap.className = 'manage-player-info';

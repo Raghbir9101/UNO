@@ -1,0 +1,74 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+<main id="main-content" class="content-page">
+  <div class="container" style="max-width:860px;">
+    <h1 style="text-align:center;">🏆 UNO Leaderboard</h1>
+    <p class="page-subtitle" style="text-align:center;margin-bottom:40px;">
+      The sharpest card slingers on Play UNO Free — ranked by wins.
+      Play a game and you're on the board automatically, no signup needed.
+    </p>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:32px;">
+      <section aria-labelledby="weekly-heading">
+        <h2 id="weekly-heading" style="margin-bottom:16px;">⚡ This Week</h2>
+        <% if (board.weekly.length === 0) { %>
+          <p style="color:var(--text-muted);">No wins recorded yet this week — the throne is empty. <a href="/play">Claim it</a>.</p>
+        <% } else { %>
+          <table style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr style="text-align:left;color:var(--text-muted);font-size:0.85rem;">
+                <th style="padding:8px 12px;">#</th>
+                <th style="padding:8px 12px;">Player</th>
+                <th style="padding:8px 12px;text-align:right;">Wins</th>
+                <th style="padding:8px 12px;text-align:right;">Games</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% board.weekly.forEach(function(p, i) { %>
+                <tr style="border-top:1px solid rgba(139,147,168,0.15);">
+                  <td style="padding:10px 12px;"><%= i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) %></td>
+                  <td style="padding:10px 12px;font-weight:600;"><%= p.name %></td>
+                  <td style="padding:10px 12px;text-align:right;"><%= p.wins %></td>
+                  <td style="padding:10px 12px;text-align:right;color:var(--text-muted);"><%= p.gamesPlayed %></td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        <% } %>
+      </section>
+
+      <section aria-labelledby="alltime-heading">
+        <h2 id="alltime-heading" style="margin-bottom:16px;">👑 All Time</h2>
+        <% if (board.allTime.length === 0) { %>
+          <p style="color:var(--text-muted);">Nobody has won a game yet. <a href="/play">Be the first</a>.</p>
+        <% } else { %>
+          <table style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr style="text-align:left;color:var(--text-muted);font-size:0.85rem;">
+                <th style="padding:8px 12px;">#</th>
+                <th style="padding:8px 12px;">Player</th>
+                <th style="padding:8px 12px;text-align:right;">Wins</th>
+                <th style="padding:8px 12px;text-align:right;">Games</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% board.allTime.forEach(function(p, i) { %>
+                <tr style="border-top:1px solid rgba(139,147,168,0.15);">
+                  <td style="padding:10px 12px;"><%= i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) %></td>
+                  <td style="padding:10px 12px;font-weight:600;"><%= p.name %></td>
+                  <td style="padding:10px 12px;text-align:right;"><%= p.wins %></td>
+                  <td style="padding:10px 12px;text-align:right;color:var(--text-muted);"><%= p.gamesPlayed %></td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        <% } %>
+      </section>
+    </div>
+
+    <div style="text-align:center;margin:56px 0 24px;">
+      <a href="/play" class="btn btn-hero">Play Now — Climb the Ranks</a>
+    </div>
+  </div>
+</main>
+<%- include('partials/footer') %>

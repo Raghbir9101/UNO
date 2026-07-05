@@ -121,6 +121,12 @@ function initGame(players, settings) {
     currentPlayerIndex = nextPlayerIndex(currentPlayerIndex, direction, playerCount);
   }
 
+  // Per-game stats: feed the post-game panel, leaderboard, and achievements
+  const stats = { startedAt: Date.now(), perPlayer: {} };
+  for (const p of players) {
+    stats.perPlayer[p.id] = { cardsPlayed: 0, cardsDrawn: 0, wildsPlayed: 0, maxHand: hands[p.id].length };
+  }
+
   return {
     hands,
     drawPile: deck,
@@ -137,6 +143,7 @@ function initGame(players, settings) {
     unoState: {},           // playerId → { called: bool, timestamp }
     winner: null,
     turnTimestamp: Date.now(),
+    stats,
   };
 }
 
@@ -176,6 +183,12 @@ function drawCards(state, playerId, count) {
   const actual = Math.min(count, state.drawPile.length);
   const drawn = state.drawPile.splice(0, actual);
   state.hands[playerId].push(...drawn);
+  // stats may be absent on games restored from an older save format
+  const ps = state.stats && state.stats.perPlayer[playerId];
+  if (ps) {
+    ps.cardsDrawn += drawn.length;
+    ps.maxHand = Math.max(ps.maxHand, state.hands[playerId].length);
+  }
   return drawn;
 }
 
@@ -207,12 +220,74 @@ function isPlayable(card, state) {
   return false;
 }
 
+// ─── Seven-Zero Helpers ───────────────────────────────────────────────────────
+
+// 0 played: every hand moves to the next player in the direction of play.
+function rotateHands(state) {
+  const oldHands = state.hands;
+  const newHands = {};
+  for (let i = 0; i < state.playerIds.length; i++) {
+    const from = state.playerIds[i];
+    const to = state.playerIds[nextPlayerIndex(i, state.direction, state.playerCount)];
+    newHands[to] = oldHands[from];
+  }
+  state.hands = newHands;
+  // Hands changed owners — pending UNO catches no longer make sense
+  state.unoState = {};
+  if (state.stats) {
+    for (const pid of state.playerIds) {
+      const ps = state.stats.perPlayer[pid];
+      if (ps) ps.maxHand = Math.max(ps.maxHand, state.hands[pid].length);
+    }
+  }
+}
+
+// 7 played: the player swaps hands with a chosen opponent.
+function swapHands(state, a, b) {
+  [state.hands[a], state.hands[b]] = [state.hands[b], state.hands[a]];
+  delete state.unoState[a];
+  delete state.unoState[b];
+  if (state.stats) {
+    for (const pid of [a, b]) {
+      const ps = state.stats.perPlayer[pid];
+      if (ps) ps.maxHand = Math.max(ps.maxHand, state.hands[pid].length);
+    }
+  }
+}
+
+// Jump-in rule: a card is jump-in playable only as an EXACT copy of the top card
+function isExactMatch(card, top) {
+  if (!top || card.color === 'wild' || top.color === 'wild') return false;
+  if (card.color !== top.color) return false;
+  if (card.type === 'number') return top.type === 'number' && card.value === top.value;
+  return card.type === top.type;
+}
+
 // ─── Play Card ────────────────────────────────────────────────────────────────
 
-function playCard(state, playerId, cardId, chosenColor) {
-  // Validate it's this player's turn
-  if (getCurrentPlayerId(state) !== playerId) {
-    return { error: "It's not your turn" };
+function playCard(state, playerId, cardId, chosenColor, swapTargetId) {
+  const isJumpIn = getCurrentPlayerId(state) !== playerId;
+
+  // Validate it's this player's turn — unless the jump-in rule lets them
+  // slam an identical card out of turn
+  if (isJumpIn) {
+    if (!state.settings.jumpIn) {
+      return { error: "It's not your turn" };
+    }
+    if (state.pendingDraw > 0) {
+      return { error: 'Cannot jump in while a draw stack is pending' };
+    }
+    const jumpHand = state.hands[playerId];
+    const jumpCard = jumpHand && jumpHand.find(c => c.id === cardId);
+    if (!jumpCard) {
+      return { error: 'Card not in your hand' };
+    }
+    if (!isExactMatch(jumpCard, state.discardTop)) {
+      return { error: 'You can only jump in with an identical card' };
+    }
+    // Jump-in steals the turn — play then proceeds from this player
+    state.currentPlayerIndex = state.playerIds.indexOf(playerId);
+    state.turnTimestamp = Date.now();
   }
 
   // If pending draw and stacking is OFF, must draw
@@ -239,8 +314,24 @@ function playCard(state, playerId, cardId, chosenColor) {
     return { error: 'You must choose a color' };
   }
 
+  // Seven-Zero: playing a 7 (that isn't the winning card) requires choosing
+  // a valid opponent to swap hands with. Validate BEFORE mutating anything.
+  const needsSwapTarget = state.settings.sevenZero && card.type === 'number' &&
+    card.value === 7 && hand.length > 1;
+  if (needsSwapTarget) {
+    if (!swapTargetId || swapTargetId === playerId || !state.playerIds.includes(swapTargetId)) {
+      return { error: 'Choose a player to swap hands with', needsSwapTarget: true };
+    }
+  }
+
   // Remove card from hand
   hand.splice(cardIndex, 1);
+
+  const ps = state.stats && state.stats.perPlayer[playerId];
+  if (ps) {
+    ps.cardsPlayed++;
+    if (card.color === 'wild') ps.wildsPlayed++;
+  }
 
   // Place on discard pile
   state.discardPile.push(card);
@@ -261,6 +352,10 @@ function playCard(state, playerId, cardId, chosenColor) {
     winner: null,
   };
 
+  if (isJumpIn) {
+    result.effects.push({ type: 'jump_in', playerId });
+  }
+
   // Check win
   if (hand.length === 0) {
     state.winner = playerId;
@@ -272,6 +367,13 @@ function playCard(state, playerId, cardId, chosenColor) {
   switch (card.type) {
     case 'number':
       state.activeColor = card.color;
+      if (state.settings.sevenZero && card.value === 0) {
+        rotateHands(state);
+        result.effects.push({ type: 'hands_rotated', direction: state.direction });
+      } else if (needsSwapTarget) {
+        swapHands(state, playerId, swapTargetId);
+        result.effects.push({ type: 'hands_swapped', a: playerId, b: swapTargetId });
+      }
       advanceTurn(state);
       break;
 
@@ -370,6 +472,21 @@ function playerDrawCard(state, playerId) {
     const drawn = drawCards(state, playerId, count);
     advanceTurn(state);
     return { drawn, count: drawn.length, forced: true, nextPlayer: getCurrentPlayerId(state) };
+  }
+
+  // Draw-to-match: keep drawing until a playable card turns up (hard-capped so
+  // a dead deck can't loop forever). Turn does not advance — player may then
+  // play the matched card or pass.
+  if (state.settings.drawToMatch) {
+    const drawn = [];
+    const MAX_DRAW_TO_MATCH = 25;
+    while (drawn.length < MAX_DRAW_TO_MATCH) {
+      const d = drawCards(state, playerId, 1);
+      if (d.length === 0) break; // deck + discard exhausted
+      drawn.push(d[0]);
+      if (isPlayable(d[0], state)) break;
+    }
+    return { drawn, count: drawn.length, forced: false, mustPass: true };
   }
 
   // Normal draw: draw 1 card, but DO NOT advance the turn yet.

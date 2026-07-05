@@ -1,0 +1,134 @@
+<%- include('partials/head') %>
+<main id="main-content" class="content-page">
+  <div class="container" style="max-width:1000px;">
+    <h1>📈 Site Analytics</h1>
+    <p class="page-subtitle" style="margin-bottom:32px;">Human traffic only — bot/crawler hits are counted separately below.</p>
+
+    <!-- Stat tiles -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:36px;">
+      <% [
+        ['Today', data.totals.visitsToday, data.totals.uniqToday],
+        ['Last 7 days', data.totals.visits7d, data.totals.uniq7d],
+        ['Last 30 days', data.totals.visits30d, data.totals.uniq30d],
+        ['All time', data.totals.visitsAll, null],
+      ].forEach(function(t) { %>
+        <div style="border:1px solid rgba(139,147,168,0.25);border-radius:12px;padding:14px 16px;">
+          <div style="font-size:0.75rem;letter-spacing:1px;text-transform:uppercase;color:var(--text-muted);"><%= t[0] %></div>
+          <div style="font-size:1.7rem;font-weight:800;"><%= t[1] %></div>
+          <div style="font-size:0.8rem;color:var(--text-muted);"><%= t[2] === null ? 'page views' : t[2] + ' unique visitors' %></div>
+        </div>
+      <% }); %>
+    </div>
+
+    <!-- Daily trend (last 14 days) -->
+    <h2 style="margin-bottom:12px;">Daily Visits (14 days)</h2>
+    <% const maxDaily = Math.max(1, ...data.daily.map(d => d.count)); %>
+    <div style="display:flex;align-items:flex-end;gap:6px;height:120px;margin-bottom:8px;">
+      <% data.daily.forEach(function(d) { %>
+        <div title="<%= d._id %>: <%= d.count %>" style="flex:1;background:linear-gradient(180deg,#ff3b5c,#b3123a);border-radius:4px 4px 0 0;min-width:8px;height:<%= Math.max(4, Math.round(d.count / maxDaily * 100)) %>%;"></div>
+      <% }); %>
+      <% if (data.daily.length === 0) { %><p style="color:var(--text-muted);">No visits recorded yet.</p><% } %>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-muted);margin-bottom:36px;">
+      <span><%= data.daily[0] ? data.daily[0]._id : '' %></span>
+      <span><%= data.daily.length ? data.daily[data.daily.length-1]._id : '' %></span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:32px;margin-bottom:36px;">
+      <section>
+        <h2 style="margin-bottom:12px;">Top Pages (30d)</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+          <% data.topPages.forEach(function(p) { %>
+            <tr style="border-top:1px solid rgba(139,147,168,0.15);">
+              <td style="padding:8px 10px;word-break:break-all;"><%= p._id %></td>
+              <td style="padding:8px 10px;text-align:right;font-weight:700;"><%= p.count %></td>
+            </tr>
+          <% }); %>
+        </table>
+      </section>
+
+      <section>
+        <h2 style="margin-bottom:12px;">Top Countries (30d)</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+          <% data.topCountries.forEach(function(c) { %>
+            <tr style="border-top:1px solid rgba(139,147,168,0.15);">
+              <td style="padding:8px 10px;"><%= c._id %></td>
+              <td style="padding:8px 10px;text-align:right;font-weight:700;"><%= c.count %></td>
+            </tr>
+          <% }); %>
+          <% if (!data.topCountries.length) { %><tr><td style="padding:8px 10px;color:var(--text-muted);">No geo data yet (local IPs have no location)</td></tr><% } %>
+        </table>
+      </section>
+
+      <section>
+        <h2 style="margin-bottom:12px;">Top Cities (30d)</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+          <% data.topCities.forEach(function(c) { %>
+            <tr style="border-top:1px solid rgba(139,147,168,0.15);">
+              <td style="padding:8px 10px;"><%= c._id.city %>, <%= c._id.country %></td>
+              <td style="padding:8px 10px;text-align:right;font-weight:700;"><%= c.count %></td>
+            </tr>
+          <% }); %>
+          <% if (!data.topCities.length) { %><tr><td style="padding:8px 10px;color:var(--text-muted);">—</td></tr><% } %>
+        </table>
+      </section>
+
+      <section>
+        <h2 style="margin-bottom:12px;">Referrers (30d)</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+          <% data.topReferrers.forEach(function(r) { %>
+            <tr style="border-top:1px solid rgba(139,147,168,0.15);">
+              <td style="padding:8px 10px;word-break:break-all;"><%= r._id %></td>
+              <td style="padding:8px 10px;text-align:right;font-weight:700;"><%= r.count %></td>
+            </tr>
+          <% }); %>
+          <% if (!data.topReferrers.length) { %><tr><td style="padding:8px 10px;color:var(--text-muted);">No external referrers yet</td></tr><% } %>
+        </table>
+      </section>
+
+      <section>
+        <h2 style="margin-bottom:12px;">Devices (30d)</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+          <% data.devices.forEach(function(d) { %>
+            <tr style="border-top:1px solid rgba(139,147,168,0.15);">
+              <td style="padding:8px 10px;text-transform:capitalize;"><%= d._id %></td>
+              <td style="padding:8px 10px;text-align:right;font-weight:700;"><%= d.count %></td>
+            </tr>
+          <% }); %>
+          <tr style="border-top:1px solid rgba(139,147,168,0.15);">
+            <td style="padding:8px 10px;color:var(--text-muted);">Bot hits (30d)</td>
+            <td style="padding:8px 10px;text-align:right;color:var(--text-muted);"><%= data.totals.botHits30d %></td>
+          </tr>
+        </table>
+      </section>
+    </div>
+
+    <h2 style="margin-bottom:12px;">Recent Visits</h2>
+    <div style="overflow-x:auto;margin-bottom:48px;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.82rem;white-space:nowrap;">
+        <thead>
+          <tr style="text-align:left;color:var(--text-muted);">
+            <th style="padding:8px 10px;">Time</th>
+            <th style="padding:8px 10px;">Path</th>
+            <th style="padding:8px 10px;">Location</th>
+            <th style="padding:8px 10px;">IP</th>
+            <th style="padding:8px 10px;">Device</th>
+            <th style="padding:8px 10px;">Referrer</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% data.recent.forEach(function(v) { %>
+            <tr style="border-top:1px solid rgba(139,147,168,0.15);">
+              <td style="padding:7px 10px;"><%= new Date(v.ts).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) %></td>
+              <td style="padding:7px 10px;"><%= v.path %></td>
+              <td style="padding:7px 10px;"><%= [v.city, v.country].filter(Boolean).join(', ') || '—' %></td>
+              <td style="padding:7px 10px;font-family:monospace;"><%= v.ip || '—' %></td>
+              <td style="padding:7px 10px;text-transform:capitalize;"><%= v.device %></td>
+              <td style="padding:7px 10px;max-width:220px;overflow:hidden;text-overflow:ellipsis;"><%= v.referer || '—' %></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
