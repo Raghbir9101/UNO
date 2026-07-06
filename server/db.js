@@ -4,6 +4,12 @@
 // the account/analytics features simply report themselves unavailable.
 // ──────────────────────────────────────────────────────────────────────────────
 
+// Polyfill global crypto for Node 18.x so the MongoDB driver doesn't crash
+// with "crypto is not defined" when trying to generate UUIDs/hashes.
+if (typeof globalThis.crypto === 'undefined') {
+  globalThis.crypto = require('crypto').webcrypto;
+}
+
 const mongoose = require('mongoose');
 
 async function connectDB() {

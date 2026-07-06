@@ -4,7 +4,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="description" content="Play UNO free online with friends — real-time multiplayer card game for 2-20 players. No download, no signup. Always free." />
+  <meta name="description"
+    content="Play UNO free online with friends — real-time multiplayer card game for 2-20 players. No download, no signup. Always free." />
   <meta name="theme-color" content="#05070d" />
   <meta name="color-scheme" content="dark" />
 
@@ -22,10 +23,12 @@
   <!-- Non-blocking font load: media="print" makes the browser fetch it at low
        priority without blocking first paint; onload swaps it live. Text renders
        immediately in the fallback font (display=swap) either way. -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600;700&display=swap"
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600;700&display=swap"
     rel="stylesheet" media="print" onload="this.media='all'" />
   <noscript>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600;700&display=swap"
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600;700&display=swap"
       rel="stylesheet" />
   </noscript>
   <link rel="stylesheet" href="style.css?v=38" />
@@ -114,7 +117,8 @@
         <!-- Tab switcher -->
         <div id="create-section" class="lobby-tabs">
           <div class="tab-bar" role="tablist">
-            <button class="tab-btn tab-btn--active" id="tab-create" role="tab" aria-selected="true" aria-controls="panel-create">
+            <button class="tab-btn tab-btn--active" id="tab-create" role="tab" aria-selected="true"
+              aria-controls="panel-create">
               ✦ Create Room
             </button>
             <button class="tab-btn" id="tab-join" role="tab" aria-selected="false" aria-controls="panel-join">
@@ -237,9 +241,10 @@
             <span class="toggle-slider"></span>
           </label>
         </div>
-        <p class="rule-desc" hidden>Got hit with a +2? Play your own +2/+4/+8 on top to pass the whole growing pile to the next player instead of drawing.</p>
+        <p class="rule-desc" hidden>Got hit with a +2? Play your own +2/+4/+8 on top to pass the whole growing pile to
+          the next player instead of drawing.</p>
 
-        <div class="rule-row">
+        <div class="rule-row" style="display: none;">
           <div class="rule-label">
             <span class="rule-name">⚡ Jump-In</span>
             <button type="button" class="rule-info-btn" aria-expanded="false" aria-label="About Jump-In">i</button>
@@ -249,9 +254,10 @@
             <span class="toggle-slider"></span>
           </label>
         </div>
-        <p class="rule-desc" hidden>Holding the exact same card as the top of the pile? Slam it down instantly — even when it's not your turn.</p>
+        <p class="rule-desc" hidden>Holding the exact same card as the top of the pile? Slam it down instantly — even
+          when it's not your turn.</p>
 
-        <div class="rule-row">
+        <div class="rule-row" style="display: none;">
           <div class="rule-label">
             <span class="rule-name">🔄 Seven-Zero</span>
             <button type="button" class="rule-info-btn" aria-expanded="false" aria-label="About Seven-Zero">i</button>
@@ -261,19 +267,22 @@
             <span class="toggle-slider"></span>
           </label>
         </div>
-        <p class="rule-desc" hidden>Play a 7 to swap hands with any player you choose. Play a 0 and everyone passes their hand to the next player.</p>
+        <p class="rule-desc" hidden>Play a 7 to swap hands with any player you choose. Play a 0 and everyone passes
+          their hand to the next player.</p>
 
-        <div class="rule-row">
+        <div class="rule-row" style="display: none;">
           <div class="rule-label">
             <span class="rule-name">🎯 Draw to Match</span>
-            <button type="button" class="rule-info-btn" aria-expanded="false" aria-label="About Draw to Match">i</button>
+            <button type="button" class="rule-info-btn" aria-expanded="false"
+              aria-label="About Draw to Match">i</button>
           </div>
           <label class="toggle-switch">
             <input type="checkbox" id="drawtomatch-toggle" />
             <span class="toggle-slider"></span>
           </label>
         </div>
-        <p class="rule-desc" hidden>No playable card? Keep drawing until you find one, instead of drawing once and passing your turn.</p>
+        <p class="rule-desc" hidden>No playable card? Keep drawing until you find one, instead of drawing once and
+          passing your turn.</p>
 
         <button id="btn-add-bot" class="btn btn-outline btn-add-bot" title="Add a bot player">
           🤖 Add Bot
@@ -328,7 +337,8 @@
         <button id="btn-close-auth" class="btn-close">✕</button>
       </div>
 
-      <p class="auth-pitch" id="auth-pitch">Save your wins, keep your leaderboard name, and carry stats across devices.</p>
+      <p class="auth-pitch" id="auth-pitch">Save your wins, keep your leaderboard name, and carry stats across devices.
+      </p>
 
       <div class="tab-bar auth-tabs" role="tablist">
         <button type="button" class="tab-btn tab-btn--active" id="auth-tab-login" role="tab">Sign In</button>
@@ -343,7 +353,8 @@
       <form id="auth-form" novalidate>
         <div class="input-group" id="auth-username-group" hidden>
           <label class="input-label" for="auth-username">Username</label>
-          <input type="text" id="auth-username" maxlength="16" autocomplete="nickname" placeholder="Shown on the leaderboard" />
+          <input type="text" id="auth-username" maxlength="16" autocomplete="nickname"
+            placeholder="Shown on the leaderboard" />
         </div>
         <div class="input-group">
           <label class="input-label" for="auth-email">Email</label>
@@ -352,7 +363,8 @@
         <div class="input-group">
           <label class="input-label" for="auth-password">Password</label>
           <div class="password-wrap">
-            <input type="password" id="auth-password" autocomplete="current-password" placeholder="At least 6 characters" />
+            <input type="password" id="auth-password" autocomplete="current-password"
+              placeholder="At least 6 characters" />
             <button type="button" id="auth-eye" class="password-eye" aria-label="Show password">👁</button>
           </div>
         </div>
@@ -374,8 +386,8 @@
       <div class="profile-top">
         <div id="profile-avatar-preview" class="profile-avatar-preview"></div>
         <div class="profile-identity">
-          <input type="text" id="profile-username" maxlength="16" aria-label="Username"
-            placeholder="Username" autocomplete="off" />
+          <input type="text" id="profile-username" maxlength="16" aria-label="Username" placeholder="Username"
+            autocomplete="off" />
           <span id="profile-email" class="profile-email"></span>
           <span id="profile-google-badge" class="profile-google-badge" hidden>🔗 Google linked</span>
         </div>
@@ -417,7 +429,13 @@
       <div class="postgame-table-wrap">
         <table id="postgame-table">
           <thead>
-            <tr><th>Player</th><th>Played</th><th>Drawn</th><th>Wilds</th><th>Wins</th></tr>
+            <tr>
+              <th>Player</th>
+              <th>Played</th>
+              <th>Drawn</th>
+              <th>Wilds</th>
+              <th>Wins</th>
+            </tr>
           </thead>
           <tbody></tbody>
         </table>

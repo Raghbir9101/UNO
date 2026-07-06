@@ -67,6 +67,23 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Custom Scrollbar for Dark Mode */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(5, 7, 13, 0.4); 
+}
+::-webkit-scrollbar-thumb {
+  background: var(--void-800);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 147, 168, 0.3);
+}
+
 /* The lit table: a single quiet pool of light on obsidian. */
 body {
   background: var(--void-950);
@@ -1696,6 +1713,7 @@ input[type="password"]:focus {
 .google-signin-btn {
   display: flex;
   justify-content: center;
+  color-scheme: light;
 }
 
 .auth-divider {
