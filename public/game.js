@@ -382,12 +382,32 @@ const Game = (() => {
     }));
 
     // Phase 2 — Arc travel via RAF
+    let _discardDone = false; // prevents double-fire from RAF + setTimeout race
+
+    function finishDiscard() {
+      if (_discardDone) return;
+      _discardDone = true;
+      // Jump to final position
+      flyEl.style.transition = `transform ${SETTLE_MS}ms ease-out, opacity 120ms ease`;
+      flyEl.style.transform =
+        `translate(${(endX-startLeft).toFixed(1)}px,${(endY-startTop).toFixed(1)}px) rotate(${randomAngle.toFixed(1)}deg) scale(1)`;
+      setTimeout(() => {
+        if (card && state.discardTop && state.discardTop.id === card.id) {
+          showDomAnim('anim-card-played', '', 900);
+        }
+        _flyingCardId = null;
+        flyEl.style.opacity = '0';
+        setTimeout(() => { if (flyEl.parentNode) flyEl.parentNode.removeChild(flyEl); }, 130);
+      }, SETTLE_MS + 20);
+    }
+
     setTimeout(() => {
       const liftedTop = startTop - 22;
       const startTime = performance.now();
       flyEl.style.transition = 'none';
 
       function arcFrame(now) {
+        if (_discardDone) return;
         const t   = Math.min(now - startTime, TRAVEL_MS);
         const p   = t / TRAVEL_MS;
         const ease = p < 0.5 ? 2*p*p : -1 + (4 - 2*p)*p;
@@ -404,26 +424,12 @@ const Game = (() => {
         if (t < TRAVEL_MS) {
           requestAnimationFrame(arcFrame);
         } else {
-          // Phase 3 — Settle
-          flyEl.style.transition =
-            `transform ${SETTLE_MS}ms ease-out, opacity 120ms ease`;
-          flyEl.style.transform =
-            `translate(${(endX-startLeft).toFixed(1)}px,${(endY-startTop).toFixed(1)}px) rotate(${randomAngle.toFixed(1)}deg) scale(1)`;
-
-          // Un-hide canvas card + fade out flyEl
-          setTimeout(() => {
-            // Ripple now that the card has physically landed on the pile
-            // (only if the server confirmed it as the new discard top)
-            if (card && state.discardTop && state.discardTop.id === card.id) {
-              showDomAnim('anim-card-played', '', 900);
-            }
-            _flyingCardId = null; // canvas draws it again (now as discardTop)
-            flyEl.style.opacity = '0';
-            setTimeout(() => { if (flyEl.parentNode) flyEl.parentNode.removeChild(flyEl); }, 130);
-          }, SETTLE_MS + 20);
+          finishDiscard();
         }
       }
       requestAnimationFrame(arcFrame);
+      // Safety net: if tab is hidden and RAF stops, force-complete arc
+      setTimeout(finishDiscard, TRAVEL_MS + 50);
     }, LIFT_MS);
   }
 
@@ -683,17 +689,31 @@ const Game = (() => {
       `will-change:transform;pointer-events:none;`;
     animOverlay.appendChild(snap);
 
-    // ── Animation: 250ms easeOutCubic, no fade, subtle arc, smooth rotation ──
-    const FLIGHT_MS = 250;
+    // ── Animation: 400ms easeOutCubic, no fade, visible arc, smooth rotation ──
+    const FLIGHT_MS = 400;
     const startTime = performance.now();
     const dx = targetL - startL;
     const dy = targetT - startT;
-    // Subtle arc: 25px upward
-    const arcH = toSelf ? -25 : -25;
+    // Visible arc: 35px upward
+    const arcH = toSelf ? -35 : -35;
     // Target scale: full size for self, actual seat card size for opponents
     const targetScale = toSelf ? 1.0 : (oppSlot ? oppSlot.w / deck.w : 0.4);
 
+    let _done = false; // prevents double-fire from RAF + setTimeout race
+
+    function finishFlight() {
+      if (_done) return;
+      _done = true;
+      // Jump to final position
+      snap.style.transform =
+        `translate(${dx.toFixed(1)}px,${(dy).toFixed(1)}px) scale(${targetScale.toFixed(3)}) rotate(${targetRot.toFixed(1)}deg)`;
+      onLand?.();
+      snap.classList.add('holo-land');
+      setTimeout(() => { if (snap.parentNode) snap.parentNode.removeChild(snap); }, 200);
+    }
+
     function frame(now) {
+      if (_done) return;
       const t = Math.min(now - startTime, FLIGHT_MS);
       const p = t / FLIGHT_MS;
       // easeOutCubic
@@ -710,14 +730,12 @@ const Game = (() => {
       if (t < FLIGHT_MS) {
         requestAnimationFrame(frame);
       } else {
-        // Card has landed — fire onLand immediately (deal chain timing depends
-        // on it), then leave the element briefly for a holo-sheen land flash.
-        onLand?.();
-        snap.classList.add('holo-land');
-        setTimeout(() => { if (snap.parentNode) snap.parentNode.removeChild(snap); }, 200);
+        finishFlight();
       }
     }
     requestAnimationFrame(frame);
+    // Safety net: if tab is hidden and RAF stops, force-complete after FLIGHT_MS
+    setTimeout(finishFlight, FLIGHT_MS + 50);
   }
 
   // ── Quick Emote: speech bubble anchored to the sender's seat ────────────────
@@ -827,8 +845,19 @@ const Game = (() => {
     const duration  = 750;
     const startTime = performance.now();
     const randomAngle = (Math.random() * 10 - 5);
+    let _oppDone = false; // prevents double-fire from RAF + setTimeout race
+
+    function finishOppFlight() {
+      if (_oppDone) return;
+      _oppDone = true;
+      // Jump to final position and remove
+      snap.style.transform = `translate(${(endL - startL).toFixed(1)}px,${(endT - startT).toFixed(1)}px) rotate(${randomAngle.toFixed(1)}deg) scale(1)`;
+      snap.style.opacity = '0';
+      setTimeout(() => { if (snap.parentNode) snap.parentNode.removeChild(snap); }, 50);
+    }
 
     function arcFrame(now) {
+      if (_oppDone) return;
       const t    = Math.min(now - startTime, duration);
       const p    = t / duration;
       const ease = p < 0.5 ? 2*p*p : -1+(4-2*p)*p;
@@ -843,10 +872,12 @@ const Game = (() => {
       if (t < duration) {
         requestAnimationFrame(arcFrame);
       } else {
-        if (snap.parentNode) snap.parentNode.removeChild(snap);
+        finishOppFlight();
       }
     }
     requestAnimationFrame(arcFrame);
+    // Safety net: if tab is hidden and RAF stops, force-complete
+    setTimeout(finishOppFlight, duration + 50);
   }
 
   // Managed by Renderer.drawPiles — we track discardStack with rotations/offsets

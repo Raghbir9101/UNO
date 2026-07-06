@@ -47,8 +47,8 @@
   // ── Draw animation sync ────────────────────────────────────────────────────
   // When a multi-card draw happens, we reveal cards one-by-one in sync with
   // the fly animation instead of applying the full hand/count instantly.
-  const CARD_FLY_MS = 250; // ms a single card takes to fly (Four Colors style)
-  const CARD_STAGGER = 80; // ms between staggered cards (rapid dealing)
+  const CARD_FLY_MS = 400; // ms a single card takes to fly (must match FLIGHT_MS in game.js)
+  const CARD_STAGGER = 180; // ms between staggered cards (visible gap for +card draws)
   // When a draw is forced by another player's +card, hold the draw animation so
   // the +card is first seen flying to the discard pile (otherwise both happen
   // at once and the penalty cards appear to arrive out of nowhere).

@@ -271,11 +271,54 @@ function botDelayMs() {
 // The client deals cards sequentially at ~270ms per card (CARD_FLY_MS 250 +
 // DEAL_GAP 20 in public/main.js — keep in sync). No auto-play may fire while
 // clients are still dealing, or bots visibly play over the deal animation.
-const DEAL_CARD_MS = 270;
+const DEAL_CARD_MS = 420;
 const DEAL_BUFFER_MS = 800; // network delivery + client render start
 
 function dealAnimationMs(playerCount) {
   return playerCount * 7 * DEAL_CARD_MS + DEAL_BUFFER_MS;
+}
+
+// ── Animation hold: prevent bots/AFK from acting while clients animate ───────
+// Client-side animation durations (must stay in sync with game.js / main.js).
+const ANIM_CARD_FLY_MS      = 400;   // flyCardToPlayer FLIGHT_MS
+const ANIM_OPPONENT_FLY_MS  = 750;   // flyCardFromOpponentToDiscard duration
+const ANIM_CARD_STAGGER_MS  = 180;   // gap between staggered draw cards
+const ANIM_FORCED_DRAW_DELAY = 1000; // FORCED_DRAW_DELAY_MS — wait for +card to land
+const ANIM_EFFECT_MS        = 1800;  // skip/reverse/+N overlay duration
+const ANIM_BUFFER_MS        = 300;   // small buffer for network + render start
+
+// Compute how long the client needs to finish animating a card play.
+// cardType: the type of card played ('draw2','wild4','wild8','skip','reverse',etc)
+// drawCount: number of cards drawn as a result of this play (0 if none)
+// isSelfPlay: whether the current player is the one who played (affects fly direction)
+function cardPlayAnimMs(cardType, drawCount, isSelfPlay) {
+  // Base: the card flies to the discard pile
+  let ms = isSelfPlay ? 700 : ANIM_OPPONENT_FLY_MS;
+
+  // Effect overlays (skip, reverse, +N flash) — shown after effectDelay
+  const effectDelay = isSelfPlay ? 620 : 0;
+  if (cardType === 'draw2' || cardType === 'wild4' || cardType === 'wild8' ||
+      cardType === 'skip' || cardType === 'reverse') {
+    ms = Math.max(ms, effectDelay + ANIM_EFFECT_MS);
+  }
+
+  // Forced-draw animation: delay + staggered card flights
+  if (drawCount > 0) {
+    const drawAnimMs = ANIM_FORCED_DRAW_DELAY + (drawCount - 1) * ANIM_CARD_STAGGER_MS + ANIM_CARD_FLY_MS;
+    ms = Math.max(ms, effectDelay + drawAnimMs);
+  }
+
+  return ms + ANIM_BUFFER_MS;
+}
+
+// Compute how long a non-forced draw animation takes (player draws voluntarily).
+function drawAnimMs(count) {
+  return (count - 1) * ANIM_CARD_STAGGER_MS + ANIM_CARD_FLY_MS + ANIM_BUFFER_MS;
+}
+
+// Set the animation hold on a room — bots/AFK won't act before this time.
+function setAnimationHold(room, durationMs) {
+  room.animEndsAt = Math.max(room.animEndsAt || 0, Date.now() + durationMs);
 }
 
 function isBotPlayer(room, playerId) {
@@ -360,6 +403,9 @@ function performAutoAction(roomCode, currentId, { isBot } = {}) {
       playedBy: currentId,
       targetPlayerId: drawEffect ? drawEffect.playerId : null,
     });
+    // Hold bots until client animations finish
+    const drawCount = drawEffect ? drawEffect.count : 0;
+    setAnimationHold(r, cardPlayAnimMs(card.type, drawCount, false));
     broadcastGameState(roomCode);
     saveStateSoon();
 
@@ -400,7 +446,10 @@ function performAutoAction(roomCode, currentId, { isBot } = {}) {
     const result = gameLogic.playerDrawCard(gs, currentId);
     if (!result.error) {
       sendHandTo(currentId);
-      io.to(roomCode).emit('player_drew', { playerId: currentId, count: result.drawn?.length || 1 });
+      const drawnCount = result.drawn?.length || 1;
+      io.to(roomCode).emit('player_drew', { playerId: currentId, count: drawnCount });
+      // Hold bots until draw animation finishes
+      setAnimationHold(r, drawAnimMs(drawnCount));
       // playerDrawCard with pendingDraw already calls advanceTurn internally
       broadcastGameState(roomCode);
     }
@@ -432,6 +481,8 @@ function performAutoAction(roomCode, currentId, { isBot } = {}) {
   if (!drawResult.error) {
     sendHandTo(currentId);
     io.to(roomCode).emit('player_drew', { playerId: currentId, count: drawResult.drawn?.length || 1 });
+    // Hold bots until draw animation finishes
+    setAnimationHold(r, drawAnimMs(drawResult.drawn?.length || 1));
 
     // Bots play the card they just drew when it's playable (always true for the
     // last card under draw-to-match, unless the deck ran dry)
@@ -462,11 +513,14 @@ function resetAutoPlayTimer(roomCode) {
   const currentId = gameLogic.getCurrentPlayerId(room.gameState);
   if (!currentId) return;
 
-  // While clients are still running the deal animation, hold every auto-play
-  // past its end — this also covers re-arms caused by a human acting mid-deal
-  const dealHold = Math.max(0, (room.dealEndsAt || 0) - Date.now());
+  // While clients are still running animations, hold auto-play past their end.
+  // dealEndsAt covers the initial round-robin deal; animEndsAt covers in-game
+  // card plays, draws, and effects (skip/reverse/+N overlays).
+  const now = Date.now();
+  const dealHold = Math.max(0, (room.dealEndsAt || 0) - now);
+  const animHold = Math.max(0, (room.animEndsAt || 0) - now);
   const isBot = isBotPlayer(room, currentId);
-  const delay = dealHold + (isBot ? botDelayMs() : AFK_TIMEOUT_MS);
+  const delay = Math.max(dealHold, animHold) + (isBot ? botDelayMs() : AFK_TIMEOUT_MS);
 
   _autoPlayTimers[roomCode] = setTimeout(() => {
     const r = roomManager.getRoom(roomCode);
@@ -1078,6 +1132,10 @@ io.on('connection', (socket) => {
       targetPlayerId: drawEffect ? drawEffect.playerId : null,
     });
 
+    // Hold bots/AFK until client animations finish
+    const drawCount = drawEffect ? drawEffect.count : 0;
+    setAnimationHold(room, cardPlayAnimMs(result.card.type, drawCount, true));
+
     // Broadcast updated game state
     broadcastGameState(roomCode);
     saveStateSoon(); // Save after card played
@@ -1125,6 +1183,8 @@ io.on('connection', (socket) => {
       forced: result.forced || false,
       mustPass: result.mustPass || false,
     });
+    // Hold bots/AFK until draw animation finishes
+    setAnimationHold(room, drawAnimMs(result.count));
     broadcastGameState(roomCode);
   });
 
