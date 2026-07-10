@@ -74,6 +74,7 @@ async function getDashboard() {
     uniqToday, uniq7d, uniq30d,
     botHits30d,
     topPages, topCountries, topCities, topReferrers, devices, daily, recent,
+    botVisits, hourly, pathsByDevice, bounceRate,
   ] = await Promise.all([
     Visit.countDocuments({ ...human, ts: { $gte: startOfToday } }),
     Visit.countDocuments({ ...human, ts: { $gte: since(7) } }),
@@ -86,17 +87,17 @@ async function getDashboard() {
     Visit.aggregate([
       { $match: { ...human, ts: { $gte: since(30) } } },
       { $group: { _id: '$path', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }, { $limit: 10 },
+      { $sort: { count: -1 } }, { $limit: 20 },
     ]),
     Visit.aggregate([
       { $match: { ...human, ts: { $gte: since(30) }, country: { $ne: null } } },
       { $group: { _id: '$country', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }, { $limit: 10 },
+      { $sort: { count: -1 } }, { $limit: 15 },
     ]),
     Visit.aggregate([
       { $match: { ...human, ts: { $gte: since(30) }, city: { $nin: [null, ''] } } },
       { $group: { _id: { city: '$city', country: '$country' }, count: { $sum: 1 } } },
-      { $sort: { count: -1 } }, { $limit: 10 },
+      { $sort: { count: -1 } }, { $limit: 15 },
     ]),
     Visit.aggregate([
       { $match: { ...human, ts: { $gte: since(30) }, referer: { $nin: [null, ''] } } },
@@ -104,7 +105,7 @@ async function getDashboard() {
       { $project: { host: { $arrayElemAt: [{ $split: [{ $arrayElemAt: [{ $split: ['$referer', '//'] }, 1] }, '/'] }, 0] } } },
       { $match: { host: { $nin: [null, '', 'playunofree.com', 'www.playunofree.com'] } } },
       { $group: { _id: '$host', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }, { $limit: 10 },
+      { $sort: { count: -1 } }, { $limit: 15 },
     ]),
     Visit.aggregate([
       { $match: { ...human, ts: { $gte: since(30) } } },
@@ -116,13 +117,46 @@ async function getDashboard() {
       { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$ts' } }, count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]),
-    Visit.find(human).sort({ ts: -1 }).limit(25)
-      .select('path ip country city device referer ts').lean(),
+    Visit.find(human).sort({ ts: -1 }).limit(500)
+      .select('path ip country city device referer ts isBot').lean(),
+    // Also fetch bot visits separately
+    Visit.find({ isBot: true }).sort({ ts: -1 }).limit(50)
+      .select('path ip country city device referer ts isBot').lean(),
+    // Hourly breakdown for today
+    Visit.aggregate([
+      { $match: { ...human, ts: { $gte: startOfToday } } },
+      { $group: { _id: { $hour: '$ts' }, count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]),
+    // Top paths by device type
+    Visit.aggregate([
+      { $match: { ...human, ts: { $gte: since(30) } } },
+      { $group: { _id: { path: '$path', device: '$device' }, count: { $sum: 1 } } },
+      { $sort: { count: -1 } }, { $limit: 30 },
+    ]),
+    // Simple bounce rate approximation: sessions with only 1 page view
+    Visit.aggregate([
+      { $match: { ...human, ts: { $gte: since(30) } } },
+      { $group: { _id: '$sessionKey', pageViews: { $sum: 1 } } },
+      { $group: {
+        _id: null,
+        totalSessions: { $sum: 1 },
+        bouncedSessions: { $sum: { $cond: [{ $eq: ['$pageViews', 1] }, 1, 0] } }
+      }},
+    ]).then(result => result[0] || { totalSessions: 0, bouncedSessions: 0 }),
   ]);
 
   return {
-    totals: { visitsToday, visits7d, visits30d, visitsAll, uniqToday, uniq7d, uniq30d, botHits30d },
+    totals: {
+      visitsToday, visits7d, visits30d, visitsAll,
+      uniqToday, uniq7d, uniq30d, botHits30d,
+      bounceRate: bounceRate.totalSessions > 0
+        ? Math.round((bounceRate.bouncedSessions / bounceRate.totalSessions) * 100)
+        : 0
+    },
     topPages, topCountries, topCities, topReferrers, devices, daily, recent,
+    hourly, pathsByDevice,
+    botVisits: botVisits || [],
   };
 }
 

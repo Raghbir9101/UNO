@@ -27,8 +27,8 @@ function renderPage(res, view, overrides = {}) {
 router.get('/', (req, res) => {
   const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
   renderPage(res, 'homepage', {
-    title: 'Play UNO Free — Free Multiplayer Card Game for Up to 20 Players',
-    description: 'Play UNO free online with friends. No download, no signup required. Create private rooms, join public games, and play with up to 20 players. 100% free forever.',
+    title: 'Play UNO Online Free — No Download, No Sign-Up',
+    description: 'Play UNO online free with friends or strangers. No download, no sign-up, no ads. Create a private room or join a public game with up to 20 players. 100% free forever.',
     canonical: `${base}/`,
     jsonLd: [
       {
@@ -97,12 +97,53 @@ router.get('/how-to-play', (req, res) => {
 });
 
 // ── FAQ ──
+// Single source of truth for the visible FAQ list AND the FAQPage schema.
+// Answers may contain HTML links (rendered on-page, stripped for JSON-LD).
+const FAQS = [
+  { q: 'How many players can play UNO online?', a: 'Up to 20 players can play in a single room. This makes it perfect for large groups, parties, and classrooms. Games with 11+ players automatically use two decks.' },
+  { q: 'Is Play UNO Free really free?', a: 'Yes, 100% free forever! There is no signup, no credit card, no ads, and no hidden fees. Just open the website and start playing.' },
+  { q: 'Do I need to download anything?', a: 'No. The game runs entirely in your web browser. It works on Chrome, Firefox, Safari, Edge, and most modern browsers.' },
+  { q: 'Can I play on my phone?', a: 'Yes! The game has full touch support on both iOS and Android. The interface adapts automatically to your screen size.' },
+  { q: 'Can I play on a tablet or iPad?', a: 'Absolutely. Tablets provide a great UNO experience with more screen space for cards and player information.' },
+  { q: 'How do I create a room?', a: 'Go to the <a href="/play">Play page</a>, enter a nickname, and click "Create New Room." You\'ll receive a room code to share with friends.' },
+  { q: 'How do I join a room?', a: 'Enter the room code shared by the host, or click "Browse Public Rooms" to find open games.' },
+  { q: 'How do I invite friends?', a: 'After creating a room, click "Copy Invite Link" and send it via WhatsApp, Discord, text, or any messaging app. Friends join in one click.' },
+  { q: 'What is a private room?', a: 'A private room can only be joined with the room code or invite link. It won\'t appear in the public room browser.' },
+  { q: 'What is a public room?', a: 'A public room appears in the "Browse Public Rooms" list, allowing anyone to join.' },
+  { q: 'What are the UNO rules?', a: 'Standard UNO rules apply. Match cards by color, number, or symbol. Wild cards can be played anytime. <a href="/rules">Read the full rules →</a>' },
+  { q: 'What is card stacking?', a: 'When enabled, you can stack +2 on +2, +4 on +4, and +8 on +8. The penalty accumulates until someone can\'t stack and must draw all the cards. <a href="/rules/stacking">Learn more →</a>' },
+  { q: 'What is the Wild Draw 8 card?', a: 'A custom card exclusive to our game. It works like a Wild Draw 4 but forces the next player to draw 8 cards. There are 2 per deck.' },
+  { q: 'How does UNO calling work?', a: 'When you have 1 card left, you must press the UNO button within a few seconds. If another player catches you first, you draw 2 penalty cards.' },
+  { q: 'What happens if I disconnect?', a: 'You\'ll automatically reconnect within seconds. Your cards are preserved on the server. If you\'re away too long, the auto-play system will play for you.' },
+  { q: 'What is auto-play?', a: 'If a player is AFK (away from keyboard) for 30 seconds, the game automatically plays a valid card for them or draws and passes.' },
+  { q: 'Can I watch a game without playing?', a: 'Yes! If a game is in progress, you can join as a spectator and watch without affecting the game.' },
+  { q: 'Is there a time limit per turn?', a: 'Yes, each player has 30 seconds to play. After that, auto-play kicks in. A visual timer shows the remaining time.' },
+  { q: 'Can the host kick players?', a: 'Yes. The host can remove any player from the room at any time, both in the lobby and during the game.' },
+  { q: 'Is it safe for kids?', a: 'Yes. There is no text chat, no user accounts, and no personal data collected. The game is family-friendly.' },
+  { q: 'How many cards are in the deck?', a: 'A standard deck has 110 cards: 76 number cards, 24 action cards (Skip, Reverse, Draw Two), and 10 wild cards. Games with 11+ players use 220 cards.' },
+  { q: 'Do you support custom rules?', a: 'Currently, the host can toggle card stacking on or off. More custom rules (Jump-In, Seven-Zero, etc.) are on our roadmap.' },
+  { q: 'Can I play UNO solo?', a: 'Not yet. We\'re working on AI bot opponents so you can practice or play solo. Stay tuned!' },
+  { q: 'Is this affiliated with Mattel?', a: 'No. This is an independent fan-made project. UNO® is a registered trademark of Mattel, Inc.' },
+];
+
+const stripHtml = (s) => s.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+
 router.get('/faq', (req, res) => {
   const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
   renderPage(res, 'faq', {
     title: 'Play UNO Free FAQ — Frequently Asked Questions',
     description: 'Answers to common questions about Play UNO Free. Players, rules, devices, rooms, and why it\'s 100% free forever.',
     canonical: `${base}/faq`,
+    faqs: FAQS,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": FAQS.map(f => ({
+        "@type": "Question",
+        "name": f.q,
+        "acceptedAnswer": { "@type": "Answer", "text": stripHtml(f.a) }
+      }))
+    },
   });
 });
 
@@ -120,8 +161,8 @@ router.get('/game-modes', (req, res) => {
 router.get('/20-player-uno', (req, res) => {
   const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
   renderPage(res, '20-player-uno', {
-    title: '20-Player UNO Free — Massive Multiplayer Card Games',
-    description: 'Play UNO free with up to 20 players in a single room. Double decks, auto-play, spectator mode — the biggest free online UNO experience anywhere.',
+    title: '20-Player UNO — Play UNO With More Than 4 Players Online',
+    description: 'Need UNO for more than 4 players? Play free online with up to 20 players in one room. Double decks, auto-play, spectator mode — perfect for big groups.',
     canonical: `${base}/20-player-uno`,
   });
 });
@@ -130,9 +171,19 @@ router.get('/20-player-uno', (req, res) => {
 router.get('/multiplayer', (req, res) => {
   const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
   renderPage(res, 'multiplayer', {
-    title: 'Free Multiplayer UNO Online — Play With Friends in Real-Time',
-    description: 'Create a free room, share the invite link, and play UNO with friends instantly. Private rooms, public rooms, host controls — all free.',
+    title: 'Multiplayer UNO Online — Play With Friends or Strangers',
+    description: 'Play UNO online with friends via invite link, or join a public room and play with strangers. Real-time multiplayer, host controls, up to 20 players — all free.',
     canonical: `${base}/multiplayer`,
+  });
+});
+
+// ── UNO Unblocked ──
+router.get('/uno-unblocked', (req, res) => {
+  const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
+  renderPage(res, 'uno-unblocked', {
+    title: 'UNO Unblocked — Play Free Online, No Download',
+    description: 'Play UNO unblocked in your browser. No download, no install, no signup — works on Chromebooks and any device with a browser. 100% free.',
+    canonical: `${base}/uno-unblocked`,
   });
 });
 
@@ -220,6 +271,7 @@ router.get('/sitemap.xml', (req, res) => {
     { url: '/faq', changefreq: 'monthly', priority: '0.7' },
     { url: '/20-player-uno', changefreq: 'monthly', priority: '0.7' },
     { url: '/multiplayer', changefreq: 'monthly', priority: '0.7' },
+    { url: '/uno-unblocked', changefreq: 'monthly', priority: '0.7' },
     { url: '/blog', changefreq: 'weekly', priority: '0.7' },
     { url: '/about', changefreq: 'yearly', priority: '0.5' },
     { url: '/contact', changefreq: 'yearly', priority: '0.4' },

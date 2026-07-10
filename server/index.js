@@ -18,6 +18,10 @@ const statsStore = require('./statsStore');
 const { connectDB, dbReady } = require('./db');
 const analytics = require('./analytics');
 const authRoutes = require('./routes/auth');
+const analyticsApiRoutes = require('./routes/analytics-api');
+const bugReportRoutes = require('./routes/bugReport');
+const BugReport = require('./models/BugReport');
+const GameHistory = require('./models/GameHistory');
 
 const app = express();
 const server = http.createServer(app);
@@ -47,7 +51,36 @@ app.set('trust proxy', true);
 // from — BASE_URL overrides, otherwise derive from the request.
 app.use((req, res, next) => {
   res.locals.baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+  // Donation options (footer + contact page). Unset = the sections don't render.
+  res.locals.coffeeUrl = process.env.BUYMEACOFFEE_URL || '';
+  res.locals.upiId = process.env.UPI_ID || '';
+  res.locals.upiName = process.env.UPI_NAME || 'Play UNO Free';
   next();
+});
+
+// ── UPI donation QR (SVG built once from UPI_ID/UPI_NAME env; 404 when unset) ──
+const UPI_URI = process.env.UPI_ID
+  ? `upi://pay?pa=${encodeURIComponent(process.env.UPI_ID)}&pn=${encodeURIComponent(process.env.UPI_NAME || 'Play UNO Free')}&cu=INR`
+  : null;
+let upiQrSvg = null;
+app.get('/upi-qr.svg', async (req, res) => {
+  if (!UPI_URI) return res.status(404).end();
+  try {
+    if (!upiQrSvg) {
+      upiQrSvg = await require('qrcode').toString(UPI_URI, {
+        type: 'svg',
+        margin: 2,
+        errorCorrectionLevel: 'M',
+        color: { dark: '#000000', light: '#ffffff' },
+      });
+    }
+    // Registered before the cache-header middleware, so set caching here
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.type('image/svg+xml').send(upiQrSvg);
+  } catch (err) {
+    console.error('[upi-qr] failed:', err.message);
+    res.status(500).end();
+  }
 });
 
 // ── Compression ──
@@ -61,6 +94,8 @@ app.use(analytics.middleware);
 
 // ── Auth API (register / login / Google / me) ──
 app.use('/api/auth', authRoutes);
+app.use('/api/analytics', analyticsApiRoutes);
+app.use('/api/bug-report', bugReportRoutes);
 
 // ── Password reset pages ──
 app.get('/forgot-password', (req, res) => {
@@ -93,10 +128,31 @@ app.get('/admin/analytics', async (req, res) => {
   }
   if (!dbReady()) return res.status(503).send('Database not connected — analytics unavailable');
   try {
-    const data = await analytics.getDashboard();
+    const startOfToday = new Date(new Date().setHours(0, 0, 0, 0));
+    const [data, bugReports, gameHistory, gamesAll, gamesToday] = await Promise.all([
+      analytics.getDashboard(),
+      BugReport.find().sort({ ts: -1 }).limit(100).lean().catch(() => []),
+      GameHistory.find().sort({ ts: -1 }).limit(100).lean().catch(() => []),
+      GameHistory.countDocuments().catch(() => 0),
+      GameHistory.countDocuments({ ts: { $gte: startOfToday } }).catch(() => 0),
+    ]);
+    data.bugReports = bugReports;
+    data.gameHistory = gameHistory;
+    data.gamesAll = gamesAll;
+    data.gamesToday = gamesToday;
+    // Live snapshot of in-memory rooms (lobbies + running games)
+    data.liveRooms = [...roomManager.rooms.values()].map(r => ({
+      code: r.code,
+      status: r.status,
+      isPrivate: !!r.isPrivate,
+      players: r.players.map(p => ({ nickname: p.nickname, isBot: !!p.isBot, connected: !!p.connected })),
+      spectators: (r.spectators || []).length,
+      rules: Object.entries(r.settings || {}).filter(([, on]) => on).map(([rule]) => rule),
+      createdAt: r.createdAt,
+    })).sort((a, b) => b.createdAt - a.createdAt);
     res.render('analytics', {
       title: 'Site Analytics — Admin',
-      description: 'Private analytics dashboard.',
+      description: 'Interactive analytics dashboard with charts, filters, and data tables.',
       canonical: (process.env.BASE_URL || 'https://playunofree.com') + '/admin/analytics',
       extraHead: '<meta name="robots" content="noindex,nofollow">',
       data,
@@ -186,7 +242,16 @@ app.get('/play', (req, res) => {
 });
 
 // Serve static files (JS, CSS, images, assets — but NOT index.html as homepage)
-app.use(express.static(path.join(__dirname, '..', 'public'), { index: false }));
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  index: false,
+  setHeaders(res, filePath) {
+    // Raw image files were showing up as web search results (og-image.jpg
+    // ranked as a page in GSC) — keep them out of search entirely
+    if (/\.(png|jpe?g|svg|webp|ico)$/i.test(filePath)) {
+      res.setHeader('X-Robots-Tag', 'noindex');
+    }
+  },
+}));
 
 // ── 404 Handler (must come after all other routes) ──
 app.use((req, res) => {
@@ -618,6 +683,24 @@ function recordGameEnd(roomCode, winnerId) {
   }
 
   io.to(roomCode).emit('game_over_stats', summary);
+
+  // Persist to game history (fire-and-forget — never blocks or breaks the game)
+  if (dbReady()) {
+    GameHistory.create({
+      roomCode,
+      isPrivate: !!room.isPrivate,
+      winnerName: summary.winnerName,
+      winnerIsBot: !!(winner && winner.isBot),
+      players: summary.players.map(p => ({
+        nickname: p.nickname, isBot: p.isBot, won: p.won,
+        cardsPlayed: p.cardsPlayed, cardsDrawn: p.cardsDrawn, wildsPlayed: p.wildsPlayed,
+      })),
+      humanCount: summary.players.filter(p => !p.isBot).length,
+      botCount: summary.players.filter(p => p.isBot).length,
+      durationMs,
+      rules: Object.entries(room.settings || {}).filter(([, on]) => on).map(([rule]) => rule),
+    }).catch(err => console.error('[game-history] save failed:', err.message));
+  }
 }
 
 // Toast/sound events for Seven-Zero hand exchanges
@@ -863,6 +946,12 @@ io.on('connection', (socket) => {
       clearTimeout(_autoPlayTimers[roomCode]);
       const result = gameLogic.removePlayerFromGame(room.gameState, playerId);
 
+      // Record BEFORE forceRemovePlayer: if the surrendering player was the
+      // last human, forceRemovePlayer destroys the room and recordGameEnd's
+      // room lookup would silently fail (losing the game-history record).
+      // Also counts the surrender as a loss for the quitter, which is fair.
+      if (result.winner) recordGameEnd(roomCode, result.winner);
+
       roomManager.forceRemovePlayer(roomCode, playerId);
       socket.leave(roomCode);
       socket.data = {};
@@ -877,7 +966,7 @@ io.on('connection', (socket) => {
           playerId: result.winner,
           nickname: winner ? winner.nickname : 'Unknown',
         });
-        recordGameEnd(roomCode, result.winner);
+        // (game already recorded above, before forceRemovePlayer)
         clearTimeout(_autoPlayTimers[roomCode]);
         room.status = 'lobby';
         broadcastRoomUpdate(roomCode);
