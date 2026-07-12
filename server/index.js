@@ -55,6 +55,8 @@ app.use((req, res, next) => {
   res.locals.coffeeUrl = process.env.BUYMEACOFFEE_URL || '';
   res.locals.upiId = process.env.UPI_ID || '';
   res.locals.upiName = process.env.UPI_NAME || 'Play UNO Free';
+  // Support email (used across legal pages)
+  res.locals.supportEmail = process.env.SMTP_USER || 'support@playunofree.com';
   next();
 });
 
