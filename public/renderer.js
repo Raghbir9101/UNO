@@ -46,21 +46,32 @@ const Renderer = (() => {
     return n + '…';
   }
 
+  // Active table/card-back theme from the cosmetics registry (safe fallback
+  // when the shared script hasn't loaded — e.g. very old cached shells)
+  const _THEME_FALLBACK = {
+    table: { base: ['#0c1220', '#070a13', '#04060b'], grid: '#8b93a8', ringRgb: '61,157,255', spotRgb: '61,157,255' },
+    back: { top: '#1a2237', bottom: '#0c1120', ring: ['255,59,92', '255,210,63', '46,232,138', '61,157,255'], label: 'UNO', labelColor: 'rgba(232,235,243,0.9)' },
+  };
+  function activeTheme() {
+    return (typeof Cosmetics !== 'undefined' && Cosmetics.active) ? Cosmetics.active : _THEME_FALLBACK;
+  }
+
   function drawBackground(ctx, W, H) {
     const t = REDUCED ? 0 : Date.now() / 1000;
+    const TT = activeTheme().table;
 
-    // 1. Obsidian base — a single pool of light on a black table
+    // 1. Themed base — a single pool of light on a dark table
     const g = ctx.createRadialGradient(W / 2, H * 0.42, 0, W / 2, H * 0.42, Math.max(W, H) * 0.75);
-    g.addColorStop(0, '#0c1220');
-    g.addColorStop(0.55, '#070a13');
-    g.addColorStop(1, '#04060b');
+    g.addColorStop(0, TT.base[0]);
+    g.addColorStop(0.55, TT.base[1]);
+    g.addColorStop(1, TT.base[2]);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
-    // 2. Projection grid — fine static steel lines (the holo surface)
+    // 2. Projection grid — fine static lines (the holo surface)
     ctx.save();
     ctx.globalAlpha = 0.045;
-    ctx.strokeStyle = '#8b93a8';
+    ctx.strokeStyle = TT.grid;
     ctx.lineWidth = vs(1);
     const grid = vs(52);
     ctx.beginPath();
@@ -73,7 +84,7 @@ const Renderer = (() => {
     const _TH = H * 0.26, _HH = H * 0.26;
     const _CY = _TH + (H - _TH - _HH) / 2;
     ctx.save();
-    ctx.strokeStyle = 'rgba(61,157,255,0.06)';
+    ctx.strokeStyle = `rgba(${TT.ringRgb},0.06)`;
     ctx.lineWidth = vs(1);
     for (let i = 1; i <= 3; i++) {
       ctx.beginPath();
@@ -86,8 +97,8 @@ const Renderer = (() => {
     ctx.save();
     const spotSize = Math.max(W, H) * 0.45;
     const spot = ctx.createRadialGradient(W / 2, _CY, 0, W / 2, _CY, spotSize);
-    spot.addColorStop(0, 'rgba(61, 157, 255, 0.10)');
-    spot.addColorStop(0.5, 'rgba(61, 157, 255, 0.03)');
+    spot.addColorStop(0, `rgba(${TT.spotRgb}, 0.10)`);
+    spot.addColorStop(0.5, `rgba(${TT.spotRgb}, 0.03)`);
     spot.addColorStop(1, 'transparent');
     ctx.fillStyle = spot;
     ctx.globalAlpha = 0.8 + Math.sin(t * 0.8) * 0.2;
@@ -233,6 +244,7 @@ const Renderer = (() => {
   function _cardBack(ctx, x, y, w, h) {
     const rd = w * 0.12;
     const mini = w < vs(34); // opponent minis skip the expensive touches
+    const BT = activeTheme().back;
 
     ctx.save();
     if (!mini) {
@@ -240,8 +252,8 @@ const Renderer = (() => {
     }
     rr(ctx, x, y, w, h, rd);
     const g = ctx.createLinearGradient(x, y, x, y + h);
-    g.addColorStop(0, '#1a2237');
-    g.addColorStop(1, '#0c1120');
+    g.addColorStop(0, BT.top);
+    g.addColorStop(1, BT.bottom);
     ctx.fillStyle = g; ctx.fill();
     ctx.restore();
 
@@ -256,20 +268,20 @@ const Renderer = (() => {
       ctx.restore();
     }
 
-    // Prism inset ring — the deck's identity mark
+    // Themed inset ring — the deck's identity mark
     const m = w * 0.1;
     const pg = ctx.createLinearGradient(x + m, y + m, x + w - m, y + h - m);
-    pg.addColorStop(0, 'rgba(255,59,92,0.6)');
-    pg.addColorStop(0.33, 'rgba(255,210,63,0.6)');
-    pg.addColorStop(0.66, 'rgba(46,232,138,0.6)');
-    pg.addColorStop(1, 'rgba(61,157,255,0.6)');
+    pg.addColorStop(0, `rgba(${BT.ring[0]},0.6)`);
+    pg.addColorStop(0.33, `rgba(${BT.ring[1]},0.6)`);
+    pg.addColorStop(0.66, `rgba(${BT.ring[2]},0.6)`);
+    pg.addColorStop(1, `rgba(${BT.ring[3]},0.6)`);
     rr(ctx, x + m, y + m, w - m * 2, h - m * 2, rd * 0.5);
     ctx.strokeStyle = pg; ctx.lineWidth = vs(mini ? 1 : 1.5); ctx.stroke();
 
     ctx.save(); ctx.translate(x + w / 2, y + h / 2); ctx.rotate(-0.25);
-    ctx.fillStyle = 'rgba(232,235,243,0.9)'; ctx.font = `700 ${w * 0.26}px ${displayFont}`;
+    ctx.fillStyle = BT.labelColor; ctx.font = `700 ${w * 0.26}px ${displayFont}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('UNO', 0, 0);
+    ctx.fillText(BT.label, 0, 0);
     ctx.restore();
 
     rr(ctx, x, y, w, h, rd);

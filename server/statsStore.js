@@ -10,16 +10,11 @@ const path = require('path');
 
 const STATS_FILE = path.join(__dirname, '..', 'data', 'player-stats.json');
 
-// Achievement definitions — unlocked ids are stored per player; the game
-// server computes unlocks at game end and the profile API lists them all.
-const ACHIEVEMENTS = {
-  first_win:    { emoji: '🏆', title: 'First Victory', desc: 'Win your first game' },
-  ten_wins:     { emoji: '👑', title: 'Deca-Champion', desc: 'Win 10 games' },
-  plus4_finish: { emoji: '💥', title: 'Savage Finish', desc: 'Win by playing a +4' },
-  speed_win:    { emoji: '⚡', title: 'Speed Run', desc: 'Win a game in under 2 minutes' },
-  comeback:     { emoji: '💪', title: 'The Comeback', desc: 'Win after holding 12+ cards' },
-  card_shark:   { emoji: '🃏', title: 'Card Shark', desc: 'Play 20+ cards in one game' },
-};
+// Achievement definitions now live in the rewards registry
+// (server/rewards/achievements.js) — re-exported here (display fields only,
+// no condition functions) so existing consumers (profile API) keep working.
+// Unlocked ids are still stored per player in this store.
+const ACHIEVEMENTS = require('./rewards/achievements').publicDefs();
 
 let data = { version: 1, players: {} };
 
@@ -96,6 +91,7 @@ function recordGame({ uid, nickname, won, cardsPlayed = 0, cardsDrawn = 0, wilds
     rec.weekly.wins++;
   }
   rec.lastSeen = Date.now();
+  if (module.exports.onChange) module.exports.onChange(uid); // → cloud sync
   saveSoon();
   return rec;
 }
@@ -106,6 +102,7 @@ function unlockAchievements(uid, achievementIds) {
   const fresh = achievementIds.filter(id => !rec.achievements.includes(id));
   if (fresh.length) {
     rec.achievements.push(...fresh);
+    if (module.exports.onChange) module.exports.onChange(uid); // → cloud sync
     saveSoon();
   }
   return fresh;
@@ -132,4 +129,29 @@ function getLeaderboard(limit = 20) {
   return { allTime, weekly, totalPlayers: all.length };
 }
 
-module.exports = { recordGame, unlockAchievements, getLeaderboard, getPlayer, saveNow, ACHIEVEMENTS };
+// ── Cloud-sync accessors (no side effects, no record creation) ───────────────
+
+function has(uid) {
+  return !!data.players[uid];
+}
+
+function peek(uid) {
+  return data.players[uid] || null;
+}
+
+function restore(uid, rec) {
+  if (!rec || typeof rec !== 'object') return;
+  data.players[uid] = rec;
+  saveSoon(); // file only — restoring FROM the cloud must not re-upsert
+}
+
+function remove(uid) {
+  delete data.players[uid];
+  saveSoon();
+}
+
+module.exports = {
+  recordGame, unlockAchievements, getLeaderboard, getPlayer, saveNow,
+  has, peek, restore, remove, onChange: null,
+  ACHIEVEMENTS,
+};

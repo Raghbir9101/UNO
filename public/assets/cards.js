@@ -22,6 +22,7 @@ const CardTypeDisplay = {
   wild:    () => '★',
   wild4:   () => '+4',
   wild8:   () => '+8',
+  shuffle: () => '🔀',
 };
 
 function getCardDisplayText(card) {
@@ -38,7 +39,9 @@ function getCardColor(card, activeColor) {
 }
 
 function isWildCard(card) {
-  return card.type === 'wild' || card.type === 'wild4' || card.type === 'wild8';
+  // Covers every wild-family card (wild, wild4, wild8, shuffle, and any
+  // future wild types) — wilds are identified by color, not type.
+  return card.color === 'wild';
 }
 
 // Avatar color palette for player chips — emissive hues that read on obsidian

@@ -7,16 +7,18 @@
 // Bump CACHE_VERSION together with the ?v= asset versions in index.html.
 // ──────────────────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'uno-v38';
+const CACHE_VERSION = 'uno-v47';
 
 const CORE_ASSETS = [
   '/play',
-  '/style.css?v=38',
-  '/main.js?v=38',
-  '/game.js?v=37',
-  '/renderer.js?v=38',
+  '/style.css?v=43',
+  '/main.js?v=45',
+  '/game.js?v=39',
+  '/renderer.js?v=40',
   '/sounds.js?v=1',
-  '/assets/cards.js?v=30',
+  '/shared/game-modes.js?v=4',
+  '/shared/cosmetics.js?v=1',
+  '/assets/cards.js?v=31',
   '/manifest.json',
   '/images/favicon.svg?v=30',
   '/images/icon-192.png',

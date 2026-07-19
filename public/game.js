@@ -435,10 +435,17 @@ const Game = (() => {
 
   // Client-side playability check (mirrors server isPlayable in gameLogic.js)
   function clientIsPlayable(card) {
+    const s = state.settings || {};
     if (state.pendingDraw > 0) {
-      // Stacking rules enforced server-side; client just blocks obviously wrong cards
-      // Allow wild cards and matching draw type to pass through
-      return card.color === 'wild' || card.type === state.pendingDrawType;
+      // Stacking matrix: same-family stacks need their flag, cross-family
+      // stacks need Mixed Stacking, Skip/Reverse dodge needs a color match.
+      const t = state.pendingDrawType; // 'draw2' | 'wild4' | 'wild8'
+      const isWildDraw = (ty) => ty === 'wild4' || ty === 'wild8';
+      if (card.type === 'draw2') return t === 'draw2' ? !!s.stackDraw2 : !!s.stackMix;
+      if (isWildDraw(card.type)) return isWildDraw(t) ? !!s.stackDraw4 : !!s.stackMix;
+      if (card.type === 'skip') return !!s.stackSkip && card.color === state.activeColor;
+      if (card.type === 'reverse') return !!s.stackReverse && card.color === state.activeColor;
+      return false;
     }
     if (card.color === 'wild') return true;
     if (card.color === state.activeColor) return true;
@@ -475,7 +482,8 @@ const Game = (() => {
       return;
     }
 
-    if (card.type === 'wild' || card.type === 'wild4' || card.type === 'wild8') {
+    // Every wild-family card (wild, +4, +8, shuffle) needs a color choice
+    if (card.color === 'wild') {
       state.showColorPicker = true; state.pendingWildCardId = card.id; return;
     }
 
@@ -617,8 +625,8 @@ const Game = (() => {
   function resetGame() {
     Object.assign(state, {
       winner: null, winnerName: null, myHand: [], selectedCardIndex: -1,
-      scrollOffset: 0, showColorPicker: false, pendingDraw: 0, unoState: {},
-      hasDrawnThisTurn: false,
+      scrollOffset: 0, showColorPicker: false, pendingDraw: 0, pendingDrawType: null,
+      unoState: {}, hasDrawnThisTurn: false,
     });
     _prevCardPositions = {};
     unlockAction();  // clear any stale lock from the previous round
@@ -916,6 +924,97 @@ const Game = (() => {
     showDomAnim('anim-color-flash anim-color-flash--' + (color || 'wild'), '', 1200);
   }
 
+  // ── Victory FX (cosmetics): the winner's equipped effect plays for everyone ──
+
+  function triggerVictoryFx(fx) {
+    switch (fx) {
+      case 'fireworks': triggerFireworks(); break;
+      case 'goldburst': triggerGoldBurst(); break;
+      case 'cardstorm': triggerCardStorm(); break;
+      case 'royale':
+        showDomAnim('fx-crown', '👑', 2200);
+        triggerGoldBurst();
+        setTimeout(triggerWinnerConfetti, 500);
+        break;
+      default: triggerWinnerConfetti();
+    }
+  }
+
+  // Radial particle burst helper (fireworks / gold)
+  function sparkBurst(cx, cy, colors, count, dist, gravity) {
+    if (!animOverlay) return;
+    for (let i = 0; i < count; i++) {
+      const bit = document.createElement('div');
+      bit.className = 'anim-el fx-spark';
+      const color = colors[i % colors.length];
+      bit.style.left = cx + 'px';
+      bit.style.top = cy + 'px';
+      bit.style.background = color;
+      bit.style.boxShadow = `0 0 8px ${color}`;
+      animOverlay.appendChild(bit);
+      const ang = (i / count) * Math.PI * 2 + Math.random() * 0.25;
+      const d = dist * (0.55 + Math.random() * 0.45);
+      const dx = Math.cos(ang) * d;
+      const dy = Math.sin(ang) * d + gravity;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        bit.style.transition = 'transform 950ms cubic-bezier(0.16,1,0.3,1), opacity 950ms ease';
+        bit.style.transform = `translate(${dx.toFixed(0)}px, ${dy.toFixed(0)}px) scale(${(0.4 + Math.random() * 0.6).toFixed(2)})`;
+        bit.style.opacity = '0';
+      }));
+      setTimeout(() => { if (bit.parentNode) bit.parentNode.removeChild(bit); }, 1050);
+    }
+  }
+
+  function triggerFireworks() {
+    const palettes = [
+      ['#ff3b5c', '#ff8fa3', '#fff'], ['#ffd23f', '#ffe37e', '#fff'],
+      ['#2ee88a', '#7df2b8', '#fff'], ['#3d9dff', '#8ec4ff', '#fff'],
+      ['#b06bff', '#d8c4ff', '#fff'],
+    ];
+    for (let b = 0; b < 6; b++) {
+      setTimeout(() => {
+        const cx = (0.18 + Math.random() * 0.64) * window.innerWidth;
+        const cy = (0.12 + Math.random() * 0.4) * window.innerHeight;
+        sparkBurst(cx, cy, palettes[b % palettes.length], 26, 130, 36);
+      }, b * 330);
+    }
+  }
+
+  function triggerGoldBurst() {
+    showDomAnim('fx-gold-flash', '', 1300);
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight * 0.42;
+    sparkBurst(cx, cy, ['#ffd23f', '#ffe37e', '#c9a17a', '#fff3c2'], 44, 190, 70);
+    setTimeout(() => sparkBurst(cx, cy, ['#ffd23f', '#ffe37e'], 30, 140, 60), 350);
+  }
+
+  // Mini themed card-backs exploding outward from the table center
+  function triggerCardStorm() {
+    if (!animOverlay || typeof Renderer === 'undefined') return;
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight * 0.42;
+    for (let i = 0; i < 22; i++) {
+      const snap = document.createElement('canvas');
+      snap.width = 36; snap.height = 50;
+      Renderer.drawCard(snap.getContext('2d'), null, 0, 0, 36, 50, { faceUp: false });
+      snap.className = 'anim-el fx-mini-card';
+      snap.style.left = cx + 'px';
+      snap.style.top = cy + 'px';
+      animOverlay.appendChild(snap);
+      const ang = (i / 22) * Math.PI * 2 + Math.random() * 0.3;
+      const d = 120 + Math.random() * 180;
+      const dx = Math.cos(ang) * d;
+      const dy = Math.sin(ang) * d + 60;
+      const rot = (Math.random() * 720 - 360).toFixed(0);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        snap.style.transition = 'transform 1100ms cubic-bezier(0.16,1,0.3,1), opacity 1100ms ease';
+        snap.style.transform = `translate(${dx.toFixed(0)}px, ${dy.toFixed(0)}px) rotate(${rot}deg)`;
+        snap.style.opacity = '0';
+      }));
+      setTimeout(() => { if (snap.parentNode) snap.parentNode.removeChild(snap); }, 1200);
+    }
+  }
+
   // ── Feature 9: Winner confetti via DOM ──
   function triggerWinnerConfetti() {
     if (!animOverlay) return;
@@ -975,7 +1074,7 @@ const Game = (() => {
       flyCardFromOpponentToDiscard(side, data && data.playerId);
     }
     if (type === 'winner') {
-      triggerWinnerConfetti();
+      triggerVictoryFx(data && data.fx);
     }
     if (type === 'discard_land') {
       addDiscardEntry();
@@ -991,6 +1090,7 @@ const Game = (() => {
     init, destroy, state, setPlayers, setHand, updateGameState,
     setWinner, resetGame, triggerAnimation, resizeCanvas, discardStack, showDomAnim,
     setTurnTimer, flyCardToPlayer, showEmoteBubble, playSevenWithSwap,
+    isCardPlayable: clientIsPlayable,
     onPlayCard: null, onDrawCard: null, onPassTurn: null, onCallUno: null,
     onCatchUno: null, onRestartGame: null, onShowToast: null, onSevenSwap: null,
   };

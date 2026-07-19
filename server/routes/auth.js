@@ -13,6 +13,7 @@ const router = express.Router();
 const User = require('../models/User');
 const { dbReady } = require('../db');
 const statsStore = require('../statsStore');
+const cloudSync = require('../cloudSync');
 const mailer = require('../mailer');
 const { AVATAR_EMOJIS, sanitizePicture } = require('../avatars');
 
@@ -78,6 +79,26 @@ function linkUid(user, clientUid) {
   }
 }
 
+// Signing in makes progress durable and portable:
+//  1. hydrate — if this server has no local record for the account's uid
+//     (fresh deploy / different machine), pull the MongoDB copy in.
+//  2. merge — if the device was playing anonymously under a different uid,
+//     fold those coins/XP/stats into the account (once; the anonymous
+//     record is deleted afterwards).
+//  3. markDirty — mirror the up-to-date record back to MongoDB.
+async function syncAccountProgress(user, clientUid) {
+  if (!user.uid) return;
+  try {
+    await cloudSync.hydrate(user.uid);
+    if (clientUid && UID_RE.test(clientUid) && clientUid !== user.uid) {
+      cloudSync.mergeLocalInto(clientUid, user.uid);
+    }
+    cloudSync.markDirty(user.uid);
+  } catch (err) {
+    console.error('[auth] progress sync failed:', err.message); // never blocks login
+  }
+}
+
 // ── Config for the client (which providers are available) ──
 router.get('/config', (req, res) => {
   res.json({
@@ -106,6 +127,7 @@ router.post('/register', requireDb, async (req, res) => {
     const user = new User({ email, username: name, password: hashed, lastLoginAt: new Date() });
     linkUid(user, uid);
     await user.save();
+    await syncAccountProgress(user, uid);
 
     res.status(201).json({ success: true, token: issueToken(user), user: publicUser(user) });
   } catch (error) {
@@ -133,6 +155,7 @@ router.post('/login', requireDb, async (req, res) => {
     linkUid(user, uid);
     user.lastLoginAt = new Date();
     await user.save();
+    await syncAccountProgress(user, uid);
 
     res.json({ success: true, token: issueToken(user), user: publicUser(user) });
   } catch (error) {
@@ -191,6 +214,7 @@ router.post('/google', requireDb, async (req, res) => {
     linkUid(user, uid);
     user.lastLoginAt = new Date();
     await user.save();
+    await syncAccountProgress(user, uid);
 
     res.json({ success: true, token: issueToken(user), user: publicUser(user) });
   } catch (error) {
@@ -262,7 +286,10 @@ router.post('/reset', requireDb, async (req, res) => {
 });
 
 // ── Current user ──
-router.get('/me', requireDb, requireAuth, (req, res) => {
+router.get('/me', requireDb, requireAuth, async (req, res) => {
+  // Session restore on a fresh server: pull the cloud progress record in
+  // before the client asks /api/progress for it
+  if (req.user.uid) await cloudSync.hydrate(req.user.uid);
   res.json({ success: true, user: publicUser(req.user) });
 });
 

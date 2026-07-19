@@ -31,7 +31,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600;700&display=swap"
       rel="stylesheet" />
   </noscript>
-  <link rel="stylesheet" href="style.css?v=38" />
+  <link rel="stylesheet" href="style.css?v=43" />
 
   <!--
     Game scripts: moved to <head> with `defer` instead of the old runtime loader
@@ -50,11 +50,13 @@
       deploy, matching the pattern already used for style.css above.
   -->
   <script defer src="/socket.io/socket.io.js"></script>
-  <script defer src="assets/cards.js?v=30"></script>
+  <script defer src="shared/game-modes.js?v=4"></script>
+  <script defer src="shared/cosmetics.js?v=1"></script>
+  <script defer src="assets/cards.js?v=31"></script>
   <script defer src="sounds.js?v=1"></script>
-  <script defer src="renderer.js?v=38"></script>
-  <script defer src="game.js?v=37"></script>
-  <script defer src="main.js?v=38"></script>
+  <script defer src="renderer.js?v=40"></script>
+  <script defer src="game.js?v=39"></script>
+  <script defer src="main.js?v=45"></script>
 
   <style>
     /* Visually hides labels for sighted users while keeping them for screen readers */
@@ -79,6 +81,48 @@
     </div>
   </noscript>
 
+  <!-- ── Splash: app-style boot screen (removed by main.js once connected) ── -->
+  <div id="splash" aria-hidden="true">
+    <div class="splash-logo">
+      <span class="splash-card splash-card--red">U</span><span class="splash-card splash-card--yellow">N</span><span class="splash-card splash-card--blue">O</span>
+    </div>
+    <p class="splash-title">Play UNO Free</p>
+    <div class="splash-bar"><div id="splash-fill" class="splash-fill"></div></div>
+    <p id="splash-status" class="splash-status">Loading game assets…</p>
+  </div>
+
+  <!-- ── App Bar: persistent top navigation (hidden during gameplay) ── -->
+  <header id="app-bar" class="app-bar">
+    <a class="app-brand" href="/" aria-label="Play UNO Free home">
+      <span class="brand-card brand-card--red">U</span><span class="brand-card brand-card--yellow">N</span><span class="brand-card brand-card--blue">O</span>
+      <span class="brand-name">Play UNO Free</span>
+    </a>
+    <div class="app-bar-actions">
+      <!-- Shop: spend earned coins on cosmetics -->
+      <button id="btn-open-shop" class="btn-app-icon" aria-label="Cosmetics shop">🛍️</button>
+      <!-- Coins + level chip: opens the rewards panel (works without signup) -->
+      <button id="progress-chip" class="progress-chip" hidden aria-label="Your rewards and challenges">
+        <span class="chip-coins">🪙 <b id="chip-coins">0</b></span>
+        <span class="chip-level">Lv <b id="chip-level">1</b></span>
+        <span id="chip-daily-dot" class="chip-daily-dot" hidden aria-label="Daily reward available"></span>
+      </button>
+      <button id="btn-open-auth" class="btn-account">👤 Sign in</button>
+      <div id="account-chip" class="account-chip" hidden>
+        <img id="account-avatar" class="account-avatar" alt="" hidden />
+        <span id="account-name"></span>
+        <button id="btn-logout" class="btn-logout">Sign out</button>
+      </div>
+      <button id="btn-app-menu" class="btn-app-menu" aria-label="Menu" aria-expanded="false">☰</button>
+      <nav id="app-menu" class="app-menu" hidden>
+        <a href="/leaderboard">🏆 Leaderboard</a>
+        <a href="/how-to-play">📖 How to Play</a>
+        <a href="/game-modes">🎮 Game Modes</a>
+        <a href="/rules">📜 Rules</a>
+        <a href="/contact">💬 Contact & Support</a>
+      </nav>
+    </div>
+  </header>
+
   <!-- ── Screen 1: Lobby ── -->
   <div id="lobby" class="screen active">
     <div class="lobby-container">
@@ -87,16 +131,6 @@
           <span class="logo-u">U</span><span class="logo-n">N</span><span class="logo-o">O</span>
         </div>
         <p class="tagline">Play with friends — anywhere, anytime</p>
-      </div>
-
-      <!-- Account: optional sign-in; the game never requires it -->
-      <div class="account-bar">
-        <button id="btn-open-auth" class="btn-account">👤 Sign in to save your stats</button>
-        <div id="account-chip" class="account-chip" hidden>
-          <img id="account-avatar" class="account-avatar" alt="" hidden />
-          <span id="account-name"></span>
-          <button id="btn-logout" class="btn-logout">Sign out</button>
-        </div>
       </div>
 
       <div class="form-card">
@@ -229,60 +263,13 @@
       </div>
 
       <div class="settings-card" id="host-settings" style="display:none;">
-        <h3 class="settings-title">House Rules</h3>
+        <h3 class="settings-title">Game Mode</h3>
+        <!-- Mode cards + rule rows are rendered dynamically from the shared
+             rules registry (shared/game-modes.js) — see renderSettingsPanel() -->
+        <div id="mode-selector" class="mode-selector" role="radiogroup" aria-label="Game mode"></div>
+        <p id="mode-tagline" class="mode-tagline" aria-live="polite"></p>
 
-        <div class="rule-row">
-          <div class="rule-label">
-            <span class="rule-name">➕ Stacking</span>
-            <button type="button" class="rule-info-btn" aria-expanded="false" aria-label="About Stacking">i</button>
-          </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="stacking-toggle" />
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-        <p class="rule-desc" hidden>Got hit with a +2? Play your own +2/+4/+8 on top to pass the whole growing pile to
-          the next player instead of drawing.</p>
-
-        <div class="rule-row" style="display: none;">
-          <div class="rule-label">
-            <span class="rule-name">⚡ Jump-In</span>
-            <button type="button" class="rule-info-btn" aria-expanded="false" aria-label="About Jump-In">i</button>
-          </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="jumpin-toggle" />
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-        <p class="rule-desc" hidden>Holding the exact same card as the top of the pile? Slam it down instantly — even
-          when it's not your turn.</p>
-
-        <div class="rule-row" style="display: none;">
-          <div class="rule-label">
-            <span class="rule-name">🔄 Seven-Zero</span>
-            <button type="button" class="rule-info-btn" aria-expanded="false" aria-label="About Seven-Zero">i</button>
-          </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="sevenzero-toggle" />
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-        <p class="rule-desc" hidden>Play a 7 to swap hands with any player you choose. Play a 0 and everyone passes
-          their hand to the next player.</p>
-
-        <div class="rule-row" style="display: none;">
-          <div class="rule-label">
-            <span class="rule-name">🎯 Draw to Match</span>
-            <button type="button" class="rule-info-btn" aria-expanded="false"
-              aria-label="About Draw to Match">i</button>
-          </div>
-          <label class="toggle-switch">
-            <input type="checkbox" id="drawtomatch-toggle" />
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-        <p class="rule-desc" hidden>No playable card? Keep drawing until you find one, instead of drawing once and
-          passing your turn.</p>
+        <div id="rules-container"></div>
 
         <button id="btn-add-bot" class="btn btn-outline btn-add-bot" title="Add a bot player">
           🤖 Add Bot
@@ -407,6 +394,53 @@
     </div>
   </div>
 
+  <!-- Shop: cosmetics purchasable with earned coins (registry-driven) -->
+  <div id="shop-modal" class="modal" style="display: none;">
+    <div class="modal-content shop-modal-content">
+      <div class="modal-header">
+        <h3>🛍️ Shop <span class="shop-coins-chip">🪙 <b id="shop-coins">0</b></span></h3>
+        <button id="btn-close-shop" class="btn-close">✕</button>
+      </div>
+      <div id="shop-tabs" class="shop-tabs" role="tablist"></div>
+      <div id="shop-grid" class="shop-grid"></div>
+      <p class="rewards-note">Everything here is bought with coins earned by playing — never with money.</p>
+    </div>
+  </div>
+
+  <!-- Rewards: coins, level, daily login calendar, challenges (uid-based, no signup) -->
+  <div id="rewards-modal" class="modal" style="display: none;">
+    <div class="modal-content rewards-modal-content">
+      <div class="modal-header">
+        <h3>🎁 Rewards</h3>
+        <button id="btn-close-rewards" class="btn-close">✕</button>
+      </div>
+
+      <div class="rewards-top">
+        <div class="level-ring" aria-label="Level">
+          <span class="level-ring-label">LVL</span>
+          <span id="rewards-level" class="level-ring-num">1</span>
+        </div>
+        <div class="rewards-xp">
+          <div class="xp-bar"><div id="xp-fill" class="xp-fill"></div></div>
+          <span id="xp-label" class="xp-label"></span>
+        </div>
+        <div class="rewards-coins" aria-label="Coins">🪙 <b id="rewards-coins">0</b></div>
+      </div>
+
+      <p class="profile-section-title">📅 Daily Login <span id="login-streak" class="login-streak"></span></p>
+      <div id="login-calendar" class="login-calendar"></div>
+      <button id="btn-claim-daily" class="btn btn-primary" style="width:100%;margin-top:8px;">Claim Today's Reward</button>
+
+      <p class="profile-section-title">☀️ Daily Challenges</p>
+      <div id="daily-challenges" class="challenge-list"></div>
+
+      <p class="profile-section-title">📆 Weekly Challenges</p>
+      <div id="weekly-challenges" class="challenge-list"></div>
+
+      <p class="rewards-note">Coins are earned by playing — never bought. Cosmetics shop coming soon!</p>
+    </div>
+  </div>
+
   <!-- Seven-Zero: choose who to swap hands with when playing a 7 -->
   <div id="seven-swap-modal" class="modal" style="display: none;">
     <div class="modal-content">
@@ -425,6 +459,7 @@
         <h3 id="postgame-title">📊 Match Stats</h3>
         <button id="btn-close-postgame" class="btn-close">✕</button>
       </div>
+      <div id="postgame-rewards"></div>
       <div id="postgame-achievements"></div>
       <div class="postgame-table-wrap">
         <table id="postgame-table">

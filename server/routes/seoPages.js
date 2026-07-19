@@ -28,7 +28,7 @@ router.get('/', (req, res) => {
   const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
   renderPage(res, 'homepage', {
     title: 'Play UNO Online Free — No Download, No Sign-Up',
-    description: 'Play UNO online free with friends or strangers. No download, no sign-up, no ads. Create a private room or join a public game with up to 20 players. 100% free forever.',
+    description: 'Play UNO online free with friends or strangers — Classic, No Mercy, and custom house rules. No download, no sign-up. Private rooms, up to 20 players. 100% free forever.',
     canonical: `${base}/`,
     jsonLd: [
       {
@@ -111,18 +111,23 @@ const FAQS = [
   { q: 'What is a private room?', a: 'A private room can only be joined with the room code or invite link. It won\'t appear in the public room browser.' },
   { q: 'What is a public room?', a: 'A public room appears in the "Browse Public Rooms" list, allowing anyone to join.' },
   { q: 'What are the UNO rules?', a: 'Standard UNO rules apply. Match cards by color, number, or symbol. Wild cards can be played anytime. <a href="/rules">Read the full rules →</a>' },
-  { q: 'What is card stacking?', a: 'When enabled, you can stack +2 on +2, +4 on +4, and +8 on +8. The penalty accumulates until someone can\'t stack and must draw all the cards. <a href="/rules/stacking">Learn more →</a>' },
-  { q: 'What is the Wild Draw 8 card?', a: 'A custom card exclusive to our game. It works like a Wild Draw 4 but forces the next player to draw 8 cards. There are 2 per deck.' },
-  { q: 'How does UNO calling work?', a: 'When you have 1 card left, you must press the UNO button within a few seconds. If another player catches you first, you draw 2 penalty cards.' },
+  { q: 'What game modes are there?', a: 'Three: Classic (official rules), No Mercy (stacking, Wild +8s, and elimination at 25 cards), and Custom (the host toggles every house rule individually). <a href="/game-modes">Compare the modes →</a>' },
+  { q: 'What is UNO No Mercy?', a: 'The brutal way to play: every kind of stacking is on, Wild +8 and Shuffle Hands cards join the deck, illegal +4s can be challenged, and collecting 25 cards eliminates you. Last player standing wins. <a href="/uno-no-mercy">Full No Mercy guide →</a>' },
+  { q: 'Can you stack cards in UNO?', a: 'Officially no — but it\'s the world\'s favorite house rule, and it\'s built in here. Stack +2 on +2, +4 on +4, or mix them, and even deflect piles with Skip Dodge and Reverse Bounce. <a href="/rules/stacking">Stacking rules explained →</a>' },
+  { q: 'Do you support custom house rules?', a: 'Yes — pick Custom mode and toggle each rule: stacking, Seven-Zero, Jump-In, Draw to Match, Force Play, Wild Challenge, Play for Places, elimination, starting hand size, turn timer, and more. <a href="/house-rules">Every house rule explained →</a>' },
+  { q: 'What is the Wild Draw 8 card?', a: 'A custom card exclusive to our game. It works like a Wild Draw 4 but forces the next player to draw 8 cards. There are 2 per deck, and the host can toggle them on or off.' },
+  { q: 'What is Play for Places?', a: 'A house rule where the first player out takes 1st place, but the round keeps going so everyone earns a final rank — 2nd, 3rd, and beyond. Nobody sits out after one lucky card.' },
+  { q: 'How does UNO calling work?', a: 'When you have 1 card left, you must press the UNO button. Other players get a chance to catch you after a short grace period (the host can set it from 100ms to 1 second). Get caught and you draw 2 penalty cards.' },
   { q: 'What happens if I disconnect?', a: 'You\'ll automatically reconnect within seconds. Your cards are preserved on the server. If you\'re away too long, the auto-play system will play for you.' },
-  { q: 'What is auto-play?', a: 'If a player is AFK (away from keyboard) for 30 seconds, the game automatically plays a valid card for them or draws and passes.' },
+  { q: 'What is auto-play?', a: 'If a player is idle for the length of the turn timer, the game automatically plays a valid card for them or draws and passes, so one AFK player never freezes the table.' },
   { q: 'Can I watch a game without playing?', a: 'Yes! If a game is in progress, you can join as a spectator and watch without affecting the game.' },
-  { q: 'Is there a time limit per turn?', a: 'Yes, each player has 30 seconds to play. After that, auto-play kicks in. A visual timer shows the remaining time.' },
+  { q: 'Is there a time limit per turn?', a: 'Yes — 30 seconds by default, and the host can set it anywhere from 15 to 90 seconds. A visual timer shows the remaining time, then auto-play kicks in.' },
   { q: 'Can the host kick players?', a: 'Yes. The host can remove any player from the room at any time, both in the lobby and during the game.' },
-  { q: 'Is it safe for kids?', a: 'Yes. There is no text chat, no user accounts, and no personal data collected. The game is family-friendly.' },
-  { q: 'How many cards are in the deck?', a: 'A standard deck has 110 cards: 76 number cards, 24 action cards (Skip, Reverse, Draw Two), and 10 wild cards. Games with 11+ players use 220 cards.' },
-  { q: 'Do you support custom rules?', a: 'Currently, the host can toggle card stacking on or off. More custom rules (Jump-In, Seven-Zero, etc.) are on our roadmap.' },
-  { q: 'Can I play UNO solo?', a: 'Not yet. We\'re working on AI bot opponents so you can practice or play solo. Stay tuned!' },
+  { q: 'What are coins and levels?', a: 'You earn coins and XP by playing and winning — plus daily login rewards, achievements, and daily/weekly challenges. Spend coins on cosmetics like card themes, table styles, and victory effects. Coins can never be bought with real money, and cosmetics never affect gameplay.' },
+  { q: 'Do I need an account?', a: 'No — you can play and even earn rewards without one. Signing in (email or Google) is optional and saves your stats, coins, and cosmetics across devices.' },
+  { q: 'Is it safe for kids?', a: 'Yes. There is no text chat (only preset emoji reactions), accounts are optional, and no personal data is needed to play. The game is family-friendly.' },
+  { q: 'How many cards are in the deck?', a: 'The classic deck has 108 cards: 76 number cards, 24 action cards (Skip, Reverse, Draw Two), and 8 wild cards. Optional Wild +8 and Shuffle Hands cards add more, and games with 11+ players use a double deck.' },
+  { q: 'Can I play UNO solo?', a: 'Yes! Tap "Play vs Bots" for an instant game against computer players, or add bots to any room. Bots play every mode — including No Mercy.' },
   { q: 'Is this affiliated with Mattel?', a: 'No. This is an independent fan-made project. UNO® is a registered trademark of Mattel, Inc.' },
 ];
 
@@ -151,9 +156,77 @@ router.get('/faq', (req, res) => {
 router.get('/game-modes', (req, res) => {
   const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
   renderPage(res, 'game-modes', {
-    title: 'Free UNO Game Modes — Classic, Stacking, and More',
-    description: 'Explore free UNO game modes including Classic and Stacking. Learn the differences and choose your favorite way to play for free.',
+    title: 'UNO Game Modes — Classic, No Mercy & Custom Rules | Play Free',
+    description: 'Three free ways to play UNO online: Classic official rules, brutal No Mercy with stacking and elimination, or Custom mode with every house rule. 2-20 players.',
     canonical: `${base}/game-modes`,
+  });
+});
+
+// ── UNO No Mercy (landing page for the "uno no mercy online" query cluster) ──
+router.get('/uno-no-mercy', (req, res) => {
+  const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
+  renderPage(res, 'uno-no-mercy', {
+    title: 'Play UNO No Mercy Online Free — Stacking, Wild +8s & Elimination',
+    description: 'Play UNO No Mercy style online for free: unlimited stacking, Wild +8 cards, shuffle hands, and elimination at 25 cards. Last player standing wins. No download, 2-20 players.',
+    canonical: `${base}/uno-no-mercy`,
+    jsonLd: [
+      {
+        "@context": "https://schema.org", "@type": "Article",
+        "headline": "Play UNO No Mercy Online — Free Browser Game",
+        "description": "How to play the No Mercy style of UNO online for free: stacking rules, Wild +8, Shuffle Hands, Wild Challenge, and elimination at 25 cards.",
+        "author": { "@type": "Organization", "name": SITE_NAME },
+        "publisher": { "@type": "Organization", "name": SITE_NAME },
+        "datePublished": "2026-07-18",
+        "mainEntityOfPage": `${base}/uno-no-mercy`
+      },
+      {
+        "@context": "https://schema.org", "@type": "FAQPage",
+        "mainEntity": [
+          { "@type": "Question", "name": "Is UNO No Mercy free to play online?", "acceptedAnswer": { "@type": "Answer", "text": "Yes — completely free, forever. No download, no signup. It runs in any browser on phone, tablet, or computer." } },
+          { "@type": "Question", "name": "How many players can join a No Mercy game?", "acceptedAnswer": { "@type": "Answer", "text": "2 to 20 players in one room. Big tables mean more stacking chains and more eliminations." } },
+          { "@type": "Question", "name": "What happens when a player is eliminated?", "acceptedAnswer": { "@type": "Answer", "text": "At 25 cards they are out: their cards return to the deck and they watch the rest of the round. They rejoin automatically next round." } },
+          { "@type": "Question", "name": "Can I play No Mercy with bots?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Add bots from the room lobby — they stack, challenge, and get eliminated just like human players." } },
+        ]
+      }
+    ],
+  });
+});
+
+// ── Stacking Rules (deep-dive; also the target of FAQ/rules internal links) ──
+router.get('/rules/stacking', (req, res) => {
+  const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
+  renderPage(res, 'stacking', {
+    title: 'UNO Stacking Rules — Can You Stack +2 and +4 Cards?',
+    description: 'Can you stack a +2 on a +2 in UNO? Officially no — but it\'s the world\'s favorite house rule. Full stacking rules explained, plus how to play UNO with stacking online free.',
+    canonical: `${base}/rules/stacking`,
+    jsonLd: {
+      "@context": "https://schema.org", "@type": "Article",
+      "headline": "UNO Stacking Rules — The Complete Guide",
+      "description": "Official UNO stacking rules vs the popular house rule: +2 stacking, +4 stacking, mixed stacking, Skip Dodge, and Reverse Bounce explained.",
+      "author": { "@type": "Organization", "name": SITE_NAME },
+      "publisher": { "@type": "Organization", "name": SITE_NAME },
+      "datePublished": "2026-07-18",
+      "mainEntityOfPage": `${base}/rules/stacking`
+    },
+  });
+});
+
+// ── House Rules (Seven-Zero, Jump-In, Force Play, and friends) ──
+router.get('/house-rules', (req, res) => {
+  const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
+  renderPage(res, 'house-rules', {
+    title: 'UNO House Rules — Seven-Zero, Jump-In, Stacking & More',
+    description: 'Every popular UNO house rule explained: the 7-0 rule, Jump-In, stacking, Draw to Match, Force Play, and Wild Challenge — and how to play each one online for free.',
+    canonical: `${base}/house-rules`,
+    jsonLd: {
+      "@context": "https://schema.org", "@type": "Article",
+      "headline": "UNO House Rules — Every Popular Variant Explained",
+      "description": "The Seven-Zero rule, Jump-In, stacking, Draw to Match, Force Play, Wild Challenge, Play for Places, and elimination — what each UNO house rule does.",
+      "author": { "@type": "Organization", "name": SITE_NAME },
+      "publisher": { "@type": "Organization", "name": SITE_NAME },
+      "datePublished": "2026-07-18",
+      "mainEntityOfPage": `${base}/house-rules`
+    },
   });
 });
 
@@ -267,6 +340,9 @@ router.get('/sitemap.xml', (req, res) => {
     { url: '/play', changefreq: 'monthly', priority: '0.9' },
     { url: '/rules', changefreq: 'monthly', priority: '0.8' },
     { url: '/how-to-play', changefreq: 'monthly', priority: '0.8' },
+    { url: '/uno-no-mercy', changefreq: 'monthly', priority: '0.8' },
+    { url: '/rules/stacking', changefreq: 'monthly', priority: '0.7' },
+    { url: '/house-rules', changefreq: 'monthly', priority: '0.7' },
     { url: '/game-modes', changefreq: 'monthly', priority: '0.7' },
     { url: '/faq', changefreq: 'monthly', priority: '0.7' },
     { url: '/20-player-uno', changefreq: 'monthly', priority: '0.7' },

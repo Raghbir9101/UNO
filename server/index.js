@@ -11,11 +11,15 @@ require('dotenv').config();
 const fs = require('fs');
 const roomManager = require('./roomManager');
 const gameLogic = require('./gameLogic');
+const GameModes = require('../public/shared/game-modes');
 const seoPages = require('./routes/seoPages');
 const ogImage = require('./routes/ogImage');
 const statePersistence = require('./statePersistence');
 const statsStore = require('./statsStore');
+const progressStore = require('./progressStore');
+const rewardsEngine = require('./rewards/engine');
 const { connectDB, dbReady } = require('./db');
+const cloudSync = require('./cloudSync'); // wires store→MongoDB mirroring hooks
 const analytics = require('./analytics');
 const authRoutes = require('./routes/auth');
 const analyticsApiRoutes = require('./routes/analytics-api');
@@ -98,6 +102,7 @@ app.use(analytics.middleware);
 app.use('/api/auth', authRoutes);
 app.use('/api/analytics', analyticsApiRoutes);
 app.use('/api/bug-report', bugReportRoutes);
+app.use('/api/progress', require('./routes/progress'));
 
 // ── Password reset pages ──
 app.get('/forgot-password', (req, res) => {
@@ -149,7 +154,8 @@ app.get('/admin/analytics', async (req, res) => {
       isPrivate: !!r.isPrivate,
       players: r.players.map(p => ({ nickname: p.nickname, isBot: !!p.isBot, connected: !!p.connected })),
       spectators: (r.spectators || []).length,
-      rules: Object.entries(r.settings || {}).filter(([, on]) => on).map(([rule]) => rule),
+      mode: (r.settings && r.settings.mode) || 'custom',
+      rules: Object.entries(r.settings || {}).filter(([, v]) => v === true).map(([rule]) => rule),
       createdAt: r.createdAt,
     })).sort((a, b) => b.createdAt - a.createdAt);
     res.render('analytics', {
@@ -330,6 +336,14 @@ function releaseRoomLock(roomCode) {
 const _autoPlayTimers = {};  // roomCode → timeout handle
 
 const AFK_TIMEOUT_MS = Number(process.env.AFK_TIMEOUT_MS) || 30000; // env override is for tests
+
+// Per-room turn timer: host-configured seconds (rule 'turnTimer'), with the
+// env/default value as fallback for legacy rooms.
+function afkTimeoutMs(room) {
+  if (process.env.AFK_TIMEOUT_MS) return AFK_TIMEOUT_MS; // tests force a global value
+  const secs = Number(room && room.settings && room.settings.turnTimer);
+  return Number.isFinite(secs) && secs >= 5 ? secs * 1000 : AFK_TIMEOUT_MS;
+}
 // Bots think for a moment so the game has a human rhythm instead of instant replies
 function botDelayMs() {
   return 1100 + Math.floor(Math.random() * 1400); // 1.1–2.5s
@@ -341,8 +355,8 @@ function botDelayMs() {
 const DEAL_CARD_MS = 420;
 const DEAL_BUFFER_MS = 800; // network delivery + client render start
 
-function dealAnimationMs(playerCount) {
-  return playerCount * 7 * DEAL_CARD_MS + DEAL_BUFFER_MS;
+function dealAnimationMs(playerCount, cardsEach) {
+  return playerCount * (cardsEach || 7) * DEAL_CARD_MS + DEAL_BUFFER_MS;
 }
 
 // ── Animation hold: prevent bots/AFK from acting while clients animate ───────
@@ -365,7 +379,7 @@ function cardPlayAnimMs(cardType, drawCount, isSelfPlay) {
   // Effect overlays (skip, reverse, +N flash) — shown after effectDelay
   const effectDelay = isSelfPlay ? 620 : 0;
   if (cardType === 'draw2' || cardType === 'wild4' || cardType === 'wild8' ||
-      cardType === 'skip' || cardType === 'reverse') {
+      cardType === 'skip' || cardType === 'reverse' || cardType === 'shuffle') {
     ms = Math.max(ms, effectDelay + ANIM_EFFECT_MS);
   }
 
@@ -440,41 +454,7 @@ function performAutoAction(roomCode, currentId, { isBot } = {}) {
     const result = gameLogic.playCard(gs, currentId, card.id, chosenColor, swapTargetId);
     if (result.error) return false;
 
-    sendHandTo(currentId);
-    // Seven-Zero swaps/rotations reassign whole hands — resend everyone's
-    if (result.effects.some(e => e.type === 'hands_rotated' || e.type === 'hands_swapped')) {
-      for (const pl of r.players) {
-        if (!pl.isBot) sendHandTo(pl.id);
-      }
-      emitHandExchangeEvents(roomCode, r, result.effects);
-    }
-    for (const effect of result.effects) {
-      if (effect.type === 'draw' && effect.playerId) {
-        // Same ordering contract as the play_card handler: player_drew (with
-        // causedBy) first, then the victim's hand_updated
-        io.to(roomCode).emit('player_drew', { playerId: effect.playerId, count: effect.count, causedBy: currentId });
-        sendHandTo(effect.playerId);
-      }
-      if (effect.type === 'skip') {
-        io.to(roomCode).emit('turn_skipped', { playerId: effect.playerId });
-      }
-      if (effect.type === 'reverse') {
-        io.to(roomCode).emit('direction_changed', { direction: effect.direction });
-      }
-    }
-    const drawEffect = result.effects.find(e => e.type === 'draw');
-    io.to(roomCode).emit('card_effect', {
-      cardType: card.type,
-      cardColor: card.color,
-      chosenColor: chosenColor || null,
-      playedBy: currentId,
-      targetPlayerId: drawEffect ? drawEffect.playerId : null,
-    });
-    // Hold bots until client animations finish
-    const drawCount = drawEffect ? drawEffect.count : 0;
-    setAnimationHold(r, cardPlayAnimMs(card.type, drawCount, false));
-    broadcastGameState(roomCode);
-    saveStateSoon();
+    applyPlayResult(roomCode, r, currentId, result, chosenColor, { isSelfPlay: false });
 
     // Bot UNO etiquette: call UNO after a beat — humans get a window to catch it,
     // and sometimes (15%) the bot "forgets" entirely and can be caught.
@@ -488,23 +468,27 @@ function performAutoAction(roomCode, currentId, { isBot } = {}) {
         }, 1200 + Math.floor(Math.random() * 1200));
       }
     }
+    return true;
+  };
 
+  // Shared: announce a voluntary/forced draw + handle elimination and win
+  const emitDrawOutcome = (result) => {
+    const drawnCount = result.drawn?.length || 1;
+    io.to(roomCode).emit('player_drew', { playerId: currentId, count: drawnCount });
+    setAnimationHold(r, drawAnimMs(drawnCount));
+    if (result.eliminated) handleElimination(roomCode, r, result.eliminated);
+    broadcastGameState(roomCode);
     if (result.winner) {
-      const winner = r.players.find(p => p.id === result.winner);
-      io.to(roomCode).emit('player_won', {
-        playerId: result.winner,
-        nickname: winner ? winner.nickname : 'Unknown',
-      });
+      emitPlayerWon(roomCode, r, result.winner);
       recordGameEnd(roomCode, result.winner);
     }
-    return true;
   };
 
   // ── Case 1: Pending forced draw (draw2/wild4/wild8 stack) ──
   if (gs.pendingDraw > 0) {
-    // Bots stack back when they can instead of eating the cards
-    if (isBot && gs.settings.stacking) {
-      const stackCard = hand.find(c => c.type === gs.pendingDrawType);
+    // Bots answer the stack when the rules allow it instead of eating the cards
+    if (isBot) {
+      const stackCard = hand.find(c => gameLogic.isPlayable(c, gs));
       if (stackCard) {
         const chosenColor = stackCard.color === 'wild' ? bestWildColor(hand) : undefined;
         if (playCardAs(stackCard, chosenColor)) return;
@@ -513,25 +497,14 @@ function performAutoAction(roomCode, currentId, { isBot } = {}) {
     const result = gameLogic.playerDrawCard(gs, currentId);
     if (!result.error) {
       sendHandTo(currentId);
-      const drawnCount = result.drawn?.length || 1;
-      io.to(roomCode).emit('player_drew', { playerId: currentId, count: drawnCount });
-      // Hold bots until draw animation finishes
-      setAnimationHold(r, drawAnimMs(drawnCount));
-      // playerDrawCard with pendingDraw already calls advanceTurn internally
-      broadcastGameState(roomCode);
+      // playerDrawCard with pendingDraw already advances the turn internally
+      emitDrawOutcome(result);
     }
     return;
   }
 
   // ── Case 2: Find a card playable under current game rules ──
-  const playable = hand.filter(card => {
-    if (card.color === 'wild') return true;
-    if (card.color === gs.activeColor) return true;
-    const top = gs.discardPile[gs.discardPile.length - 1];
-    if (top && card.type === 'number' && top.type === 'number' && card.value === top.value) return true;
-    if (top && card.type !== 'number' && card.type === top.type) return true;
-    return false;
-  });
+  const playable = hand.filter(card => gameLogic.isPlayable(card, gs));
 
   if (playable.length > 0) {
     // Prefer non-wild cards to conserve wilds
@@ -547,22 +520,15 @@ function performAutoAction(roomCode, currentId, { isBot } = {}) {
   const drawResult = gameLogic.playerDrawCard(gs, currentId);
   if (!drawResult.error) {
     sendHandTo(currentId);
-    io.to(roomCode).emit('player_drew', { playerId: currentId, count: drawResult.drawn?.length || 1 });
-    // Hold bots until draw animation finishes
-    setAnimationHold(r, drawAnimMs(drawResult.drawn?.length || 1));
+    emitDrawOutcome(drawResult);
+    if (drawResult.eliminated || drawResult.winner) return;
 
     // Bots play the card they just drew when it's playable (always true for the
     // last card under draw-to-match, unless the deck ran dry)
     const last = drawResult.drawn && drawResult.drawn[drawResult.drawn.length - 1];
-    if (isBot && last) {
-      const top = gs.discardPile[gs.discardPile.length - 1];
-      const lastPlayable = last.color === 'wild' || last.color === gs.activeColor ||
-        (top && last.type === 'number' && top.type === 'number' && last.value === top.value) ||
-        (top && last.type !== 'number' && last.type === top.type);
-      if (lastPlayable) {
-        const chosenColor = last.color === 'wild' ? bestWildColor(gs.hands[currentId] || []) : undefined;
-        if (playCardAs(last, chosenColor)) return;
-      }
+    if (isBot && last && gameLogic.isPlayable(last, gs)) {
+      const chosenColor = last.color === 'wild' ? bestWildColor(gs.hands[currentId] || []) : undefined;
+      if (playCardAs(last, chosenColor)) return;
     }
 
     // Must explicitly pass turn after drawing (turn doesn't auto-advance for normal draw)
@@ -587,7 +553,7 @@ function resetAutoPlayTimer(roomCode) {
   const dealHold = Math.max(0, (room.dealEndsAt || 0) - now);
   const animHold = Math.max(0, (room.animEndsAt || 0) - now);
   const isBot = isBotPlayer(room, currentId);
-  const delay = Math.max(dealHold, animHold) + (isBot ? botDelayMs() : AFK_TIMEOUT_MS);
+  const delay = Math.max(dealHold, animHold) + (isBot ? botDelayMs() : afkTimeoutMs(room));
 
   _autoPlayTimers[roomCode] = setTimeout(() => {
     const r = roomManager.getRoom(roomCode);
@@ -613,7 +579,7 @@ function sendHandToPlayer(socket, playerId, gameState) {
 
 // ─── Game-End Stats & Achievements ───────────────────────────────────────────
 
-// Definitions live in statsStore so the profile API can list them too
+// Display definitions (no condition functions) for broadcast payloads
 const ACHIEVEMENTS = statsStore.ACHIEVEMENTS;
 
 // Anonymous stats identity from the client (localStorage) — never trusted raw
@@ -627,13 +593,22 @@ const { sanitizePicture } = require('./avatars');
 
 // Called once per finished game, from every code path that emits player_won.
 // Updates lifetime stats for each human, computes achievement unlocks, and
-// broadcasts the post-game summary panel data.
-function recordGameEnd(roomCode, winnerId) {
+// broadcasts the post-game summary panel data. `standings` (best→worst
+// playerIds) is passed for Play-for-Places games; when absent, the winner is
+// 1st and everyone else is unranked.
+function recordGameEnd(roomCode, winnerId, standings) {
   const room = roomManager.getRoom(roomCode);
   if (!room || !room.gameState) return;
   const gs = room.gameState;
   if (gs._statsRecorded) return; // several paths can reach a win — count once
   gs._statsRecorded = true;
+
+  // playerId → finishing place (1-based). Empty for non-places games.
+  const placeOf = {};
+  if (Array.isArray(standings)) {
+    standings.forEach((pid, i) => { placeOf[pid] = i + 1; });
+  }
+  const totalRanked = Array.isArray(standings) ? standings.length : 0;
 
   const durationMs = Date.now() - ((gs.stats && gs.stats.startedAt) || Date.now());
   const winner = room.players.find(p => p.id === winnerId);
@@ -643,6 +618,17 @@ function recordGameEnd(roomCode, winnerId) {
     durationMs,
     players: [],
     achievements: [],
+    standings: Array.isArray(standings) ? standings : null,
+  };
+
+  // Context shared by achievement conditions and challenge metrics
+  const gameCtx = {
+    durationMs,
+    playerCount: Object.keys((gs.stats && gs.stats.perPlayer) || {}).length || gs.playerCount,
+    mode: (room.settings && room.settings.mode) || 'custom',
+    settings: gs.settings || room.settings || {},
+    finalDiscardType: gs.discardTop ? gs.discardTop.type : null,
+    maxHand: 0, // filled per player below
   };
 
   for (const p of room.players) {
@@ -653,9 +639,13 @@ function recordGameEnd(roomCode, winnerId) {
       nickname: p.nickname,
       isBot: !!p.isBot,
       won: p.id === winnerId,
+      place: placeOf[p.id] || null,        // finishing rank (Play-for-Places)
+      totalRanked: totalRanked || null,     // how many places there were
       cardsPlayed: ps.cardsPlayed || 0,
       cardsDrawn: ps.cardsDrawn || 0,
       wildsPlayed: ps.wildsPlayed || 0,
+      unoCalls: ps.unoCalls || 0,
+      typeCounts: ps.typeCounts || {},
     };
 
     if (!p.isBot && p.uid) {
@@ -666,19 +656,22 @@ function recordGameEnd(roomCode, winnerId) {
       row.totalWins = rec.wins;
       row.totalGames = rec.gamesPlayed;
 
-      const earned = [];
-      if (row.won) {
-        if (rec.wins === 1) earned.push('first_win');
-        if (rec.wins === 10) earned.push('ten_wins');
-        if (gs.discardTop && gs.discardTop.type === 'wild4') earned.push('plus4_finish');
-        if (durationMs < 120000) earned.push('speed_win');
-        if ((ps.maxHand || 0) >= 12) earned.push('comeback');
-      }
-      if (row.cardsPlayed >= 20) earned.push('card_shark');
-
-      const fresh = statsStore.unlockAchievements(p.uid, earned);
-      for (const id of fresh) {
-        summary.achievements.push({ playerId: p.id, nickname: p.nickname, id, ...ACHIEVEMENTS[id] });
+      // Rewards engine: coins, XP, level-ups, achievements, challenge progress
+      const grants = rewardsEngine.processGameEnd(p.uid, p.nickname, {
+        row,
+        rec,
+        game: { ...gameCtx, maxHand: ps.maxHand || 0, place: row.place, totalRanked },
+      });
+      row.rewards = {
+        coins: grants.coins,
+        xp: grants.xp,
+        level: grants.level,
+        totalCoins: grants.totalCoins,
+        levelUps: grants.levelUps,
+        challenges: grants.challenges,
+      };
+      for (const id of grants.achievements) {
+        summary.achievements.push({ playerId: p.id, nickname: p.nickname, id, ...(ACHIEVEMENTS[id] || {}) });
       }
     }
     summary.players.push(row);
@@ -700,21 +693,149 @@ function recordGameEnd(roomCode, winnerId) {
       humanCount: summary.players.filter(p => !p.isBot).length,
       botCount: summary.players.filter(p => p.isBot).length,
       durationMs,
-      rules: Object.entries(room.settings || {}).filter(([, on]) => on).map(([rule]) => rule),
+      rules: [
+        'mode:' + ((room.settings && room.settings.mode) || 'custom'),
+        ...Object.entries(room.settings || {}).filter(([, v]) => v === true).map(([rule]) => rule),
+      ],
     }).catch(err => console.error('[game-history] save failed:', err.message));
   }
 }
 
-// Toast/sound events for Seven-Zero hand exchanges
+// Toast/sound events for whole-hand exchanges (Seven-Zero + Shuffle card)
 function emitHandExchangeEvents(roomCode, room, effects) {
+  const nameOf = (id) => room.players.find(p => p.id === id)?.nickname || 'Player';
   const rot = effects.find(e => e.type === 'hands_rotated');
   const swp = effects.find(e => e.type === 'hands_swapped');
+  const shf = effects.find(e => e.type === 'hands_shuffled');
   if (rot) io.to(roomCode).emit('hands_rotated', { direction: rot.direction });
   if (swp) {
-    const nameOf = (id) => room.players.find(p => p.id === id)?.nickname || 'Player';
     io.to(roomCode).emit('hands_swapped', {
       a: swp.a, b: swp.b, aNickname: nameOf(swp.a), bNickname: nameOf(swp.b),
     });
+  }
+  if (shf) io.to(roomCode).emit('hands_shuffled', { playerId: shf.playerId, nickname: nameOf(shf.playerId) });
+}
+
+// ─── Winner announcement ──────────────────────────────────────────────────────
+// Single place every win is broadcast from — carries the winner's equipped
+// victory effect so the whole table sees their celebration (visual only).
+function emitPlayerWon(roomCode, room, winnerId) {
+  const winner = room.players.find(p => p.id === winnerId);
+  io.to(roomCode).emit('player_won', {
+    playerId: winnerId,
+    nickname: winner ? winner.nickname : 'Unknown',
+    victoryFx: rewardsEngine.getVictoryFx(winner && winner.uid),
+  });
+}
+
+// ─── Elimination announcement ─────────────────────────────────────────────────
+// The eliminated player stays in the room as a watcher (they're back next
+// round) — the engine has already pulled them from the turn order.
+function handleElimination(roomCode, room, playerId) {
+  const player = room.players.find(p => p.id === playerId);
+  io.to(roomCode).emit('player_eliminated', {
+    playerId,
+    nickname: player ? player.nickname : 'Player',
+  });
+  if (player && player.socketId) {
+    const sock = getSocketById(player.socketId);
+    if (sock) sock.emit('hand_updated', { cards: [] });
+  }
+  console.log(`[eliminate] ${player ? player.nickname : playerId} eliminated in ${roomCode}`);
+}
+
+// ─── Shared play-result pipeline ──────────────────────────────────────────────
+// Emits every event a successful playCard result requires, in the exact order
+// clients depend on (player_drew BEFORE hand_updated, card_effect after
+// per-effect events). Used by BOTH the play_card socket handler and the
+// bot/AFK auto-play path so the two can never drift apart.
+function applyPlayResult(roomCode, room, playerId, result, chosenColor, { isSelfPlay } = {}) {
+  const gs = room.gameState;
+  const nameOf = (id) => room.players.find(p => p.id === id)?.nickname || 'Player';
+
+  const sendHandTo = (pid) => {
+    const p = room.players.find(pl => pl.id === pid);
+    if (p && p.socketId) {
+      const sock = getSocketById(p.socketId);
+      if (sock) sendHandToPlayer(sock, pid, gs);
+    }
+  };
+
+  // 1. The player's own updated hand
+  sendHandTo(playerId);
+
+  // 2. Whole-hand exchanges reassign everyone's cards — resend all hands
+  if (result.effects.some(e => e.type === 'hands_rotated' || e.type === 'hands_swapped' || e.type === 'hands_shuffled')) {
+    for (const pl of room.players) {
+      if (!pl.isBot && pl.socketId) sendHandTo(pl.id);
+    }
+    emitHandExchangeEvents(roomCode, room, result.effects);
+  }
+
+  // 3. Jump-in announcement (turn steal)
+  const jumpEffect = result.effects.find(e => e.type === 'jump_in');
+  if (jumpEffect) {
+    io.to(roomCode).emit('jumped_in', { playerId: jumpEffect.playerId, nickname: nameOf(jumpEffect.playerId) });
+  }
+
+  // 4. Per-effect events. player_drew goes out BEFORE the victim's
+  // hand_updated: it carries causedBy, which the client uses to delay the
+  // draw animation until the +card play is visible.
+  for (const effect of result.effects) {
+    if (effect.type === 'draw' && effect.playerId) {
+      io.to(roomCode).emit('player_drew', { playerId: effect.playerId, count: effect.count, causedBy: playerId });
+      sendHandTo(effect.playerId);
+    }
+    if (effect.type === 'skip') {
+      io.to(roomCode).emit('turn_skipped', { playerId: effect.playerId });
+    }
+    if (effect.type === 'reverse') {
+      io.to(roomCode).emit('direction_changed', { direction: effect.direction });
+    }
+    if (effect.type === 'stack_passed') {
+      io.to(roomCode).emit('stack_passed', {
+        via: effect.via,
+        playerId: effect.playerId, nickname: nameOf(effect.playerId),
+        targetId: effect.targetId, targetNickname: nameOf(effect.targetId),
+        count: effect.count,
+      });
+    }
+    if (effect.type === 'eliminated') {
+      handleElimination(roomCode, room, effect.playerId);
+    }
+    if (effect.type === 'finished') {
+      // Play-for-Places: a player emptied their hand and secured a placement,
+      // but the round continues. Announce it so clients show the standing.
+      io.to(roomCode).emit('player_finished', {
+        playerId: effect.playerId,
+        nickname: nameOf(effect.playerId),
+        place: effect.place,
+      });
+    }
+  }
+
+  // 5. Card effect for animations — include target of draw effects
+  const drawEffect = result.effects.find(e => e.type === 'draw');
+  io.to(roomCode).emit('card_effect', {
+    cardType: result.card.type,
+    cardColor: result.card.color,
+    chosenColor: chosenColor || null,
+    playedBy: playerId,
+    targetPlayerId: drawEffect ? drawEffect.playerId : null,
+  });
+
+  // 6. Hold bots/AFK until client animations finish
+  const drawCount = drawEffect ? drawEffect.count : 0;
+  setAnimationHold(room, cardPlayAnimMs(result.card.type, drawCount, !!isSelfPlay));
+
+  // 7. Fresh public state + persistence
+  broadcastGameState(roomCode);
+  saveStateSoon();
+
+  // 8. Winner (result.standings is present only for a completed Play-for-Places round)
+  if (result.winner) {
+    emitPlayerWon(roomCode, room, result.winner);
+    recordGameEnd(roomCode, result.winner, result.standings || null);
   }
 }
 
@@ -903,11 +1024,7 @@ io.on('connection', (socket) => {
     // ── Step 5: Game was active ──
     if (kickWinner) {
       // Only 1 player left — they win
-      const winner = room.players.find(p => p.id === kickWinner);
-      io.to(roomCode).emit('player_won', {
-        playerId: kickWinner,
-        nickname: winner ? winner.nickname : 'Unknown',
-      });
+      emitPlayerWon(roomCode, room, kickWinner);
       recordGameEnd(roomCode, kickWinner);
       // End the game properly
       clearTimeout(_autoPlayTimers[roomCode]);
@@ -963,11 +1080,7 @@ io.on('connection', (socket) => {
 
       if (result.winner) {
         // Only one player left standing — they win
-        const winner = room.players.find(p => p.id === result.winner);
-        io.to(roomCode).emit('player_won', {
-          playerId: result.winner,
-          nickname: winner ? winner.nickname : 'Unknown',
-        });
+        emitPlayerWon(roomCode, room, result.winner);
         // (game already recorded above, before forceRemovePlayer)
         clearTimeout(_autoPlayTimers[roomCode]);
         room.status = 'lobby';
@@ -1011,27 +1124,33 @@ io.on('connection', (socket) => {
     callback?.({ success: true, botId: result.player.id, nickname: result.player.nickname });
   });
 
-  // ── Toggle Stacking ──
-  socket.on('toggle_stacking', ({ roomCode, enabled }) => {
+  // ── Set Game Mode (host only, lobby only) ──
+  socket.on('set_mode', ({ roomCode, mode }) => {
     const room = roomManager.getRoom(roomCode);
     if (!room) return socket.emit('error', { message: 'Room not found' });
     if (room.status !== 'lobby') return socket.emit('error', { message: 'Cannot change settings during game' });
     if (socket.data?.playerId !== room.hostId) return socket.emit('error', { message: 'Only host can change settings' });
 
-    room.settings.stacking = !!enabled;
+    const next = GameModes.switchMode(room.settings, mode);
+    if (!next) return socket.emit('error', { message: 'Unknown game mode' });
+    room.settings = next;
     broadcastRoomUpdate(roomCode);
   });
 
-  // ── Set House Rule (host only, lobby only) ──
-  const RULE_KEYS = ['stacking', 'jumpIn', 'sevenZero', 'drawToMatch'];
-  socket.on('set_rule', ({ roomCode, rule, enabled }) => {
+  // ── Set Rule (host only, lobby only; validated against the rules registry) ──
+  socket.on('set_rule', ({ roomCode, rule, enabled, value }) => {
     const room = roomManager.getRoom(roomCode);
     if (!room) return socket.emit('error', { message: 'Room not found' });
     if (room.status !== 'lobby') return socket.emit('error', { message: 'Cannot change settings during game' });
     if (socket.data?.playerId !== room.hostId) return socket.emit('error', { message: 'Only host can change settings' });
-    if (!RULE_KEYS.includes(rule)) return;
 
-    room.settings[rule] = !!enabled;
+    const next = GameModes.applyRuleChange(
+      GameModes.normalizeSettings(room.settings),
+      rule,
+      value !== undefined ? value : enabled
+    );
+    if (!next) return socket.emit('error', { message: 'That rule cannot be changed in this mode' });
+    room.settings = next;
     broadcastRoomUpdate(roomCode);
   });
 
@@ -1049,7 +1168,7 @@ io.on('connection', (socket) => {
     let best = null;
     for (const [, room] of roomManager.rooms) {
       if (room.isPrivate || room.status !== 'lobby') continue;
-      if (room.players.length >= roomManager.MAX_PLAYERS) continue;
+      if (room.players.length >= roomManager.roomCapacity(room)) continue;
       if (!room.players.some(p => !p.isBot && p.connected)) continue;
       if (!best || room.players.length > best.players.length) best = room;
     }
@@ -1124,6 +1243,9 @@ io.on('connection', (socket) => {
     if (room.status === 'playing') return callback?.({ error: 'Game already in progress' });
 
     room.status = 'playing';
+    // Normalize once so the room, the engine, and every broadcast share the
+    // same complete settings object (handles legacy persisted rooms too)
+    room.settings = GameModes.normalizeSettings(room.settings);
     const activePlayers = room.players.filter(p => p.connected);
     room.gameState = gameLogic.initGame(activePlayers, room.settings);
 
@@ -1149,7 +1271,7 @@ io.on('connection', (socket) => {
     // Arm the turn timer — if the first player is a bot this kicks off its
     // move, and if a human goes AFK on turn one the 30s fallback works.
     // dealEndsAt makes resetAutoPlayTimer wait out the clients' deal animation.
-    room.dealEndsAt = Date.now() + dealAnimationMs(activePlayers.length);
+    room.dealEndsAt = Date.now() + dealAnimationMs(activePlayers.length, room.settings.startingCards);
     resetAutoPlayTimer(roomCode);
   });
 
@@ -1168,82 +1290,62 @@ io.on('connection', (socket) => {
       return socket.emit('error', { message: result.error });
     }
 
-    // Send updated hand to the player who played
-    sendHandToPlayer(socket, playerId, room.gameState);
-
-    // Seven-Zero swaps/rotations reassign whole hands — resend everyone's
-    if (result.effects.some(e => e.type === 'hands_rotated' || e.type === 'hands_swapped')) {
-      for (const pl of room.players) {
-        if (pl.isBot || !pl.socketId) continue;
-        const sock = getSocketById(pl.socketId);
-        if (sock) sendHandToPlayer(sock, pl.id, room.gameState);
-      }
-      emitHandExchangeEvents(roomCode, room, result.effects);
-    }
-
-    // Jump-in: announce the turn steal so other clients can toast it
-    const jumpEffect = result.effects.find(e => e.type === 'jump_in');
-    if (jumpEffect) {
-      const jumper = room.players.find(p => p.id === jumpEffect.playerId);
-      io.to(roomCode).emit('jumped_in', {
-        playerId: jumpEffect.playerId,
-        nickname: jumper ? jumper.nickname : 'Player',
-      });
-    }
-
-    // If effects caused other players to draw, send them updated hands.
-    // player_drew goes out BEFORE hand_updated: it carries causedBy, which the
-    // client uses to delay the draw animation until the +card play is visible.
-    for (const effect of result.effects) {
-      if (effect.type === 'draw' && effect.playerId) {
-        io.to(roomCode).emit('player_drew', { playerId: effect.playerId, count: effect.count, causedBy: playerId });
-        const targetPlayer = room.players.find(p => p.id === effect.playerId);
-        if (targetPlayer) {
-          const targetSock = getSocketById(targetPlayer.socketId);
-          if (targetSock) {
-            sendHandToPlayer(targetSock, effect.playerId, room.gameState);
-          }
-        }
-      }
-      if (effect.type === 'skip') {
-        io.to(roomCode).emit('turn_skipped', { playerId: effect.playerId });
-      }
-      if (effect.type === 'reverse') {
-        io.to(roomCode).emit('direction_changed', { direction: effect.direction });
-      }
-    }
-
-    // Emit card effect for animations — include target of draw effects
-    const drawEffect = result.effects.find(e => e.type === 'draw');
-    io.to(roomCode).emit('card_effect', {
-      cardType: result.card.type,
-      cardColor: result.card.color,
-      chosenColor: chosenColor || null,
-      playedBy: playerId,
-      targetPlayerId: drawEffect ? drawEffect.playerId : null,
-    });
-
-    // Hold bots/AFK until client animations finish
-    const drawCount = drawEffect ? drawEffect.count : 0;
-    setAnimationHold(room, cardPlayAnimMs(result.card.type, drawCount, true));
-
-    // Broadcast updated game state
-    broadcastGameState(roomCode);
-    saveStateSoon(); // Save after card played
+    // All hand updates, effect events, animations, state broadcast, and the
+    // winner announcement flow through the shared pipeline.
+    applyPlayResult(roomCode, room, playerId, result, chosenColor, { isSelfPlay: true });
 
     // Check for UNO trigger
     const hand = room.gameState.hands[playerId];
     if (hand && hand.length === 1) {
       socket.emit('uno_trigger', {}); // tell this player to press UNO
     }
+  });
 
-    // Check for winner
+  // ── Challenge a Wild +4 (Wild Challenge rule) ──
+  socket.on('challenge_wild4', ({ roomCode }) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room || !room.gameState) return socket.emit('error', { message: 'No active game' });
+
+    const playerId = socket.data?.playerId;
+
+    if (!acquireRoomLock(roomCode)) return;
+    const result = gameLogic.challengeWild4(room.gameState, playerId);
+    releaseRoomLock(roomCode);
+
+    if (result.error) {
+      return socket.emit('error', { message: result.error });
+    }
+
+    const nameOf = (id) => room.players.find(p => p.id === id)?.nickname || 'Player';
+
+    // Draw animation + hand update for whoever lost the challenge
+    io.to(roomCode).emit('player_drew', { playerId: result.loserId, count: result.count });
+    const loser = room.players.find(p => p.id === result.loserId);
+    if (loser && loser.socketId) {
+      const loserSock = getSocketById(loser.socketId);
+      if (loserSock) sendHandToPlayer(loserSock, result.loserId, room.gameState);
+    }
+
+    io.to(roomCode).emit('challenge_result', {
+      guilty: result.guilty,
+      challengerId: result.challengerId,
+      challengerNickname: nameOf(result.challengerId),
+      offenderId: result.offenderId,
+      offenderNickname: nameOf(result.offenderId),
+      loserId: result.loserId,
+      count: result.count,
+    });
+
+    for (const effect of result.effects) {
+      if (effect.type === 'eliminated') handleElimination(roomCode, room, effect.playerId);
+    }
+
+    setAnimationHold(room, drawAnimMs(result.count) + 1200);
+    broadcastGameState(roomCode);
+    saveStateSoon();
+
     if (result.winner) {
-      const winner = room.players.find(p => p.id === result.winner);
-      io.to(roomCode).emit('player_won', {
-        playerId: result.winner,
-        nickname: winner ? winner.nickname : 'Unknown',
-      });
+      emitPlayerWon(roomCode, room, result.winner);
       recordGameEnd(roomCode, result.winner);
     }
   });
@@ -1276,7 +1378,13 @@ io.on('connection', (socket) => {
     });
     // Hold bots/AFK until draw animation finishes
     setAnimationHold(room, drawAnimMs(result.count));
+    // Elimination rule: this draw may have knocked the player out
+    if (result.eliminated) handleElimination(roomCode, room, result.eliminated);
     broadcastGameState(roomCode);
+    if (result.winner) {
+      emitPlayerWon(roomCode, room, result.winner);
+      recordGameEnd(roomCode, result.winner);
+    }
   });
 
   // ── Pass Turn (player passes after drawing) ──
@@ -1305,6 +1413,9 @@ io.on('connection', (socket) => {
     const playerId = socket.data?.playerId;
     const result = gameLogic.callUno(room.gameState, playerId);
     if (result.success) {
+      // Successful UNO calls feed achievements/challenges
+      const ps = room.gameState.stats && room.gameState.stats.perPlayer[playerId];
+      if (ps) ps.unoCalls = (ps.unoCalls || 0) + 1;
       io.to(roomCode).emit('uno_called', { playerId });
     }
   });
@@ -1331,7 +1442,13 @@ io.on('connection', (socket) => {
           sendHandToPlayer(targetSock, result.targetId, room.gameState);
         }
       }
+      // Elimination rule: the penalty may have knocked the player out
+      if (result.eliminated) handleElimination(roomCode, room, result.eliminated);
       broadcastGameState(roomCode);
+      if (result.winner) {
+        emitPlayerWon(roomCode, room, result.winner);
+        recordGameEnd(roomCode, result.winner);
+      }
     }
   });
 
@@ -1394,8 +1511,16 @@ io.on('connection', (socket) => {
 const savedRooms = statePersistence.loadState();
 let restoredRoomCount = 0;
 if (savedRooms) {
-  // Restore rooms into roomManager
+  // Restore rooms into roomManager. Settings are normalized so rooms saved
+  // by an older build (flat house-rule flags, no mode) keep working — the
+  // legacy 'stacking' flag maps onto the granular stacking rules.
   for (const [code, room] of savedRooms) {
+    room.settings = GameModes.normalizeSettings(room.settings);
+    if (room.gameState) {
+      room.gameState.settings = GameModes.normalizeSettings(room.gameState.settings);
+      if (!room.gameState.eliminatedIds) room.gameState.eliminatedIds = [];
+      if (room.gameState.challenge === undefined) room.gameState.challenge = null;
+    }
     roomManager.rooms.set(code, room);
     restoredRoomCount++;
   }
@@ -1441,6 +1566,9 @@ function gracefulShutdown(signal) {
   clearInterval(saveInterval);
   statePersistence.saveState(roomManager.rooms);
   statsStore.saveNow();
+  progressStore.saveNow();
+  cloudSync.flush().catch(() => {}); // best-effort final MongoDB mirror
+  progressStore.saveNow();
   server.close(() => {
     console.log('[shutdown] HTTP server closed');
     process.exit(0);

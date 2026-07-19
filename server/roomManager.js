@@ -4,6 +4,7 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 const crypto = require('crypto');
+const GameModes = require('../public/shared/game-modes');
 
 /** @type {Map<string, RoomState>} */
 const rooms = new Map();
@@ -14,7 +15,13 @@ const disconnectTimers = new Map(); // playerId → timeout
 /** @type {Map<string, NodeJS.Timeout>} */
 const roomCleanupTimers = new Map(); // roomCode → timeout
 
-const MAX_PLAYERS = 20;
+const MAX_PLAYERS = 20; // hard platform cap; rooms can set a lower settings.maxPlayers
+
+// Per-room player cap: host-configured, clamped to the platform cap
+function roomCapacity(room) {
+  const cap = Number(room.settings && room.settings.maxPlayers);
+  return Number.isFinite(cap) && cap >= 2 ? Math.min(cap, MAX_PLAYERS) : MAX_PLAYERS;
+}
 const RECONNECT_WINDOW_MS = 60_000; // 60 seconds
 const ROOM_CLEANUP_MS = 5 * 60_000; // 5 minutes
 
@@ -49,7 +56,7 @@ function addBot(roomCode) {
   const room = rooms.get(roomCode);
   if (!room) return { error: 'Room not found' };
   if (room.status !== 'lobby') return { error: 'Cannot add bots during a game' };
-  if (room.players.length >= MAX_PLAYERS) return { error: 'Room is full (max 20 players)' };
+  if (room.players.length >= roomCapacity(room)) return { error: `Room is full (max ${roomCapacity(room)} players)` };
 
   const used = new Set(room.players.map(p => p.nickname));
   const name = BOT_NAMES.find(n => !used.has(n)) ||
@@ -86,7 +93,7 @@ function createRoom(nickname, options = {}) {
     code: roomCode,
     hostId: playerId,
     status: 'lobby', // 'lobby' | 'playing'
-    settings: { stacking: false, jumpIn: false, sevenZero: false, drawToMatch: false },
+    settings: GameModes.modeDefaults(GameModes.DEFAULT_MODE),
     players: [player],
     gameState: null,
     isPrivate: options.isPrivate || false,
@@ -141,7 +148,7 @@ function joinRoom(roomCode, nickname, existingPlayerId, options = {}) {
     return { error: 'Game already in progress', canSpectate: true };
   }
 
-  if (room.players.length >= MAX_PLAYERS) return { error: 'Room is full (max 20 players)' };
+  if (room.players.length >= roomCapacity(room)) return { error: `Room is full (max ${roomCapacity(room)} players)` };
 
   // Allow duplicate nicknames — use the name exactly as provided.
   const playerId = generatePlayerId();
@@ -309,7 +316,8 @@ function getPublicRooms() {
         code: roomCode,
         hostNickname: room.players[0]?.nickname || 'Unknown',
         playerCount: room.players.filter(p => p.connected).length,
-        maxPlayers: MAX_PLAYERS,
+        maxPlayers: roomCapacity(room),
+        mode: (room.settings && room.settings.mode) || 'custom',
         status: room.status,
         createdAt: room.createdAt,
       });
@@ -332,5 +340,6 @@ module.exports = {
   scheduleRoomCleanup,
   cancelRoomCleanup,
   getPublicRooms,
+  roomCapacity,
   MAX_PLAYERS,
 };
