@@ -2886,4 +2886,45 @@
       $manageModal.style.display = 'none';
     });
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── Card Style Picker (Holo vs Classic UNO) ────────────────────────────────
+  // Per-player local preference — no server changes needed.
+  // ═══════════════════════════════════════════════════════════════════════════
+  const $cardStyleModal = document.getElementById('card-style-modal');
+  const $btnCardStyle = document.getElementById('btn-card-style');
+  const $btnCloseCardStyle = document.getElementById('btn-close-card-style');
+
+  function updateCardStyleUI() {
+    if (!$cardStyleModal) return;
+    const current = (typeof getCardVariant === 'function') ? getCardVariant() : 'holo';
+    $cardStyleModal.querySelectorAll('.card-style-option').forEach(opt => {
+      opt.classList.toggle('card-style-option--active', opt.dataset.variant === current);
+    });
+  }
+
+  if ($btnCardStyle) {
+    $btnCardStyle.addEventListener('click', () => {
+      updateCardStyleUI();
+      $cardStyleModal.style.display = 'flex';
+    });
+  }
+
+  if ($btnCloseCardStyle) {
+    $btnCloseCardStyle.addEventListener('click', () => {
+      $cardStyleModal.style.display = 'none';
+    });
+  }
+
+  if ($cardStyleModal) {
+    $cardStyleModal.querySelectorAll('.card-style-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const variant = opt.dataset.variant;
+        if (typeof setCardVariant === 'function') setCardVariant(variant);
+        updateCardStyleUI();
+        showToast(variant === 'classic' ? '🎴 Classic UNO cards activated!' : '🎴 Holo cards activated!');
+        $cardStyleModal.style.display = 'none';
+      });
+    });
+  }
 })();

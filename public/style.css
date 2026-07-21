@@ -3757,3 +3757,182 @@ body.in-game .app-bar { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .fx-gold-flash, .fx-crown { animation: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Card Style Picker
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.btn-card-style {
+  position: fixed;
+  bottom: 112px;
+  right: 16px;
+  z-index: 800;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  color: var(--steel-300);
+  font-size: 18px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s, transform 0.15s, border-color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.btn-card-style:hover {
+  background: var(--void-800);
+  color: #fff;
+  border-color: rgba(139, 147, 168, 0.4);
+}
+
+.btn-card-style:active {
+  transform: scale(0.92);
+}
+
+#game-screen.active .btn-card-style {
+  display: flex;
+}
+
+.card-style-modal-content {
+  max-width: 440px;
+}
+
+.card-style-desc {
+  font-size: 12.5px;
+  opacity: 0.6;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.card-style-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.card-style-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 12px;
+  border-radius: 16px;
+  border: 2px solid rgba(232, 235, 243, 0.1);
+  background: rgba(232, 235, 243, 0.03);
+  cursor: pointer;
+  transition: border-color 0.25s ease, background 0.25s ease, transform 0.15s ease, box-shadow 0.25s ease;
+  text-align: center;
+  font-family: inherit;
+  color: inherit;
+}
+
+.card-style-option:hover {
+  transform: translateY(-2px);
+  border-color: rgba(232, 235, 243, 0.25);
+}
+
+.card-style-option--active {
+  border-color: rgba(46, 232, 138, 0.65) !important;
+  background: rgba(46, 232, 138, 0.06);
+  box-shadow: 0 0 20px rgba(46, 232, 138, 0.15);
+}
+
+.card-style-preview {
+  width: 100%;
+  height: 110px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.card-style-preview--holo {
+  background: radial-gradient(circle at 50% 45%, #0c1220, #05070d);
+}
+
+.card-style-preview--classic {
+  background: radial-gradient(circle at 50% 45%, #1a3a1a, #0a160a);
+}
+
+/* Miniature preview cards */
+.csp-card {
+  width: 52px;
+  height: 74px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.csp-pip {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 900;
+  position: relative;
+  z-index: 1;
+}
+
+/* Holo preview card */
+.csp-holo {
+  background: linear-gradient(180deg, #1a2237 0%, #0a0e1c 100%);
+  border: 1.5px solid rgba(61, 157, 255, 0.5);
+  box-shadow: inset 0 0 20px rgba(61, 157, 255, 0.15), 0 0 12px rgba(61, 157, 255, 0.2);
+}
+
+.csp-holo .csp-pip {
+  color: #8ec4ff;
+  text-shadow: 0 0 10px rgba(61, 157, 255, 0.6);
+}
+
+/* Classic preview card */
+.csp-classic {
+  background: #ED1C24;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.csp-classic .csp-oval {
+  position: absolute;
+  width: 72%;
+  height: 78%;
+  border-radius: 50%;
+  background: #fff;
+  transform: rotate(-25deg);
+}
+
+.csp-classic .csp-pip {
+  color: #ED1C24;
+}
+
+.card-style-name {
+  font-size: 14px;
+  font-weight: 800;
+  font-family: var(--font-display);
+}
+
+.card-style-sub {
+  font-size: 11px;
+  opacity: 0.55;
+  line-height: 1.3;
+}
+
+.card-style-option--active .card-style-name {
+  color: #7df2b8;
+}
+
+@media (max-width: 420px) {
+  .card-style-grid { gap: 8px; }
+  .card-style-option { padding: 12px 8px; }
+  .card-style-preview { height: 90px; }
+  .csp-card { width: 44px; height: 62px; }
+  .csp-pip { font-size: 22px; }
+}

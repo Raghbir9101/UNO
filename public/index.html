@@ -300,9 +300,42 @@
       aria-label="Surrender and leave the game">🏳️</button>
     <button id="btn-emote" class="btn-emote" title="Send a reaction" aria-label="Send a reaction">😀</button>
     <div id="emote-picker" class="emote-picker" hidden></div>
+    <button id="btn-card-style" class="btn-card-style" title="Card Style" aria-label="Change card style">🎴</button>
     <button id="btn-sound" class="btn-sound" title="Toggle sound" aria-label="Toggle sound">🔊</button>
     <button id="btn-fullscreen" class="btn-fullscreen" title="Fullscreen / Landscape"
       aria-label="Toggle fullscreen">⛶</button>
+  </div>
+
+  <!-- Card Style Picker Modal -->
+  <div id="card-style-modal" class="modal" style="display: none;">
+    <div class="modal-content card-style-modal-content">
+      <div class="modal-header">
+        <h3>🎴 Card Style</h3>
+        <button id="btn-close-card-style" class="btn-close">✕</button>
+      </div>
+      <p class="card-style-desc">Choose how your cards look. This is a local preference — only you see the change.</p>
+      <div class="card-style-grid">
+        <button class="card-style-option" data-variant="holo" type="button">
+          <div class="card-style-preview card-style-preview--holo">
+            <div class="csp-card csp-holo">
+              <span class="csp-pip">7</span>
+            </div>
+          </div>
+          <span class="card-style-name">Holo</span>
+          <span class="card-style-sub">Dark obsidian with emissive glow</span>
+        </button>
+        <button class="card-style-option" data-variant="classic" type="button">
+          <div class="card-style-preview card-style-preview--classic">
+            <div class="csp-card csp-classic">
+              <div class="csp-oval"></div>
+              <span class="csp-pip">7</span>
+            </div>
+          </div>
+          <span class="card-style-name">Classic UNO</span>
+          <span class="card-style-sub">Original colors &amp; design</span>
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Manage Players Modal -->

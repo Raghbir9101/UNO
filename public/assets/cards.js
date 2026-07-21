@@ -44,6 +44,30 @@ function isWildCard(card) {
   return card.color === 'wild';
 }
 
+/* ── Classic UNO palette: the original card colors ─────────────────────────── */
+const ClassicCardColors = {
+  red:    { fill: '#ED1C24', dark: '#9B0000', light: '#FF6659', name: 'Red',    text: '#fff' },
+  blue:   { fill: '#0956BF', dark: '#003380', light: '#5B8FE8', name: 'Blue',   text: '#fff' },
+  green:  { fill: '#00A651', dark: '#006B33', light: '#4DD88A', name: 'Green',  text: '#fff' },
+  yellow: { fill: '#FFDE00', dark: '#BFA200', light: '#FFEB66', name: 'Yellow', text: '#222' },
+  wild:   { fill: '#222222', dark: '#111111', light: '#555555', name: 'Wild',   text: '#fff' },
+};
+
+/* Card variant: 'holo' (default dark obsidian) or 'classic' (original UNO).
+   Stored in localStorage, readable globally by the renderer. */
+let _cardVariant = (typeof localStorage !== 'undefined' && localStorage.getItem('uno_card_variant')) || 'holo';
+
+function getCardVariant() { return _cardVariant; }
+function setCardVariant(v) {
+  _cardVariant = (v === 'classic') ? 'classic' : 'holo';
+  if (typeof localStorage !== 'undefined') localStorage.setItem('uno_card_variant', _cardVariant);
+}
+
+/** Returns the active palette for the current variant. */
+function getActiveCardColors() {
+  return _cardVariant === 'classic' ? ClassicCardColors : CardColors;
+}
+
 // Avatar color palette for player chips — emissive hues that read on obsidian
 const AvatarColors = [
   '#ff3b5c', '#3d9dff', '#2ee88a', '#ffd23f',

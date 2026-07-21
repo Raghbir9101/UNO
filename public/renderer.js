@@ -127,7 +127,249 @@ const Renderer = (() => {
     ctx.fillRect(x, y, w, h);
   }
 
+  // ── Classic UNO card renderer ───────────────────────────────────────────────
+  // Authentic UNO design: white border, large white diamond (rotated 45°),
+  // inner colored diamond, bold center symbol, corner pips in colored ovals.
+
+  function _drawOval(ctx, cx, cy, rx, ry, angle) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    ctx.restore();
+  }
+
+  // Draw a diamond (rhombus) path centered at (cx, cy) with half-widths (hw, hh)
+  function _diamondPath(ctx, cx, cy, hw, hh) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - hh);      // top
+    ctx.lineTo(cx + hw, cy);      // right
+    ctx.lineTo(cx, cy + hh);      // bottom
+    ctx.lineTo(cx - hw, cy);      // left
+    ctx.closePath();
+  }
+
+  // Draw a reverse symbol (two curved arrows forming a loop)
+  function _drawReverseSymbol(ctx, cx, cy, size, color, strokeColor) {
+    const r = size * 0.38;
+    const aw = size * 0.16; // arrowhead width
+    const ah = size * 0.2;  // arrowhead height
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.lineWidth = size * 0.1;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Top arrow (curves right-to-left)
+    ctx.strokeStyle = strokeColor; ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, -Math.PI * 0.85, -Math.PI * 0.15);
+    ctx.stroke();
+    // Arrowhead at start
+    const a1x = r * Math.cos(-Math.PI * 0.85), a1y = r * Math.sin(-Math.PI * 0.85);
+    ctx.beginPath();
+    ctx.moveTo(a1x - ah * 0.6, a1y - aw);
+    ctx.lineTo(a1x + ah * 0.5, a1y);
+    ctx.lineTo(a1x - ah * 0.6, a1y + aw);
+    ctx.closePath(); ctx.fill();
+
+    // Bottom arrow (curves left-to-right)
+    ctx.beginPath();
+    ctx.arc(0, 0, r, Math.PI * 0.15, Math.PI * 0.85);
+    ctx.stroke();
+    // Arrowhead at start
+    const a2x = r * Math.cos(Math.PI * 0.15), a2y = r * Math.sin(Math.PI * 0.15);
+    ctx.beginPath();
+    ctx.moveTo(a2x + ah * 0.6, a2y + aw);
+    ctx.lineTo(a2x - ah * 0.5, a2y);
+    ctx.lineTo(a2x + ah * 0.6, a2y - aw);
+    ctx.closePath(); ctx.fill();
+
+    ctx.restore();
+  }
+
+  // Draw a skip symbol (circle with diagonal line)
+  function _drawSkipSymbol(ctx, cx, cy, size, color, strokeColor) {
+    const r = size * 0.35;
+    const lw = size * 0.1;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = strokeColor;
+    ctx.fillStyle = 'none';
+
+    // Outer circle
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Diagonal line
+    const dx = r * Math.cos(Math.PI * 0.25);
+    const dy = r * Math.sin(Math.PI * 0.25);
+    ctx.beginPath();
+    ctx.moveTo(-dx, -dy);
+    ctx.lineTo(dx, dy);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // Small 4-color UNO circle logo (used on wild cards)
+  function _unoCircle(ctx, cx, cy, r) {
+    const colors = ['#ED1C24', '#FFDE00', '#0956BF', '#00A651'];
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, (i * Math.PI / 2) - Math.PI / 2, ((i + 1) * Math.PI / 2) - Math.PI / 2);
+      ctx.closePath();
+      ctx.fillStyle = colors[i];
+      ctx.fill();
+    }
+    // White ring
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = r * 0.15; ctx.stroke();
+  }
+
+  function drawCardClassic(ctx, card, x, y, w, h, opts = {}) {
+    const { selected, faceUp = true, playable = false } = opts;
+    const rd = w * 0.12;
+    ctx.save();
+    if (selected) y -= vs(20);
+
+    if (!faceUp) { _cardBackClassic(ctx, x, y, w, h); ctx.restore(); return; }
+
+    const ci = isWildCard(card) ? CardColors.wild : (CardColors[card.color] || CardColors.wild);
+
+    // Shadow + white base
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = vs(8);
+    ctx.shadowOffsetY = vs(3);
+    rr(ctx, x, y, w, h, rd); ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.restore();
+
+    // Color fill
+    const m = w * 0.05;
+    rr(ctx, x + m, y + m, w - m * 2, h - m * 2, rd * 0.7);
+    ctx.fillStyle = ci.fill; ctx.fill();
+
+    // Wild stripes
+    if (isWildCard(card)) {
+      ctx.save();
+      rr(ctx, x + m, y + m, w - m * 2, h - m * 2, rd * 0.7); ctx.clip();
+      const cols = ['#E53935', '#FDD835', '#43A047', '#1E88E5'];
+      const sw = w * 0.35;
+      for (let i = 0; i < 4; i++) {
+        ctx.save(); ctx.fillStyle = cols[i]; ctx.globalAlpha = 0.55;
+        ctx.translate(x + w * 0.1 + i * sw * 0.6, y + h / 2);
+        ctx.rotate(0.45);
+        ctx.fillRect(-sw / 2, -h, sw, h * 2.2);
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+
+    // White ellipse center
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + h / 2, w * 0.32, h * 0.28, -0.3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fill();
+    ctx.restore();
+
+    // Center text
+    const txt = getCardDisplayText(card);
+    const fs = card.type === 'number' ? w * 0.5 : w * 0.38;
+    ctx.fillStyle = ci.text || '#fff';
+    ctx.font = `900 ${fs}px ${font}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = isWildCard(card) ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.25)';
+    ctx.shadowBlur = vs(4);
+    ctx.fillText(txt, x + w / 2, y + h / 2);
+    ctx.shadowBlur = 0;
+
+    // Corners
+    const cs = w * 0.24;
+    ctx.font = `800 ${cs}px ${font}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillStyle = ci.text || '#fff';
+    ctx.fillText(txt, x + w * 0.22, y + h * 0.06);
+    ctx.save();
+    ctx.translate(x + w * 0.78, y + h * 0.94);
+    ctx.rotate(Math.PI);
+    ctx.textBaseline = 'top';
+    ctx.fillText(txt, 0, 0);
+    ctx.restore();
+
+    // Border
+    rr(ctx, x, y, w, h, rd);
+    ctx.strokeStyle = selected ? '#FFD700' : 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = selected ? vs(3) : vs(1);
+    ctx.stroke();
+
+    if (selected) {
+      ctx.save(); ctx.shadowColor = '#FFD700'; ctx.shadowBlur = vs(18);
+      rr(ctx, x - vs(2), y - vs(2), w + vs(4), h + vs(4), rd + vs(2));
+      ctx.strokeStyle = 'rgba(255,215,0,0.7)'; ctx.lineWidth = vs(2); ctx.stroke();
+      ctx.restore();
+    }
+
+    // Playable glow
+    if (playable && !selected) {
+      const breathe = osc(318);
+      ctx.save(); ctx.globalAlpha = 0.35 + breathe * 0.5;
+      ctx.shadowColor = isWildCard(card) ? '#fff' : ci.fill; ctx.shadowBlur = vs(14);
+      rr(ctx, x, y, w, h, rd);
+      ctx.strokeStyle = isWildCard(card) ? '#fff' : ci.fill; ctx.lineWidth = vs(2.5); ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  function _cardBackClassic(ctx, x, y, w, h) {
+    const rd = w * 0.12;
+    const mini = w < vs(34);
+
+    ctx.save();
+    if (!mini) {
+      ctx.shadowColor = 'rgba(0,0,0,0.4)'; ctx.shadowBlur = vs(6); ctx.shadowOffsetY = vs(2);
+    }
+    rr(ctx, x, y, w, h, rd); ctx.fillStyle = '#1b1b35'; ctx.fill();
+    ctx.restore();
+
+    // Crosshatch
+    if (!mini) {
+      ctx.save(); rr(ctx, x, y, w, h, rd); ctx.clip();
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = vs(1);
+      for (let i = -h; i < w + h; i += vs(5)) {
+        ctx.beginPath(); ctx.moveTo(x + i, y); ctx.lineTo(x + i - h, y + h); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x + i, y); ctx.lineTo(x + i + h, y + h); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // Red border inset
+    const bm = w * 0.1;
+    rr(ctx, x + bm, y + bm, w - bm * 2, h - bm * 2, rd * 0.5);
+    ctx.strokeStyle = '#D32F2F'; ctx.lineWidth = vs(2.5); ctx.stroke();
+
+    // UNO text
+    ctx.save(); ctx.translate(x + w / 2, y + h / 2); ctx.rotate(-0.25);
+    ctx.fillStyle = '#FFCA28'; ctx.font = `900 ${w * 0.28}px ${font}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = vs(3);
+    ctx.fillText('UNO', 0, 0);
+    ctx.restore();
+
+    rr(ctx, x, y, w, h, rd);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = vs(1); ctx.stroke();
+  }
+
+
   function drawCard(ctx, card, x, y, w, h, opts = {}) {
+    // Variant dispatch: classic renderer has its own full pipeline
+    if (typeof getCardVariant === 'function' && getCardVariant() === 'classic') {
+      return drawCardClassic(ctx, card, x, y, w, h, opts);
+    }
     const { selected, faceUp = true, playable = false, foilPhase = 0 } = opts;
     const rd = w * 0.12;
     ctx.save();
@@ -242,6 +484,9 @@ const Renderer = (() => {
   }
 
   function _cardBack(ctx, x, y, w, h) {
+    if (typeof getCardVariant === 'function' && getCardVariant() === 'classic') {
+      return _cardBackClassic(ctx, x, y, w, h);
+    }
     const rd = w * 0.12;
     const mini = w < vs(34); // opponent minis skip the expensive touches
     const BT = activeTheme().back;
@@ -928,11 +1173,12 @@ const Renderer = (() => {
     ctx.fillText('Pick a color', W / 2, H * 0.33);
 
     const sz = vs(60), gap = vs(12);
+    const _ac = (typeof getActiveCardColors === 'function') ? getActiveCardColors() : CardColors;
     const cols = [
-      { k: 'red', f: '#ff3b5c', l: 'Red' },
-      { k: 'blue', f: '#3d9dff', l: 'Blue' },
-      { k: 'green', f: '#2ee88a', l: 'Green' },
-      { k: 'yellow', f: '#ffd23f', l: 'Yellow' },
+      { k: 'red', f: _ac.red.fill, l: 'Red' },
+      { k: 'blue', f: _ac.blue.fill, l: 'Blue' },
+      { k: 'green', f: _ac.green.fill, l: 'Green' },
+      { k: 'yellow', f: _ac.yellow.fill, l: 'Yellow' },
     ];
     const tw = sz * 4 + gap * 3;
     const sx = (W - tw) / 2, sy = H * 0.40;
