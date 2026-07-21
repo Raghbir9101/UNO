@@ -56,7 +56,7 @@
   <script defer src="sounds.js?v=1"></script>
   <script defer src="renderer.js?v=40"></script>
   <script defer src="game.js?v=39"></script>
-  <script defer src="main.js?v=45"></script>
+  <script defer src="main.js?v=47"></script>
 
   <style>
     /* Visually hides labels for sighted users while keeping them for screen readers */
@@ -300,7 +300,7 @@
       aria-label="Surrender and leave the game">🏳️</button>
     <button id="btn-emote" class="btn-emote" title="Send a reaction" aria-label="Send a reaction">😀</button>
     <div id="emote-picker" class="emote-picker" hidden></div>
-    <button id="btn-card-style" class="btn-card-style" title="Card Style" aria-label="Change card style">🎴</button>
+    <button id="btn-card-style" class="btn-card-style" title="Card Style" aria-label="Change card style" style="z-index: 9999; pointer-events: auto;" onclick="document.getElementById('card-style-modal').style.display='flex'; if(typeof updateCardStyleUI === 'function') updateCardStyleUI();">🎴</button>
     <button id="btn-sound" class="btn-sound" title="Toggle sound" aria-label="Toggle sound">🔊</button>
     <button id="btn-fullscreen" class="btn-fullscreen" title="Fullscreen / Landscape"
       aria-label="Toggle fullscreen">⛶</button>
@@ -311,7 +311,7 @@
     <div class="modal-content card-style-modal-content">
       <div class="modal-header">
         <h3>🎴 Card Style</h3>
-        <button id="btn-close-card-style" class="btn-close">✕</button>
+        <button id="btn-close-card-style" class="btn-close" onclick="document.getElementById('card-style-modal').style.display='none'">✕</button>
       </div>
       <p class="card-style-desc">Choose how your cards look. This is a local preference — only you see the change.</p>
       <div class="card-style-grid">
