@@ -1562,7 +1562,7 @@
     const p = players.find(pl => pl.id === data.playerId);
     const name = p ? p.nickname : 'Player';
     if (data.playerId !== myPlayerId) {
-      showToast(`${name} drew ${data.count} card${data.count > 1 ? 's' : ''}`);
+      showToast(`${name} drew ${data.count} card${data.count === 1 ? '' : 's'}`);
     }
 
     const toSelf = data.playerId === myPlayerId;

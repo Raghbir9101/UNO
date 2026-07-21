@@ -205,6 +205,11 @@ function getCurrentPlayerId(state) {
 function ensureDrawPile(state, needed) {
   if (state.drawPile.length >= needed) return;
 
+  // Nothing recyclable: the discard holds only the face-up top card (or is
+  // somehow empty). Popping here would set discardTop to undefined and corrupt
+  // every later playability check, so bail and let drawCards short-draw.
+  if (state.discardPile.length <= 1) return;
+
   // Take all discard except top card
   const top = state.discardPile.pop();
   const reshuffled = shuffle(state.discardPile);

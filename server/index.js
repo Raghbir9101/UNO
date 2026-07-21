@@ -490,7 +490,9 @@ function performAutoAction(roomCode, currentId, { isBot } = {}) {
 
   // Shared: announce a voluntary/forced draw + handle elimination and win
   const emitDrawOutcome = (result) => {
-    const drawnCount = result.drawn?.length || 1;
+    // `?.length || 1` reported a phantom card when the deck ran dry and drawn
+    // was [] — the client then animated a card the player never received.
+    const drawnCount = result.drawn ? result.drawn.length : 1;
     io.to(roomCode).emit('player_drew', { playerId: currentId, count: drawnCount });
     setAnimationHold(r, drawAnimMs(drawnCount));
     if (result.eliminated) handleElimination(roomCode, r, result.eliminated);
