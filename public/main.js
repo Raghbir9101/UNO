@@ -79,6 +79,20 @@
   let _lastServerSeq = 0;        // last server-issued room_updated seq; rejects stale events
   let _winnerFallbackTimer = null; // shows winner from game_state if player_won was missed
 
+  // Every room keeps its own updateSeq starting at 0, so the stale-event guard
+  // has to be zeroed whenever we change rooms — otherwise a leftover high seq
+  // from the previous room silently drops the new room's room_updated events,
+  // leaving the player list empty, hostId null (no host controls) and the
+  // settings panel showing defaults. Call this on every room entry and exit.
+  function resetRoomState() {
+    currentRoomCode = null;
+    myPlayerId = null;
+    hostId = null;
+    isHost = false;
+    players = [];
+    _lastServerSeq = 0;
+  }
+
   // ── Ping measurement ───────────────────────────────────────────────────────
   let _pingLatency = null;
   let _pingInterval = null;
@@ -658,9 +672,15 @@
       $btnCreate.disabled = false;
       if (res.error) return showToast(res.error, true);
 
+      resetRoomState(); // new room → new seq counter
       myPlayerId = res.playerId;
       myNickname = res.nickname;
       currentRoomCode = res.roomCode;
+      hostId = res.hostId;
+      isHost = myPlayerId === hostId;
+      if (res.players) players = res.players;
+      if (res.settings) applySettings(res.settings);
+      renderPlayerList();
 
       // Persist session so refresh reconnects automatically
       sessionStorage.setItem('uno_session', JSON.stringify({
@@ -697,6 +717,7 @@
         return showToast(res.error, true);
       }
 
+      resetRoomState(); // new room → new seq counter
       myPlayerId = res.playerId;
       myNickname = res.nickname;
       currentRoomCode = res.roomCode;
@@ -776,6 +797,9 @@
 
   // ── Lobby: Join Room ───────────────────────────────────────────────────────
   function handleJoinSuccess(res, code) {
+    // A different room means the server's seq counter restarted at 0 — clear the
+    // stale-event guard. Reconnects into the same room keep theirs.
+    if (code !== currentRoomCode) resetRoomState();
     myPlayerId = res.playerId;
     myNickname = res.nickname;
     currentRoomCode = code;
@@ -847,10 +871,7 @@
 
     socket.emit('leave_room', { roomCode: currentRoomCode }, (res) => {
       if (res?.success) {
-        currentRoomCode = null;
-        myPlayerId = null;
-        players = [];
-        _lastServerSeq = 0;
+        resetRoomState();
         sessionStorage.removeItem('uno_session');
         history.replaceState({}, '', window.location.pathname);
         showScreen($lobby);
@@ -1163,6 +1184,7 @@
 
       if (res.error) {
         sessionStorage.removeItem('uno_session');
+        resetRoomState(); // room gone — don't carry its seq into the next one
         showToast(`Could not reconnect: ${res.error}`, true);
         showScreen($lobby);
         startPingMonitoring();
@@ -1246,11 +1268,7 @@
 
   socket.on('kicked_from_room', () => {
     showToast('You were kicked from the room', true);
-    myPlayerId = null;
-    currentRoomCode = null;
-    hostId = null;
-    isHost = false;
-    players = [];
+    resetRoomState();
     history.replaceState({}, '', window.location.pathname); // clean the URL
     showScreen($lobby);
   });
@@ -1764,6 +1782,8 @@
     if (!currentRoomCode || !myNickname) return; // handled by sessionStorage handler above
     socket.emit('join_room', { roomCode: currentRoomCode, nickname: myNickname, playerId: myPlayerId, spectator: Game.isSpectator, godPassword: Game.isGodMode ? 'admin' : '', uid: myUid, picture: myPicture() }, (res) => {
       if (res?.error) {
+        resetRoomState(); // room gone — don't carry its seq into the next one
+        sessionStorage.removeItem('uno_session');
         showScreen($lobby);
         showToast('Could not reconnect: ' + res.error, true);
         startPingMonitoring();
@@ -1850,10 +1870,7 @@
       if (res?.success) {
         Game.resetGame();
         Game.destroy();
-        currentRoomCode = null;
-        myPlayerId = null;
-        players = [];
-        _lastServerSeq = 0;
+        resetRoomState();
         sessionStorage.removeItem('uno_session');
         history.replaceState({}, '', window.location.pathname);
         showScreen($lobby);

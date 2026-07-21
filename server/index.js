@@ -332,6 +332,23 @@ function releaseRoomLock(roomCode) {
   delete _roomLocks[roomCode];
 }
 
+// Run a game-logic mutation under the room lock, releasing it even if the
+// mutation throws. A leaked lock is permanent and silent: every later
+// play/draw/pass in that room hits the `already locked` branch and is dropped
+// with no error to the client, so the table just freezes until a restart.
+// Returns null when the lock was already held (a genuinely concurrent event).
+function withRoomLock(roomCode, label, fn) {
+  if (!acquireRoomLock(roomCode)) return null;
+  try {
+    return fn();
+  } catch (err) {
+    console.error(`[${label}] room ${roomCode} threw:`, err);
+    return { error: 'Something went wrong — try again' };
+  } finally {
+    releaseRoomLock(roomCode);
+  }
+}
+
 // ─── Auto-play: AFK players (after 30s) and bots (after a short delay) ───────
 const _autoPlayTimers = {};  // roomCode → timeout handle
 
@@ -883,7 +900,25 @@ io.on('connection', (socket) => {
     socket.join(roomCode);
     socket.data = { roomCode, playerId };
 
-    callback({ roomCode, playerId, nickname: player.nickname });
+    // Return the full room state, not just the identity — the waiting room used
+    // to be populated exclusively by the room_updated broadcast, so anything
+    // that dropped it left the creator with an empty player list and no host
+    // controls (they are the host).
+    const room = roomManager.getRoom(roomCode);
+    callback({
+      roomCode,
+      playerId,
+      nickname: player.nickname,
+      hostId: room.hostId,
+      settings: room.settings,
+      players: room.players.map(p => ({
+        id: p.id,
+        nickname: p.nickname,
+        connected: p.connected,
+        isBot: !!p.isBot,
+        picture: p.picture || null,
+      })),
+    });
     broadcastRoomUpdate(roomCode);
     saveStateSoon(); // Save after room creation
   });
@@ -1282,9 +1317,9 @@ io.on('connection', (socket) => {
 
     const playerId = socket.data?.playerId;
 
-    if (!acquireRoomLock(roomCode)) return;
-    const result = gameLogic.playCard(room.gameState, playerId, cardId, chosenColor, swapTargetId);
-    releaseRoomLock(roomCode);
+    const result = withRoomLock(roomCode, 'play_card', () =>
+      gameLogic.playCard(room.gameState, playerId, cardId, chosenColor, swapTargetId));
+    if (!result) return; // concurrent action — drop
 
     if (result.error) {
       return socket.emit('error', { message: result.error });
@@ -1308,9 +1343,9 @@ io.on('connection', (socket) => {
 
     const playerId = socket.data?.playerId;
 
-    if (!acquireRoomLock(roomCode)) return;
-    const result = gameLogic.challengeWild4(room.gameState, playerId);
-    releaseRoomLock(roomCode);
+    const result = withRoomLock(roomCode, 'challenge_wild4', () =>
+      gameLogic.challengeWild4(room.gameState, playerId));
+    if (!result) return; // concurrent action — drop
 
     if (result.error) {
       return socket.emit('error', { message: result.error });
@@ -1358,10 +1393,9 @@ io.on('connection', (socket) => {
     const playerId = socket.data?.playerId;
 
     // Serialize concurrent events — silently drop duplicate actions
-    if (!acquireRoomLock(roomCode)) return;
-
-    const result = gameLogic.playerDrawCard(room.gameState, playerId);
-    releaseRoomLock(roomCode);
+    const result = withRoomLock(roomCode, 'draw_card', () =>
+      gameLogic.playerDrawCard(room.gameState, playerId));
+    if (!result) return;
 
     if (result.error) {
       return socket.emit('error', { message: result.error });
@@ -1394,9 +1428,9 @@ io.on('connection', (socket) => {
 
     const playerId = socket.data?.playerId;
 
-    if (!acquireRoomLock(roomCode)) return;
-    const result = gameLogic.passTurn(room.gameState, playerId);
-    releaseRoomLock(roomCode);
+    const result = withRoomLock(roomCode, 'pass_turn', () =>
+      gameLogic.passTurn(room.gameState, playerId));
+    if (!result) return; // concurrent action — drop
 
     if (result.error) {
       return socket.emit('error', { message: result.error });
@@ -1494,14 +1528,22 @@ io.on('connection', (socket) => {
     const info = roomManager.getPlayerBySocket(socket.id);
     if (!info) return;
 
-    const { roomCode, player } = info;
+    const { roomCode, room, player } = info;
     // Mark as disconnected but keep in room (allows reconnection on refresh)
     player.connected = false;
     player.socketId = null;
     broadcastRoomUpdate(roomCode);
 
-    // Schedule room cleanup after 2 minutes if no one reconnects
-    roomManager.scheduleRoomCleanup(roomCode, 120000);
+    // Schedule room cleanup after 2 minutes — but only once the room is empty of
+    // live humans. Arming it on every disconnect deleted rooms out from under an
+    // active game: only join_room cancels the timer, and players already in the
+    // room never re-join, so one person closing their tab killed the table.
+    // Bots are always connected:true, so they can't hold a dead room open.
+    const humansLeft = room.players.some(p => !p.isBot && p.connected) ||
+      (room.spectators || []).some(s => s.connected);
+    if (!humansLeft) {
+      roomManager.scheduleRoomCleanup(roomCode, 120000);
+    }
   });
 });
 
