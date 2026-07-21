@@ -239,7 +239,8 @@ const Renderer = (() => {
 
     if (!faceUp) { _cardBackClassic(ctx, x, y, w, h); ctx.restore(); return; }
 
-    const ci = isWildCard(card) ? CardColors.wild : (CardColors[card.color] || CardColors.wild);
+    const CC = (typeof ClassicCardColors !== 'undefined') ? ClassicCardColors : CardColors;
+    const ci = isWildCard(card) ? CC.wild : (CC[card.color] || CC.wild);
 
     // Shadow + white base
     ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = vs(8);
@@ -378,7 +379,8 @@ const Renderer = (() => {
     if (!faceUp) { _cardBack(ctx, x, y, w, h); ctx.restore(); return; }
 
     const wild = isWildCard(card);
-    const ci = wild ? CardColors.wild : (CardColors[card.color] || CardColors.wild);
+    const _CC = (typeof getActiveCardColors === 'function') ? getActiveCardColors() : CardColors;
+    const ci = wild ? _CC.wild : (_CC[card.color] || _CC.wild);
     const accent = wild ? '#e8ebf3' : ci.fill;
 
     // Drop shadow onto the table
