@@ -865,7 +865,13 @@ function getSocketById(socketId) {
 // ─── Quick Emotes ─────────────────────────────────────────────────────────────
 // Whitelisted reactions only — no free text, so no moderation surface.
 // Keep in sync with EMOTES in public/main.js.
-const EMOTES = ['👍', '😂', '😮', '😭', '😡', '🎉', '⏰', '🔥'];
+const EMOTES = [
+  '👍', '👏', '😂', '😮',
+  '🤯', '😭', '😡', '💀',
+  '🎉', '🔥', '😎', '🫡',
+  '🤔', '🙏', '🍀', '⏰',
+];
+
 const EMOTE_COOLDOWN_MS = 1500;
 
 // ─── Socket.io Events ────────────────────────────────────────────────────────

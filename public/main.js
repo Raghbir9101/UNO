@@ -2741,6 +2741,8 @@
     }
 
     $postgameModal.style.display = 'flex';
+    // Initialize post-game ad after modal is shown
+    initPostgameAd();
   }
 
   socket.on('game_over_stats', (data) => {
@@ -2779,7 +2781,12 @@
 
   // ── Quick Emotes (in-game reactions) ───────────────────────────────────────
   // Whitelisted reactions only — keep in sync with EMOTES in server/index.js.
-  const EMOTES = ['👍', '😂', '😮', '😭', '😡', '🎉', '⏰', '🔥'];
+  const EMOTES = [
+    '👍', '👏', '😂', '😮',
+    '🤯', '😭', '😡', '💀',
+    '🎉', '🔥', '😎', '🫡',
+    '🤔', '🙏', '🍀', '⏰',
+  ];
   const EMOTE_COOLDOWN_MS = 1500; // matches server rate limit
   const $btnEmote = document.getElementById('btn-emote');
   const $emotePicker = document.getElementById('emote-picker');
@@ -2944,4 +2951,48 @@
       });
     });
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── AdSense Integration ────────────────────────────────────────────────────
+  // Non-intrusive ads shown in lobby and after games end
+  // ═══════════════════════════════════════════════════════════════════════════
+  let _lobbyAdInitialized = false;
+  let _postgameAdInitialized = false;
+
+  // Initialize lobby ad when user first visits lobby
+  function initLobbyAd() {
+    if (_lobbyAdInitialized) return;
+    try {
+      const adElements = document.querySelectorAll('.lobby-ad-container .adsbygoogle');
+      adElements.forEach(ad => {
+        if (!ad.dataset.adsbygoogleStatus) {
+          (window.adsbygoogle = window.adsbygoogle || []).push({});
+        }
+      });
+      _lobbyAdInitialized = true;
+    } catch (e) {
+      console.warn('[AdSense] Lobby ad init failed:', e);
+    }
+  }
+
+  // Initialize post-game ad when modal is shown
+  function initPostgameAd() {
+    if (_postgameAdInitialized) return;
+    try {
+      const adElements = document.querySelectorAll('.postgame-ad-container .adsbygoogle');
+      adElements.forEach(ad => {
+        if (!ad.dataset.adsbygoogleStatus) {
+          (window.adsbygoogle = window.adsbygoogle || []).push({});
+        }
+      });
+      _postgameAdInitialized = true;
+    } catch (e) {
+      console.warn('[AdSense] Post-game ad init failed:', e);
+    }
+  }
+
+  // Initialize lobby ad after page load
+  window.addEventListener('load', () => {
+    setTimeout(initLobbyAd, 2000); // Delay to not interfere with game load
+  });
 })();
