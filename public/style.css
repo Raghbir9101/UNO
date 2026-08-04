@@ -1553,6 +1553,28 @@ input[type="password"]:focus {
   display: flex;
 }
 
+/* Fine sits above Give; Unlock replaces Give for spectators without God Mode,
+   so the two can share the same slot. */
+.btn-god-fine {
+  bottom: 160px;
+  border-color: rgba(255, 59, 92, 0.45);
+  color: #ff6b8a;
+}
+
+.btn-god-fine:hover {
+  border-color: rgba(255, 59, 92, 0.7);
+}
+
+.btn-god-unlock {
+  bottom: 112px;
+  border-color: rgba(0, 229, 255, 0.4);
+  color: #5ee7ff;
+}
+
+.btn-god-unlock:hover {
+  border-color: rgba(0, 229, 255, 0.7);
+}
+
 /* ── Card Style Button ─────────────────────────────────────────────────────── */
 .btn-card-style {
   position: fixed;
@@ -2526,6 +2548,27 @@ body.landscape .emote-picker {
   left: auto;
   top: 112px;
   right: 16px;
+}
+
+/* Landscape: God Mode tools follow the left rail into the top-right corner */
+body.landscape .btn-god-give {
+  bottom: auto;
+  left: auto;
+  top: 160px;
+  right: 16px;
+  transform: rotate(-90deg);
+}
+
+body.landscape .btn-god-give:active {
+  transform: rotate(-90deg) scale(0.92);
+}
+
+body.landscape .btn-god-fine {
+  top: 208px;
+}
+
+body.landscape .btn-god-unlock {
+  top: 160px;
 }
 
 /* Landscape: sound button follows fullscreen into the top-left corner */

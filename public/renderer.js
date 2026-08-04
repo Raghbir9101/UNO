@@ -31,8 +31,6 @@ const Renderer = (() => {
 
     // Diamond size clamped so rotated squares stay inside the side margin
     let sideBtnSz = cw * 0.45;
-    const halfDiag = sideBtnSz * 0.707;
-    const clear = vs(12) + halfDiag;
     const maxLeft = dx - SW;           // room left of draw pile inside side margin
     const maxRight = (W - SW) - (dcx + cw);
     const maxBtn = Math.min(maxLeft, maxRight) / 0.707 - vs(12) / 0.707;
@@ -56,7 +54,7 @@ const Renderer = (() => {
       ciCY: CY - vs(36),
       passCX: dcx + cw + btnClear,
       passCY: CY + vs(36),
-      // Labels under piles — split so they never stack on each other
+      // One baseline under the piles; each label sits under its own pile
       countY: dy + ch + vs(16),
       dirY: dy + ch + vs(16),
     };
@@ -998,47 +996,52 @@ const Renderer = (() => {
     const pulse3 = osc(180);
 
     // ── UNO Button (Bottom Left 4-color Diamond) ──────────────────────────
-    ctx.save();
-    ctx.translate(unoCX, unoCY);
-    if (state.unoClickTime && Date.now() - state.unoClickTime < 200) ctx.scale(0.7, 0.7);
-    ctx.rotate(Math.PI / 4);
-    ctx.beginPath();
-    rr(ctx, -sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz, sideBtnSz, vs(6));
-    ctx.clip();
-    const gOp = state.unoHighlight ? 0.95 : 0.35;
-    ctx.fillStyle = `rgba(46, 232, 138, ${gOp})`; ctx.fillRect(-sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz / 2, sideBtnSz / 2);
-    ctx.fillStyle = `rgba(255, 59, 92, ${gOp})`; ctx.fillRect(0, -sideBtnSz / 2, sideBtnSz / 2, sideBtnSz / 2);
-    ctx.fillStyle = `rgba(61, 157, 255, ${gOp})`; ctx.fillRect(0, 0, sideBtnSz / 2, sideBtnSz / 2);
-    ctx.fillStyle = `rgba(255, 210, 63, ${gOp})`; ctx.fillRect(-sideBtnSz / 2, 0, sideBtnSz / 2, sideBtnSz / 2);
-    rr(ctx, -sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz, sideBtnSz, vs(6));
-    ctx.strokeStyle = state.unoHighlight ? 'rgba(255,255,255,0.9)' : 'rgba(5,7,13,0.7)';
-    ctx.lineWidth = vs(3); ctx.stroke();
-    ctx.restore();
+    // A plain spectator can never call UNO, so the diamond is left out rather
+    // than drawn dead. God Mode keeps it as the shortcut for fining a player.
+    const showUno = !state.isSpectator || state.isGodMode;
+    if (showUno) {
+      ctx.save();
+      ctx.translate(unoCX, unoCY);
+      if (state.unoClickTime && Date.now() - state.unoClickTime < 200) ctx.scale(0.7, 0.7);
+      ctx.rotate(Math.PI / 4);
+      ctx.beginPath();
+      rr(ctx, -sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz, sideBtnSz, vs(6));
+      ctx.clip();
+      const gOp = state.unoHighlight ? 0.95 : 0.35;
+      ctx.fillStyle = `rgba(46, 232, 138, ${gOp})`; ctx.fillRect(-sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz / 2, sideBtnSz / 2);
+      ctx.fillStyle = `rgba(255, 59, 92, ${gOp})`; ctx.fillRect(0, -sideBtnSz / 2, sideBtnSz / 2, sideBtnSz / 2);
+      ctx.fillStyle = `rgba(61, 157, 255, ${gOp})`; ctx.fillRect(0, 0, sideBtnSz / 2, sideBtnSz / 2);
+      ctx.fillStyle = `rgba(255, 210, 63, ${gOp})`; ctx.fillRect(-sideBtnSz / 2, 0, sideBtnSz / 2, sideBtnSz / 2);
+      rr(ctx, -sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz, sideBtnSz, vs(6));
+      ctx.strokeStyle = state.unoHighlight ? 'rgba(255,255,255,0.9)' : 'rgba(5,7,13,0.7)';
+      ctx.lineWidth = vs(3); ctx.stroke();
+      ctx.restore();
 
-    ctx.save();
-    ctx.translate(unoCX, unoCY);
-    if (state.unoClickTime && Date.now() - state.unoClickTime < 200) ctx.scale(0.7, 0.7);
-    ctx.rotate(Math.PI / 4);
-    if (state.unoHighlight) {
-      ctx.shadowColor = '#fff'; ctx.shadowBlur = vs(10 + pulse3 * 10);
-    } else {
-      ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = vs(6);
+      ctx.save();
+      ctx.translate(unoCX, unoCY);
+      if (state.unoClickTime && Date.now() - state.unoClickTime < 200) ctx.scale(0.7, 0.7);
+      ctx.rotate(Math.PI / 4);
+      if (state.unoHighlight) {
+        ctx.shadowColor = '#fff'; ctx.shadowBlur = vs(10 + pulse3 * 10);
+      } else {
+        ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = vs(6);
+      }
+      rr(ctx, -sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz, sideBtnSz, vs(6));
+      ctx.strokeStyle = 'rgba(5,7,13,0.8)'; ctx.lineWidth = vs(2); ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(unoCX, unoCY);
+      if (state.unoClickTime && Date.now() - state.unoClickTime < 200) ctx.scale(0.7, 0.7);
+      ctx.fillStyle = state.unoHighlight ? '#fff' : 'rgba(255,255,255,0.6)';
+      ctx.font = `700 ${vs(14)}px ${displayFont}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = vs(3);
+      ctx.fillText(state.isGodMode ? 'FINE' : 'UNO!', 0, 0);
+      ctx.restore();
+
+      rects.uno = { x: unoCX - sideBtnSz / 2, y: unoCY - sideBtnSz / 2, w: sideBtnSz, h: sideBtnSz };
     }
-    rr(ctx, -sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz, sideBtnSz, vs(6));
-    ctx.strokeStyle = 'rgba(5,7,13,0.8)'; ctx.lineWidth = vs(2); ctx.stroke();
-    ctx.restore();
-
-    ctx.save();
-    ctx.translate(unoCX, unoCY);
-    if (state.unoClickTime && Date.now() - state.unoClickTime < 200) ctx.scale(0.7, 0.7);
-    ctx.fillStyle = state.unoHighlight ? '#fff' : 'rgba(255,255,255,0.6)';
-    ctx.font = `700 ${vs(14)}px ${displayFont}`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = vs(3);
-    ctx.fillText('UNO!', 0, 0);
-    ctx.restore();
-
-    rects.uno = { x: unoCX - sideBtnSz / 2, y: unoCY - sideBtnSz / 2, w: sideBtnSz, h: sideBtnSz };
 
     // ── Color indicator (Top Right) — the active light source ─────────────
     if (state.activeColor && state.activeColor !== 'wild') {
@@ -1058,53 +1061,60 @@ const Renderer = (() => {
     }
 
     // ── Pass/Draw Arrow Button (Bottom Right) ──────────────────────────
-    ctx.save();
-    ctx.translate(passCX, passCY);
-    ctx.rotate(Math.PI / 4);
-    const pSide = sideBtnSz;
-    const pg = ctx.createLinearGradient(-pSide / 2, -pSide / 2, pSide / 2, pSide / 2);
-    if (state.isMyTurn && hasDrawn && !state.isSpectator) {
-      ctx.shadowColor = '#3d9dff'; ctx.shadowBlur = vs(12);
-      pg.addColorStop(0, '#5fb0ff'); pg.addColorStop(1, '#1d64c4');
-    } else if (state.isMyTurn && state.pendingDraw > 0 && !state.isSpectator) {
-      ctx.shadowColor = '#ff3b5c'; ctx.shadowBlur = vs(12 + pulse3 * 8);
-      pg.addColorStop(0, `rgba(255,59,92,${0.7 + pulse3 * 0.25})`);
-      pg.addColorStop(1, `rgba(140,10,35,${0.7 + pulse3 * 0.25})`);
-    } else if (state.isMyTurn && !state.isSpectator) {
-      ctx.shadowColor = '#3d9dff'; ctx.shadowBlur = vs(12);
-      pg.addColorStop(0, '#5fb0ff'); pg.addColorStop(1, '#1d64c4');
-    } else {
-      pg.addColorStop(0, 'rgba(232,235,243,0.07)');
-      pg.addColorStop(1, 'rgba(232,235,243,0.03)');
-    }
-    ctx.fillStyle = pg;
-    rr(ctx, -pSide / 2, -pSide / 2, pSide, pSide, vs(6));
-    ctx.fill();
-    ctx.strokeStyle = (state.isMyTurn && !state.isSpectator) ? 'rgba(5,7,13,0.4)' : 'rgba(139,147,168,0.15)';
-    ctx.lineWidth = vs(2); ctx.stroke();
-    ctx.restore();
+    // Spectators (God Mode included) never take a turn, so no pass control.
+    if (!state.isSpectator) {
+      ctx.save();
+      ctx.translate(passCX, passCY);
+      ctx.rotate(Math.PI / 4);
+      const pSide = sideBtnSz;
+      const pg = ctx.createLinearGradient(-pSide / 2, -pSide / 2, pSide / 2, pSide / 2);
+      if (state.isMyTurn && hasDrawn) {
+        ctx.shadowColor = '#3d9dff'; ctx.shadowBlur = vs(12);
+        pg.addColorStop(0, '#5fb0ff'); pg.addColorStop(1, '#1d64c4');
+      } else if (state.isMyTurn && state.pendingDraw > 0) {
+        ctx.shadowColor = '#ff3b5c'; ctx.shadowBlur = vs(12 + pulse3 * 8);
+        pg.addColorStop(0, `rgba(255,59,92,${0.7 + pulse3 * 0.25})`);
+        pg.addColorStop(1, `rgba(140,10,35,${0.7 + pulse3 * 0.25})`);
+      } else if (state.isMyTurn) {
+        ctx.shadowColor = '#3d9dff'; ctx.shadowBlur = vs(12);
+        pg.addColorStop(0, '#5fb0ff'); pg.addColorStop(1, '#1d64c4');
+      } else {
+        pg.addColorStop(0, 'rgba(232,235,243,0.07)');
+        pg.addColorStop(1, 'rgba(232,235,243,0.03)');
+      }
+      ctx.fillStyle = pg;
+      rr(ctx, -pSide / 2, -pSide / 2, pSide, pSide, vs(6));
+      ctx.fill();
+      ctx.strokeStyle = state.isMyTurn ? 'rgba(5,7,13,0.4)' : 'rgba(139,147,168,0.15)';
+      ctx.lineWidth = vs(2); ctx.stroke();
+      ctx.restore();
 
-    // Pass arrow text
-    ctx.save();
-    ctx.fillStyle = (state.isMyTurn && !state.isSpectator) ? '#fff' : 'rgba(232,235,243,0.25)';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = vs(3);
-    if (state.pendingDraw > 0 && state.isMyTurn && !state.isSpectator) {
-      ctx.font = `700 ${vs(14)}px ${displayFont}`;
-      ctx.fillText(`+${state.pendingDraw}`, passCX, passCY);
-    } else {
-      ctx.font = `700 ${vs(24)}px ${displayFont}`;
-      ctx.fillText('›', passCX + vs(2), passCY - vs(2));
+      // Pass arrow text
+      ctx.save();
+      ctx.fillStyle = state.isMyTurn ? '#fff' : 'rgba(232,235,243,0.25)';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = vs(3);
+      if (state.pendingDraw > 0 && state.isMyTurn) {
+        ctx.font = `700 ${vs(14)}px ${displayFont}`;
+        ctx.fillText(`+${state.pendingDraw}`, passCX, passCY);
+      } else {
+        ctx.font = `700 ${vs(24)}px ${displayFont}`;
+        ctx.fillText('›', passCX + vs(2), passCY - vs(2));
+      }
+      ctx.restore();
+      rects.draw = { x: passCX - sideBtnSz / 2, y: passCY - sideBtnSz / 2, w: sideBtnSz, h: sideBtnSz };
     }
-    ctx.restore();
-    rects.draw = { x: passCX - sideBtnSz / 2, y: passCY - sideBtnSz / 2, w: sideBtnSz, h: sideBtnSz };
 
     // ── God Mode Controls — measured glass pill above the hand ─────────────
-    if (state.isGodMode && state.spectatingPlayerName) {
+    if (state.isGodMode) {
       const HAND_H = H * 0.26;
       const handTopY = H - HAND_H - vs(4);
       const gmY = handTopY - vs(22);
-      const label = `👁 God Mode: ${state.spectatingPlayerName}`;
+      // Show the bar even before a seat resolves, or the arrows vanish and the
+      // god has no way to pick whose hand to watch.
+      const label = state.spectatingPlayerName
+        ? `👁 God Mode: ${state.spectatingPlayerName}`
+        : '👁 God Mode';
 
       ctx.save();
       ctx.font = `700 ${vs(13)}px ${displayFont}`;

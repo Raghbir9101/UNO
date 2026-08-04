@@ -304,6 +304,8 @@
       aria-label="Surrender and leave the game">🏳️</button>
     <button id="btn-emote" class="btn-emote" title="Send a reaction" aria-label="Send a reaction">😀</button>
     <button id="btn-god-give" class="btn-god-give" title="Give a card (God Mode)" aria-label="Give a card to a player" style="display: none;">🃏</button>
+    <button id="btn-god-fine" class="btn-god-give btn-god-fine" title="Fine a player +2 (God Mode)" aria-label="Fine a player two cards" style="display: none;">⚡</button>
+    <button id="btn-god-unlock" class="btn-god-give btn-god-unlock" title="Enter God Mode" aria-label="Enter God Mode" style="display: none;">👁</button>
     <div id="emote-picker" class="emote-picker" hidden></div>
     <button id="btn-card-style" class="btn-card-style" title="Card Style" aria-label="Change card style" style="z-index: 9999; pointer-events: auto;" onclick="document.getElementById('card-style-modal').style.display='flex'; if(typeof updateCardStyleUI === 'function') updateCardStyleUI();">🎴</button>
     <button id="btn-sound" class="btn-sound" title="Toggle sound" aria-label="Toggle sound">🔊</button>
@@ -494,14 +496,14 @@
   <div id="spectate-modal" class="modal" style="display: none;">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>👁 Game in progress</h3>
+        <h3 id="spectate-title">👁 Game in progress</h3>
         <button id="btn-close-spectate" class="btn-close">✕</button>
       </div>
-      <p class="god-modal-hint">This table has already started. Watch this round — you'll be added to the
-        player list when the host starts the next one.</p>
+      <p id="spectate-hint" class="god-modal-hint">This table has already started. Watch this round — you'll be added to
+        the player list when the host starts the next one.</p>
       <button id="btn-spectate-normal" class="btn btn-primary btn-large" style="width:100%;">Watch as
         Spectator</button>
-      <div class="spectate-divider"><span>or</span></div>
+      <div id="spectate-divider" class="spectate-divider"><span>or</span></div>
       <div class="input-group">
         <label class="input-label" for="spectate-god-pass">God Mode password</label>
         <input type="password" id="spectate-god-pass" autocomplete="off" placeholder="Reveals every hand" />

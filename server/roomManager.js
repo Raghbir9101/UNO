@@ -122,6 +122,15 @@ function joinRoom(roomCode, nickname, existingPlayerId, options = {}) {
     : room.players.find(p => p.nickname === nickname && !p.connected) || room.spectators.find(p => p.nickname === nickname && !p.connected);
 
   if (disconnected) {
+    // A spectator seat is reused by playerId above, which used to swallow the
+    // God Mode password: anyone who first watched as a plain spectator could
+    // never upgrade, not even after a refresh.
+    if (disconnected.isSpectator && options.godPassword) {
+      if (options.godPassword !== 'admin') {
+        return { error: 'Incorrect god mode password' };
+      }
+      disconnected.isGodMode = true;
+    }
     disconnected.connected = true;
     // Clear reconnect timer
     const timerKey = `${roomCode}:${disconnected.id}`;

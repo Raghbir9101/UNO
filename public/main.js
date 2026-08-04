@@ -868,7 +868,11 @@
   const $spectateError = document.getElementById('spectate-error');
   const $btnSpectateNormal = document.getElementById('btn-spectate-normal');
   const $btnSpectateGod = document.getElementById('btn-spectate-god');
-  let _spectateCtx = null; // { code, nick, onDone }
+  const $spectateTitle = document.getElementById('spectate-title');
+  const $spectateHint = document.getElementById('spectate-hint');
+  const $spectateDivider = document.getElementById('spectate-divider');
+  const SPECTATE_HINT = "This table has already started. Watch this round — you'll be added to the player list when the host starts the next one.";
+  let _spectateCtx = null; // { code, nick, onDone, upgrade }
 
   function closeSpectateModal(res) {
     $spectateModal.style.display = 'none';
@@ -879,22 +883,32 @@
     if (done) done(res || null);
   }
 
-  function spectateJoin(code, nick, onDone) {
-    _spectateCtx = { code, nick, onDone };
+  // opts.upgrade: already seated as a spectator, just unlocking God Mode.
+  function spectateJoin(code, nick, onDone, opts = {}) {
+    const upgrade = !!opts.upgrade;
+    _spectateCtx = { code, nick, onDone, upgrade };
+    $spectateTitle.textContent = upgrade ? '👁 Enter God Mode' : '👁 Game in progress';
+    $spectateHint.textContent = upgrade
+      ? 'Reveal every hand for this table. You stay a spectator — the players are never told.'
+      : SPECTATE_HINT;
+    $btnSpectateNormal.style.display = upgrade ? 'none' : '';
+    $spectateDivider.style.display = upgrade ? 'none' : '';
     $spectateGodPass.value = '';
     $spectateError.hidden = true;
     $spectateModal.style.display = 'flex';
+    $spectateGodPass.focus();
   }
 
   function submitSpectateJoin(godPassword) {
     if (!_spectateCtx) return;
-    const { code, nick } = _spectateCtx;
+    const { code, nick, upgrade } = _spectateCtx;
     $btnSpectateNormal.disabled = true;
     $btnSpectateGod.disabled = true;
     socket.emit('join_room', {
       roomCode: code,
       nickname: nick,
-      playerId: null,
+      // Reuse the seat when upgrading, otherwise the server mints a second one
+      playerId: upgrade ? myPlayerId : null,
       spectator: true,
       godPassword,
       uid: myUid,
@@ -1875,7 +1889,7 @@
     _lastGameStats = null;
     $postgameModal.style.display = 'none';
     showScreen($waitingRoom);
-    updateGodGiveButton();
+    updateGodButtons();
     if (!(data && (data.promoted || data.stillSpectating))) {
       showToast('Game ended — back to lobby');
     }
@@ -1996,7 +2010,7 @@
 
     Game.onShowToast = showToast;
     updateManagePlayersButton();
-    updateGodGiveButton();
+    updateGodButtons();
   }
 
   // ── Surrender (in-game leave; the rest of the table keeps playing) ────────
@@ -2828,6 +2842,8 @@
   const $godGiveStepCard = document.getElementById('god-give-step-card');
   const $godGiveTargetName = document.getElementById('god-give-target-name');
   const $btnGodGive = document.getElementById('btn-god-give');
+  const $btnGodFine = document.getElementById('btn-god-fine');
+  const $btnGodUnlock = document.getElementById('btn-god-unlock');
   let _godGiveTargetId = null;
   let _godGiveColor = 'red';
 
@@ -2839,15 +2855,18 @@
     $godGiveStepPlayer.style.display = 'block';
   });
 
-  function updateGodGiveButton() {
-    if (!$btnGodGive) return;
-    if (Game.isGodMode && $gameScreen.classList.contains('active')) {
-      $btnGodGive.classList.add('visible');
-      $btnGodGive.style.display = 'flex';
-    } else {
-      $btnGodGive.classList.remove('visible');
-      $btnGodGive.style.display = 'none';
-    }
+  function updateGodButtons() {
+    const inGame = $gameScreen.classList.contains('active');
+    const show = (el, on) => {
+      if (!el) return;
+      el.classList.toggle('visible', on);
+      el.style.display = on ? 'flex' : 'none';
+    };
+    show($btnGodGive, Game.isGodMode && inGame);
+    show($btnGodFine, Game.isGodMode && inGame);
+    // Escape hatch for a spectator who skipped (or mistyped) the password: the
+    // seat can be upgraded in place instead of leaving and re-joining.
+    show($btnGodUnlock, inGame && Game.isSpectator && !Game.isGodMode);
   }
 
   function openGodGiveModal() {
@@ -2953,6 +2972,15 @@
 
   if ($btnGodGive) {
     $btnGodGive.addEventListener('click', () => openGodGiveModal());
+  }
+  if ($btnGodFine) {
+    $btnGodFine.addEventListener('click', () => openGodFineModal());
+  }
+  if ($btnGodUnlock) {
+    $btnGodUnlock.addEventListener('click', () => {
+      if (!currentRoomCode || !Game.isSpectator) return;
+      spectateJoin(currentRoomCode, myNickname, null, { upgrade: true });
+    });
   }
 
   socket.on('god_give_ack', (data) => {
@@ -3174,7 +3202,7 @@
     } else if ($btnManagePlayers) {
       $btnManagePlayers.style.display = 'none';
     }
-    updateGodGiveButton();
+    updateGodButtons();
   }
 
   function renderManagePlayerList() {

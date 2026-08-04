@@ -107,3 +107,59 @@ FIXES
 
 FILES TOUCHED
 - public/main.js, public/index.html, public/style.css, WORKLOG.txt
+
+
+2026-08-05 — God Mode: in-place upgrade, explicit Fine button, verified end to end
+---------------------------------------------------------------------------------
+
+INVESTIGATION
+Reported as "still broken after a hard refresh, and no Fine button in super
+admin". Verified against production first: the deployed HTML, main.js and the
+server process all already carried the previous fixes (probed the live socket
+API for the god_fine / god_give_card handlers), so the report came from the
+build that was live before that deploy. Reproduced the remaining defects
+locally with scripted socket and browser tests instead of by hand.
+
+ROOT CAUSE FOUND
+6. A spectator seat could never gain God Mode. joinRoom() reuses a seat by
+   playerId before it looks at options.godPassword, so anyone who first watched
+   as a plain spectator stayed one forever — refreshing re-sent the stored
+   (plain) status, which is why a hard refresh never helped. The only way out
+   was leaving the room entirely.
+
+FIXES
+- joinRoom() now upgrades a reused spectator seat when a valid god password is
+  supplied, and rejects a wrong one with an error instead of silently ignoring
+  it (server/roomManager.js).
+- Added an explicit ⚡ Fine button to the in-game rail for God Mode, so the
+  power is discoverable instead of hidden behind the canvas UNO diamond. The
+  diamond still works and is now labelled FINE in God Mode.
+- Added a 👁 unlock button shown only to spectators without God Mode. It reopens
+  the spectate dialog in "upgrade" mode (password only, no "Watch as Spectator")
+  and re-joins on the same seat, so a stuck plain spectator can unlock in place.
+- Spectators no longer get dead controls: the UNO diamond is omitted for plain
+  spectators and the pass/draw diamond for all spectators (their hit rects go
+  away with them).
+- The God Mode bar now renders even before a watched seat resolves, so the
+  ◀ ▶ arrows can't disappear and leave the god with no way to switch seats.
+- Removed a dead clearance variable in centerLayout() and corrected the
+  misleading comment on the shared label baseline.
+
+VERIFICATION
+- Socket-level test (16 checks): plain-to-god upgrade on the same seat, god
+  hands delivered on upgrade, wrong password rejected, fine draws exactly +2 and
+  blames another player, give-card lands the exact card, plain spectators denied
+  both powers, and round restart promotes plain spectators while the god keeps
+  watching.
+- Browser test (21 checks): god buttons visible for a god and hidden for players
+  and plain spectators, God Mode surviving a page reload with hands still
+  revealed, fine picker listing every player and applying the penalty, give-card
+  picker advancing to card selection, and the plain-spectator upgrade path
+  including the inline wrong-password error.
+- Layout math checked at 8 viewports (320x568 through 2560x1080): no overlap
+  between the diamonds and the pile cards, the timer, the pile labels, the god
+  bar or the hand band.
+
+FILES TOUCHED
+- server/roomManager.js, public/main.js, public/renderer.js, public/index.html,
+  public/style.css, WORKLOG.txt
