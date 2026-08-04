@@ -837,6 +837,28 @@
     }
   }
 
+  // Shared spectate join (manual join when game in progress + room browser Spectate)
+  function spectateJoin(code, nick, onDone) {
+    const pass = prompt("Game is in progress! Enter password for God Mode spectator, or leave blank for normal spectator. Click Cancel to abort.");
+    if (pass === null) {
+      if (onDone) onDone(null);
+      return;
+    }
+    socket.emit('join_room', {
+      roomCode: code,
+      nickname: nick,
+      playerId: null,
+      spectator: true,
+      godPassword: pass,
+      uid: myUid,
+      picture: myPicture(),
+    }, (spectateRes) => {
+      if (onDone) onDone(spectateRes);
+      if (spectateRes?.error) return showToast(spectateRes.error, true);
+      handleJoinSuccess(spectateRes, code);
+    });
+  }
+
   $btnJoin.addEventListener('click', () => {
     const nick = $nickname.value.trim();
     const code = $roomCode.value.trim().toUpperCase();
@@ -849,14 +871,8 @@
       $btnJoin.disabled = false;
       if (res.error) {
         if (res.canSpectate) {
-          const pass = prompt("Game is in progress! Enter password for God Mode spectator, or leave blank for normal spectator. Click Cancel to abort.");
-          if (pass === null) return;
           $btnJoin.disabled = true;
-          socket.emit('join_room', { roomCode: code, nickname: nick, playerId: null, spectator: true, godPassword: pass, uid: myUid, picture: myPicture() }, (spectateRes) => {
-            $btnJoin.disabled = false;
-            if (spectateRes.error) return showToast(spectateRes.error, true);
-            handleJoinSuccess(spectateRes, code);
-          });
+          spectateJoin(code, nick, () => { $btnJoin.disabled = false; });
           return;
         }
         return showToast(res.error, true);
@@ -1001,8 +1017,11 @@
           }
 
           joinBtn.disabled = true;
-          const spectator = room.status === 'playing';
-          socket.emit('join_room', { roomCode: room.code, nickname: nick, spectator, uid: myUid, picture: myPicture() }, (res) => {
+          if (room.status === 'playing') {
+            spectateJoin(room.code, nick, () => { joinBtn.disabled = false; });
+            return;
+          }
+          socket.emit('join_room', { roomCode: room.code, nickname: nick, spectator: false, uid: myUid, picture: myPicture() }, (res) => {
             joinBtn.disabled = false;
             if (res.error) {
               showToast(res.error, true);
@@ -1618,10 +1637,7 @@
 
   socket.on('god_hands', (hands) => {
     Game.godHands = hands;
-    if (!Game.spectatingPlayerId && players.length > 0) {
-      Game.spectatingPlayerId = players[0].id;
-    }
-    Game.render();
+    Game.applyGodView();
   });
 
   socket.on('turn_skipped', (data) => {
@@ -1651,6 +1667,8 @@
   });
 
   socket.on('uno_caught', (data) => {
+    // God mode gets the truthful ack separately — skip the attributed toast
+    if (Game.isGodMode) return;
     const target = players.find(p => p.id === data.targetId);
     const catcher = players.find(p => p.id === data.catcherId);
     showToast(`${catcher?.nickname || 'Someone'} caught ${target?.nickname || 'a player'}! +${data.penaltyCount} cards`);
@@ -1732,7 +1750,7 @@
     }, 600);
   });
 
-  socket.on('game_restarted', () => {
+  socket.on('game_restarted', (data) => {
     hideChallengeBar();
     // Eliminated/finished players were only spectating that round — welcome back
     if (_eliminatedThisGame || _finishedThisGame) {
@@ -1740,12 +1758,31 @@
       _finishedThisGame = false;
       Game.isSpectator = false;
     }
+    // Normal spectators promoted into the player list for the next lobby
+    if (data && data.promoted) {
+      Game.isSpectator = false;
+      Game.isGodMode = false;
+      Game.godHands = null;
+      Game.spectatingPlayerId = null;
+      showToast('Joined the lobby — you can play the next round!');
+    } else if (data && data.stillSpectating) {
+      if (data.reason === 'room_full') {
+        showToast('Room is full — still spectating', true);
+      }
+      // god_mode spectators stay as god spectators silently
+    } else if (Game.isSpectator && !Game.isGodMode) {
+      // Fallback if server didn't send a flag (shouldn't happen after promote)
+      Game.isSpectator = false;
+    }
     Game.resetGame();
     Game.destroy();
     _lastGameStats = null;
     $postgameModal.style.display = 'none';
     showScreen($waitingRoom);
-    showToast('Game ended — back to lobby');
+    updateGodGiveButton();
+    if (!(data && (data.promoted || data.stillSpectating))) {
+      showToast('Game ended — back to lobby');
+    }
   });
 
   socket.on('error', (data) => {
@@ -1849,12 +1886,17 @@
       socket.emit('catch_uno', { roomCode: currentRoomCode, targetPlayerId });
     };
 
+    Game.onGodFine = () => {
+      openGodFineModal();
+    };
+
     Game.onRestartGame = () => {
       socket.emit('restart_game', { roomCode: currentRoomCode });
     };
 
     Game.onShowToast = showToast;
     updateManagePlayersButton();
+    updateGodGiveButton();
   }
 
   // ── Surrender (in-game leave; the rest of the table keeps playing) ────────
@@ -2628,6 +2670,199 @@
     $sevenModal.style.display = 'flex';
   }
 
+  // ── God Mode: Fine picker ──────────────────────────────────────────────────
+  const $godFineModal = document.getElementById('god-fine-modal');
+  const $godFineList = document.getElementById('god-fine-list');
+  document.getElementById('btn-close-god-fine').addEventListener('click', () => {
+    $godFineModal.style.display = 'none';
+  });
+
+  function openGodFineModal() {
+    if (!Game.isGodMode) return;
+    $godFineList.innerHTML = '';
+    const list = Game.state.players || [];
+    if (!list.length) return showToast('No players to fine', true);
+
+    list.forEach((p, i) => {
+      const li = document.createElement('li');
+      li.className = 'manage-player-item seven-swap-item';
+      li.appendChild(makeAvatarEl(p, i));
+
+      const name = document.createElement('span');
+      name.className = 'manage-player-name';
+      name.textContent = p.nickname;
+      li.appendChild(name);
+
+      const unoEntry = (Game.state.unoState || {})[p.id];
+      if (p.cardCount === 1 || (unoEntry && !unoEntry.called)) {
+        const badge = document.createElement('span');
+        badge.className = 'god-fine-uno-badge';
+        badge.textContent = 'UNO';
+        li.appendChild(badge);
+      }
+
+      const count = document.createElement('span');
+      count.className = 'seven-swap-count';
+      count.textContent = `${p.cardCount ?? '?'} cards`;
+      li.appendChild(count);
+
+      li.addEventListener('click', () => {
+        $godFineModal.style.display = 'none';
+        socket.emit('god_fine', { roomCode: currentRoomCode, targetPlayerId: p.id }, (res) => {
+          if (res?.error) showToast(res.error, true);
+        });
+      });
+      $godFineList.appendChild(li);
+    });
+    $godFineModal.style.display = 'flex';
+  }
+
+  socket.on('god_fine_ack', (data) => {
+    showToast(`⚡ You fined ${data.targetNickname} (+${data.penaltyCount}) — blamed on ${data.blamedNickname}`);
+  });
+
+  // ── God Mode: Give card ────────────────────────────────────────────────────
+  const $godGiveModal = document.getElementById('god-give-modal');
+  const $godGivePlayerList = document.getElementById('god-give-player-list');
+  const $godGiveStepPlayer = document.getElementById('god-give-step-player');
+  const $godGiveStepCard = document.getElementById('god-give-step-card');
+  const $godGiveTargetName = document.getElementById('god-give-target-name');
+  const $btnGodGive = document.getElementById('btn-god-give');
+  let _godGiveTargetId = null;
+  let _godGiveColor = 'red';
+
+  document.getElementById('btn-close-god-give').addEventListener('click', () => {
+    $godGiveModal.style.display = 'none';
+  });
+  document.getElementById('btn-god-give-back').addEventListener('click', () => {
+    $godGiveStepCard.style.display = 'none';
+    $godGiveStepPlayer.style.display = 'block';
+  });
+
+  function updateGodGiveButton() {
+    if (!$btnGodGive) return;
+    if (Game.isGodMode && $gameScreen.classList.contains('active')) {
+      $btnGodGive.classList.add('visible');
+      $btnGodGive.style.display = 'flex';
+    } else {
+      $btnGodGive.classList.remove('visible');
+      $btnGodGive.style.display = 'none';
+    }
+  }
+
+  function openGodGiveModal() {
+    if (!Game.isGodMode) return;
+    _godGiveTargetId = null;
+    _godGiveColor = 'red';
+    $godGiveStepCard.style.display = 'none';
+    $godGiveStepPlayer.style.display = 'block';
+    $godGivePlayerList.innerHTML = '';
+
+    const list = Game.state.players || [];
+    list.forEach((p, i) => {
+      const li = document.createElement('li');
+      li.className = 'manage-player-item seven-swap-item';
+      li.appendChild(makeAvatarEl(p, i));
+      const name = document.createElement('span');
+      name.className = 'manage-player-name';
+      name.textContent = p.nickname;
+      li.appendChild(name);
+      const count = document.createElement('span');
+      count.className = 'seven-swap-count';
+      count.textContent = `${p.cardCount ?? '?'} cards`;
+      li.appendChild(count);
+      li.addEventListener('click', () => {
+        _godGiveTargetId = p.id;
+        $godGiveTargetName.textContent = p.nickname;
+        $godGiveStepPlayer.style.display = 'none';
+        $godGiveStepCard.style.display = 'block';
+        renderGodGiveCardPicker();
+      });
+      $godGivePlayerList.appendChild(li);
+    });
+    $godGiveModal.style.display = 'flex';
+  }
+
+  function renderGodGiveCardPicker() {
+    const $colors = document.getElementById('god-give-colors');
+    const $types = document.getElementById('god-give-types');
+    const $wilds = document.getElementById('god-give-wilds');
+    $colors.innerHTML = '';
+    $types.innerHTML = '';
+    $wilds.innerHTML = '';
+
+    ['red', 'blue', 'green', 'yellow'].forEach(c => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `god-give-chip color-${c}` + (_godGiveColor === c ? ' selected' : '');
+      btn.textContent = c[0].toUpperCase();
+      btn.title = c;
+      btn.addEventListener('click', () => {
+        _godGiveColor = c;
+        renderGodGiveCardPicker();
+      });
+      $colors.appendChild(btn);
+    });
+
+    for (let n = 0; n <= 9; n++) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `god-give-chip color-${_godGiveColor}`;
+      btn.textContent = String(n);
+      btn.addEventListener('click', () => emitGodGive(_godGiveColor, n));
+      $types.appendChild(btn);
+    }
+    [['skip', '⊘'], ['reverse', '⇄'], ['draw2', '+2']].forEach(([type, label]) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `god-give-chip color-${_godGiveColor}`;
+      btn.textContent = label;
+      btn.title = type;
+      btn.addEventListener('click', () => emitGodGive(_godGiveColor, type));
+      $types.appendChild(btn);
+    });
+
+    const wildOpts = [
+      ['wild', 'Wild'],
+      ['wild4', '+4'],
+    ];
+    if (Game.state.settings?.wildDraw8) wildOpts.push(['wild8', '+8']);
+    if (Game.state.settings?.shuffleHands) wildOpts.push(['shuffle', '🔀']);
+    wildOpts.forEach(([type, label]) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'god-give-chip color-wild';
+      btn.textContent = label;
+      btn.addEventListener('click', () => emitGodGive('wild', type));
+      $wilds.appendChild(btn);
+    });
+  }
+
+  function emitGodGive(color, type) {
+    if (!_godGiveTargetId || !currentRoomCode) return;
+    socket.emit('god_give_card', {
+      roomCode: currentRoomCode,
+      targetPlayerId: _godGiveTargetId,
+      color,
+      type,
+    }, (res) => {
+      if (res?.error) showToast(res.error, true);
+      // Keep modal open so god can deal several cards
+    });
+  }
+
+  if ($btnGodGive) {
+    $btnGodGive.addEventListener('click', () => openGodGiveModal());
+  }
+
+  socket.on('god_give_ack', (data) => {
+    const c = data.card;
+    const label = c
+      ? (c.color === 'wild' ? c.type : `${c.color} ${c.value}`)
+      : 'card';
+    showToast(`🃏 Gave ${label} to ${data.targetNickname}`);
+  });
+
   // ── House Rule Events ──────────────────────────────────────────────────────
   socket.on('jumped_in', (data) => {
     if (data.playerId !== myPlayerId) showToast(`⚡ ${data.nickname} jumped in!`);
@@ -2839,6 +3074,7 @@
     } else if ($btnManagePlayers) {
       $btnManagePlayers.style.display = 'none';
     }
+    updateGodGiveButton();
   }
 
   function renderManagePlayerList() {

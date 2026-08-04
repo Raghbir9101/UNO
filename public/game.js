@@ -27,6 +27,7 @@ const Game = (() => {
 
   const state = {
     active: false, myId: null, hostId: null,
+    viewId: null,             // seat we render from (god mode may differ from myId)
     players: [], myHand: [],
     discardTop: null, activeColor: null,
     currentPlayer: null, direction: 1,
@@ -39,6 +40,9 @@ const Game = (() => {
     hasDrawnThisTurn: false,  // true after drawing → shows Pass button
     turnTimer: null,          // { playerId, startTime, durationMs }
     settings: {},             // room house rules (stacking, jumpIn, sevenZero, drawToMatch)
+    isSpectator: false,
+    isGodMode: false,
+    spectatingPlayerName: null,
   };
 
   let _flyingCardId    = null;  // card hidden from canvas while it flies
@@ -66,7 +70,7 @@ const Game = (() => {
 
   function init(canvasEl, playerId, hostId) {
     canvas = canvasEl; ctx = canvas.getContext('2d');
-    state.myId = playerId; state.hostId = hostId; state.active = true;
+    state.myId = playerId; state.viewId = playerId; state.hostId = hostId; state.active = true;
     resizeCanvas();
     animOverlay = document.getElementById('anim-overlay');
     canvas.addEventListener('pointerdown', onDown, { passive: false });
@@ -118,9 +122,10 @@ const Game = (() => {
       return;
     }
 
-    // Opponents
+    // Opponents — viewId is the seat we're looking from (god mode cycles this)
+    const viewId = state.viewId || state.myId;
     const oppData = state.players.map(p => ({ id: p.id, nickname: p.nickname, cardCount: p.cardCount, picture: p.picture }));
-    Renderer.drawOpponents(ctx, oppData, state.myId, state.currentPlayer, state.direction, W, H);
+    Renderer.drawOpponents(ctx, oppData, viewId, state.currentPlayer, state.direction, W, H);
 
     // Direction
     Renderer.drawDirectionArrow(ctx, state.direction, W, H);
@@ -133,8 +138,8 @@ const Game = (() => {
     }
     hitRegions.pileRects = Renderer.drawPiles(ctx, discardToDraw, state.activeColor, state.drawPileCount, W, H);
 
-    // Turn indicator (pulses in the active-turn color)
-    const isMyTurn = state.currentPlayer === state.myId;
+    // Turn indicator — never for spectators (frees the band for the god bar)
+    const isMyTurn = !Game.isSpectator && state.currentPlayer === state.myId;
     Renderer.drawTurnIndicator(ctx, isMyTurn, W, H, state.activeColor);
 
     // Buttons
@@ -159,7 +164,7 @@ const Game = (() => {
       hitRegions.colorRects = Renderer.drawColorPicker(ctx, W, H);
     }
 
-    // Turn countdown timer (drawn last so it's on top)
+    // Turn countdown timer — always use real myId so spectators never get "your turn" style
     if (!state.winner) {
       Renderer.drawTurnTimer(ctx, state.turnTimer, state.myId, W, H);
     }
@@ -222,23 +227,32 @@ const Game = (() => {
     // God mode controls
     if (Game.isGodMode && hitRegions.buttonRects) {
        if (hit(x, y, hitRegions.buttonRects.godLeft)) {
+           resolveSpectatingPlayer();
            const idx = state.players.findIndex(p => p.id === Game.spectatingPlayerId);
-           if (idx !== -1 && state.players.length > 0) {
-               const prevIdx = (idx - 1 + state.players.length) % state.players.length;
+           if (state.players.length > 0) {
+               const prevIdx = ((idx === -1 ? 0 : idx) - 1 + state.players.length) % state.players.length;
                Game.spectatingPlayerId = state.players[prevIdx].id;
-               updateGameState(state);
+               applyGodView();
                return;
            }
        }
        if (hit(x, y, hitRegions.buttonRects.godRight)) {
+           resolveSpectatingPlayer();
            const idx = state.players.findIndex(p => p.id === Game.spectatingPlayerId);
-           if (idx !== -1 && state.players.length > 0) {
-               const nextIdx = (idx + 1) % state.players.length;
+           if (state.players.length > 0) {
+               const nextIdx = ((idx === -1 ? 0 : idx) + 1) % state.players.length;
                Game.spectatingPlayerId = state.players[nextIdx].id;
-               updateGameState(state);
+               applyGodView();
                return;
            }
        }
+    }
+
+    // God mode: UNO button opens the fine-any-player picker
+    if (Game.isGodMode && hit(x, y, hitRegions.buttonRects?.uno)) {
+      state.unoClickTime = Date.now();
+      Game.onGodFine?.();
+      return;
     }
 
     if (Game.isSpectator) return; // Spectators cannot interact with the game itself
@@ -513,7 +527,51 @@ const Game = (() => {
   }
 
   // Public API
-  function setPlayers(p) { state.players = p; }
+  function setPlayers(p) {
+    state.players = p;
+    if (Game.isGodMode) resolveSpectatingPlayer();
+  }
+
+  /** Keep Game.spectatingPlayerId pointing at a live player, or clear it. */
+  function resolveSpectatingPlayer() {
+    if (!state.players || state.players.length === 0) {
+      Game.spectatingPlayerId = null;
+      return;
+    }
+    const stillThere = state.players.some(p => p.id === Game.spectatingPlayerId);
+    if (!stillThere) {
+      Game.spectatingPlayerId = state.players[0].id;
+    }
+  }
+
+  /**
+   * Recompute the god-mode / spectator view of the hand without touching myId.
+   * Safe to call from updateGameState and from the god_hands socket handler.
+   */
+  function applyGodView() {
+    state.isSpectator = !!Game.isSpectator;
+    state.isGodMode = !!Game.isGodMode;
+    if (Game.isGodMode && Game.godHands) {
+      resolveSpectatingPlayer();
+      if (Game.spectatingPlayerId) {
+        state.viewId = Game.spectatingPlayerId;
+        state.myHand = Game.godHands[Game.spectatingPlayerId] || [];
+        const p = state.players.find(pl => pl.id === Game.spectatingPlayerId);
+        state.spectatingPlayerName = p ? p.nickname : 'Unknown';
+      } else {
+        state.viewId = state.myId;
+        state.myHand = [];
+        state.spectatingPlayerName = null;
+      }
+    } else if (Game.isSpectator) {
+      state.viewId = state.myId;
+      state.myHand = [];
+      state.spectatingPlayerName = null;
+    } else {
+      state.viewId = state.myId;
+      state.spectatingPlayerName = null;
+    }
+  }
 
   // ── Feature 4 + FLIP: Hand Rearrangement ──
   function setHand(c) {
@@ -605,14 +663,7 @@ const Game = (() => {
     
     state.isSpectator = Game.isSpectator;
     state.isGodMode = Game.isGodMode;
-    if (Game.isGodMode && Game.godHands && Game.spectatingPlayerId) {
-        state.myHand = Game.godHands[Game.spectatingPlayerId] || [];
-        state.myId = Game.spectatingPlayerId; // spoof myId so the hand is drawn
-        const p = state.players.find(pl => pl.id === Game.spectatingPlayerId);
-        state.spectatingPlayerName = p ? p.nickname : 'Unknown';
-    } else if (Game.isSpectator && !Game.isGodMode) {
-        state.myHand = [];
-    }
+    applyGodView();
 
     if (discardChanged) {
       // Our own play: the ripple fires when the flight lands, not on server-confirm
@@ -657,16 +708,19 @@ const Game = (() => {
     const screenH = deck.h * scaleY;
 
     // ── Target: exact player position ──
+    // In god mode the watched player's hand sits at the bottom, so route their
+    // incoming cards there even though the spectator's myId is different.
     let targetCX, targetCY, targetRot;
     let oppSlot = null;
-    if (toSelf) {
+    const flyToHand = toSelf || (Game.isGodMode && targetPlayerId && targetPlayerId === (state.viewId || Game.spectatingPlayerId));
+    if (flyToHand) {
       const hand = Renderer.getHandTarget(W, H);
       targetCX = cRect.left + hand.cx * scaleX;
       targetCY = cRect.top  + hand.cy * scaleY;
       targetRot = 0;
     } else {
       // Find opponent slot
-      const oppPositions = Renderer.getOpponentPositions(state.players, state.myId, W, H);
+      const oppPositions = Renderer.getOpponentPositions(state.players, state.viewId || state.myId, W, H);
       const slot = oppPositions.find(o => o.id === targetPlayerId);
       oppSlot = slot || null;
       if (slot) {
@@ -704,8 +758,8 @@ const Game = (() => {
     const dy = targetT - startT;
     // Visible arc: 35px upward
     const arcH = toSelf ? -35 : -35;
-    // Target scale: full size for self, actual seat card size for opponents
-    const targetScale = toSelf ? 1.0 : (oppSlot ? oppSlot.w / deck.w : 0.4);
+    // Target scale: full size for self/watched hand, actual seat card size for opponents
+    const targetScale = flyToHand ? 1.0 : (oppSlot ? oppSlot.w / deck.w : 0.4);
 
     let _done = false; // prevents double-fire from RAF + setTimeout race
 
@@ -757,12 +811,17 @@ const Game = (() => {
     const scaleY = cRect.height / H;
 
     let cx, cy, below = false;
-    if (playerId === state.myId) {
+    if (playerId === state.myId && !Game.isGodMode) {
       const hand = Renderer.getHandTarget(W, H);
       cx = hand.cx;
       cy = hand.cy - H * 0.10; // sit clear of the hand fan
+    } else if (Game.isGodMode && playerId === (state.viewId || Game.spectatingPlayerId)) {
+      // God mode: the watched player's hand is at the bottom
+      const hand = Renderer.getHandTarget(W, H);
+      cx = hand.cx;
+      cy = hand.cy - H * 0.10;
     } else {
-      const slot = Renderer.getOpponentPositions(state.players, state.myId, W, H)
+      const slot = Renderer.getOpponentPositions(state.players, state.viewId || state.myId, W, H)
         .find(o => o.id === playerId);
       if (slot) {
         cx = slot.cx; cy = slot.cy;
@@ -812,7 +871,7 @@ const Game = (() => {
 
     // Source: the player's exact seat
     let srcCX = null, srcCY = null;
-    const slot = Renderer.getOpponentPositions(state.players, state.myId, W, H)
+    const slot = Renderer.getOpponentPositions(state.players, state.viewId || state.myId, W, H)
       .find(o => o.id === playerId);
     if (slot) {
       srcCX = cRect.left + slot.cx * scaleX;
@@ -1090,8 +1149,10 @@ const Game = (() => {
     init, destroy, state, setPlayers, setHand, updateGameState,
     setWinner, resetGame, triggerAnimation, resizeCanvas, discardStack, showDomAnim,
     setTurnTimer, flyCardToPlayer, showEmoteBubble, playSevenWithSwap,
+    applyGodView, resolveSpectatingPlayer,
     isCardPlayable: clientIsPlayable,
     onPlayCard: null, onDrawCard: null, onPassTurn: null, onCallUno: null,
     onCatchUno: null, onRestartGame: null, onShowToast: null, onSevenSwap: null,
+    onGodFine: null, onGodGiveCard: null,
   };
 })();

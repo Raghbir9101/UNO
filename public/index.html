@@ -303,6 +303,7 @@
     <button id="btn-surrender" class="btn-surrender" title="Surrender and leave the game"
       aria-label="Surrender and leave the game">🏳️</button>
     <button id="btn-emote" class="btn-emote" title="Send a reaction" aria-label="Send a reaction">😀</button>
+    <button id="btn-god-give" class="btn-god-give" title="Give a card (God Mode)" aria-label="Give a card to a player" style="display: none;">🃏</button>
     <div id="emote-picker" class="emote-picker" hidden></div>
     <button id="btn-card-style" class="btn-card-style" title="Card Style" aria-label="Change card style" style="z-index: 9999; pointer-events: auto;" onclick="document.getElementById('card-style-modal').style.display='flex'; if(typeof updateCardStyleUI === 'function') updateCardStyleUI();">🎴</button>
     <button id="btn-sound" class="btn-sound" title="Toggle sound" aria-label="Toggle sound">🔊</button>
@@ -486,6 +487,40 @@
         <button id="btn-close-seven-swap" class="btn-close">✕</button>
       </div>
       <ul id="seven-swap-list"></ul>
+    </div>
+  </div>
+
+  <!-- God Mode: fine any player -->
+  <div id="god-fine-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>⚡ Fine a player</h3>
+        <button id="btn-close-god-fine" class="btn-close">✕</button>
+      </div>
+      <p class="god-modal-hint">They draw 2. Other players see a random player as the catcher.</p>
+      <ul id="god-fine-list"></ul>
+    </div>
+  </div>
+
+  <!-- God Mode: give any card to any player -->
+  <div id="god-give-modal" class="modal" style="display: none;">
+    <div class="modal-content god-give-modal-content">
+      <div class="modal-header">
+        <h3>🃏 Give a card</h3>
+        <button id="btn-close-god-give" class="btn-close">✕</button>
+      </div>
+      <p class="god-modal-hint">Silent for other players — the card just appears in their hand.</p>
+      <div id="god-give-step-player">
+        <h4 class="god-give-step-title">1. Choose player</h4>
+        <ul id="god-give-player-list"></ul>
+      </div>
+      <div id="god-give-step-card" style="display: none;">
+        <h4 class="god-give-step-title">2. Choose card for <span id="god-give-target-name"></span></h4>
+        <button type="button" id="btn-god-give-back" class="btn btn-secondary god-give-back">← Back</button>
+        <div class="god-give-colors" id="god-give-colors"></div>
+        <div class="god-give-types" id="god-give-types"></div>
+        <div class="god-give-wilds" id="god-give-wilds"></div>
+      </div>
     </div>
   </div>
 

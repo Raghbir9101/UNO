@@ -1,0 +1,46 @@
+WORK LOG — UNO Project
+=======================
+
+2026-08-04 — God Mode & Spectator: Bug Fixes, Layout Cleanup, New Powers
+-----------------------------------------------------------------------
+
+BUG FIXES
+- Stopped spoofing state.myId for god mode; introduced state.viewId so the
+  spectator never sees a false "YOUR TURN" pill, lit pass/draw diamonds, or
+  own-turn timer styling.
+- Fixed god hand view lagging one action behind: emit god_hands before
+  game_state; added Game.applyGodView() and call it from both updateGameState
+  and the god_hands socket handler. Removed the crashing Game.render() call
+  (render was never exported).
+- Made god ◀ ▶ player cycling resilient when the watched player is eliminated
+  or spectatingPlayerId was never set (resolveSpectatingPlayer fallback).
+- Connected non-god spectators are promoted into room.players when the host
+  restarts the game (roomManager.promoteSpectators). God-mode spectators stay
+  spectators. Client clears Game.isSpectator on promotion and toasts the result
+  (including "Room is full — still spectating").
+- Room-browser "Spectate" now uses the same spectateJoin() helper as manual
+  join, so it prompts for the god-mode password.
+
+UI / LAYOUT
+- Extracted centerLayout() in renderer.js as the single source of truth for
+  pile/diamond/timer metrics (killed the timer's divergent gap).
+- Repositioned SPECIAL MODE / UNO! / color / pass diamonds clear of pile cards
+  using half-diagonal clearance; clamped button size inside the side margin.
+- Split draw-count badge (under deck) and direction arrow (under discard) so
+  they no longer stack.
+- Rebuilt the god-mode bar as a measured glass pill just above the hand, with
+  ◀ ▶ hit rects outside the pill.
+
+NEW FEATURES
+- God Mode Fine: tapping UNO opens a player picker; server god_fine draws +2
+  for any player at any time, emits uno_caught attributed to a random other
+  player, and privately acks the god with the real story.
+- God Mode Give Card: new 🃏 button + modal to mint any valid card into any
+  player's hand via god_give_card / giveCardToPlayer(). Silent for other
+  players (no player_drew toast/animation); only the receiver's hand updates.
+
+FILES TOUCHED
+- public/game.js, public/renderer.js, public/main.js, public/index.html,
+  public/style.css
+- server/index.js, server/roomManager.js, server/gameLogic.js
+- WORKLOG.txt (this file)

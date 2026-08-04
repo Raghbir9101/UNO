@@ -810,6 +810,53 @@ function catchUno(state, catcherId, targetId) {
   return result;
 }
 
+/**
+ * God-mode: mint a specific card into a player's hand.
+ * color/type vocabulary matches buildSingleDeck.
+ * For number cards, `type` is the number 0–9 (or string "0"–"9").
+ * For actions, type is skip|reverse|draw2.
+ * For wilds, color is ignored and type is wild|wild4|wild8|shuffle.
+ */
+function giveCardToPlayer(state, playerId, color, type) {
+  if (!state.hands[playerId]) return { error: 'Player not in game' };
+
+  const COLORS_SET = new Set(COLORS);
+  const ACTIONS_SET = new Set(['skip', 'reverse', 'draw2']);
+  const WILDS = new Set(['wild', 'wild4', 'wild8', 'shuffle']);
+
+  let card;
+  if (WILDS.has(type)) {
+    if (type === 'wild8' && !(state.settings && state.settings.wildDraw8)) {
+      return { error: 'Wild +8 is not enabled in this room' };
+    }
+    if (type === 'shuffle' && !(state.settings && state.settings.shuffleHands)) {
+      return { error: 'Shuffle Hands is not enabled in this room' };
+    }
+    card = makeCard('wild', type, type);
+  } else if (ACTIONS_SET.has(type)) {
+    if (!COLORS_SET.has(color)) return { error: 'Invalid color' };
+    card = makeCard(color, type, type);
+  } else {
+    const n = Number(type);
+    if (!COLORS_SET.has(color) || !Number.isInteger(n) || n < 0 || n > 9) {
+      return { error: 'Invalid card' };
+    }
+    card = makeCard(color, 'number', n);
+  }
+
+  state.hands[playerId].push(card);
+  // Hand grew past 1 → clear any pending UNO catch on this player
+  if (state.hands[playerId].length > 1 && state.unoState[playerId]) {
+    delete state.unoState[playerId];
+  }
+  const ps = state.stats && state.stats.perPlayer[playerId];
+  if (ps) {
+    ps.cardsDrawn += 1;
+    ps.maxHand = Math.max(ps.maxHand, state.hands[playerId].length);
+  }
+  return { success: true, card };
+}
+
 // ─── Get Game State (public, safe to broadcast) ──────────────────────────────
 
 function getPublicState(state) {
@@ -939,10 +986,13 @@ module.exports = {
   passTurn,
   callUno,
   catchUno,
+  drawCards,
+  giveCardToPlayer,
   isPlayable,
   getPublicState,
   getCurrentPlayerId,
   removePlayerFromGame,
   computeStandings,
+  checkElimination,
   COLORS,
 };

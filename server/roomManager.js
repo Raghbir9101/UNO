@@ -327,6 +327,50 @@ function getPublicRooms() {
   return publicRooms.sort((a, b) => b.createdAt - a.createdAt);
 }
 
+/**
+ * Move connected non-god spectators into room.players when a round ends,
+ * respecting maxPlayers. God-mode spectators stay as spectators.
+ * Returns { promoted: Player[], stillSpectating: Player[] }.
+ */
+function promoteSpectators(roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room || !room.spectators || room.spectators.length === 0) {
+    return { promoted: [], stillSpectating: [] };
+  }
+
+  const promoted = [];
+  const stillSpectating = [];
+  const remaining = [];
+
+  for (const spec of room.spectators) {
+    // God-mode spectators intentionally stay spectators
+    if (spec.isGodMode) {
+      remaining.push(spec);
+      stillSpectating.push(spec);
+      continue;
+    }
+    if (!spec.connected) {
+      remaining.push(spec);
+      stillSpectating.push(spec);
+      continue;
+    }
+    if (room.players.length >= roomCapacity(room)) {
+      remaining.push(spec);
+      stillSpectating.push(spec);
+      continue;
+    }
+
+    // Promote: clear spectator flags, keep same id/socket
+    delete spec.isSpectator;
+    delete spec.isGodMode;
+    room.players.push(spec);
+    promoted.push(spec);
+  }
+
+  room.spectators = remaining;
+  return { promoted, stillSpectating };
+}
+
 module.exports = {
   rooms,
   createRoom,
@@ -341,5 +385,6 @@ module.exports = {
   cancelRoomCleanup,
   getPublicRooms,
   roomCapacity,
+  promoteSpectators,
   MAX_PLAYERS,
 };

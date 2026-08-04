@@ -300,9 +300,8 @@ function broadcastGameState(roomCode) {
   const room = roomManager.getRoom(roomCode);
   if (!room || !room.gameState) return;
 
-  const publicState = gameLogic.getPublicState(room.gameState);
-  io.to(roomCode).emit('game_state', publicState);
-
+  // Emit god_hands before game_state so the god client has fresh hands when
+  // updateGameState / applyGodView runs on the subsequent game_state.
   if (room.spectators) {
     for (const spec of room.spectators) {
       if (spec.connected && spec.socketId && spec.isGodMode) {
@@ -311,6 +310,9 @@ function broadcastGameState(roomCode) {
       }
     }
   }
+
+  const publicState = gameLogic.getPublicState(room.gameState);
+  io.to(roomCode).emit('game_state', publicState);
 
   // Reset the 30-second auto-play timer for the current player
   resetAutoPlayTimer(roomCode);
@@ -990,11 +992,12 @@ io.on('connection', (socket) => {
 
     // If reconnecting/spectating an in-progress game, send game state + hand
     if ((reconnected || player.isSpectator) && room.status === 'playing' && room.gameState) {
+      if (player.isGodMode) {
+        socket.emit('god_hands', room.gameState.hands);
+      }
       socket.emit('game_state', gameLogic.getPublicState(room.gameState));
       if (!player.isSpectator) {
         sendHandToPlayer(socket, playerId, room.gameState);
-      } else if (player.isGodMode) {
-        socket.emit('god_hands', room.gameState.hands);
       }
     }
   });
@@ -1494,6 +1497,103 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Helper: resolve a connected god-mode spectator for this socket/room
+  function getGodSpectator(room, sock) {
+    const playerId = sock.data?.playerId;
+    if (!playerId || !room?.spectators) return null;
+    const spec = room.spectators.find(s => s.id === playerId);
+    if (!spec || !spec.isGodMode || !spec.connected) return null;
+    return spec;
+  }
+
+  // ── God Mode: fine any player (+2), attributed to a random real player ──
+  socket.on('god_fine', ({ roomCode, targetPlayerId }, callback) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room || !room.gameState) return callback?.({ error: 'No active game' });
+
+    const god = getGodSpectator(room, socket);
+    if (!god) return callback?.({ error: 'God mode required' });
+
+    if (!room.gameState.playerIds.includes(targetPlayerId)) {
+      return callback?.({ error: 'Target not in game' });
+    }
+
+    const drawn = gameLogic.drawCards(room.gameState, targetPlayerId, 2);
+    delete room.gameState.unoState[targetPlayerId];
+
+    // Blame a random real player (not the target) so the toast looks legit
+    const blamePool = room.players.filter(p => p.id !== targetPlayerId);
+    const blamed = blamePool.length
+      ? blamePool[Math.floor(Math.random() * blamePool.length)]
+      : room.players[0];
+    const catcherId = blamed ? blamed.id : targetPlayerId;
+    const targetPlayer = room.players.find(p => p.id === targetPlayerId);
+
+    io.to(roomCode).emit('uno_caught', {
+      catcherId,
+      targetId: targetPlayerId,
+      penaltyCount: drawn.length,
+    });
+
+    if (targetPlayer?.socketId) {
+      const targetSock = getSocketById(targetPlayer.socketId);
+      if (targetSock) sendHandToPlayer(targetSock, targetPlayerId, room.gameState);
+    }
+
+    const elim = gameLogic.checkElimination(room.gameState, targetPlayerId);
+    if (elim?.eliminated) handleElimination(roomCode, room, elim.eliminated);
+    broadcastGameState(roomCode);
+    if (elim?.winner) {
+      emitPlayerWon(roomCode, room, elim.winner);
+      recordGameEnd(roomCode, elim.winner);
+    }
+
+    socket.emit('god_fine_ack', {
+      targetNickname: targetPlayer?.nickname || 'Player',
+      blamedNickname: blamed?.nickname || 'Someone',
+      penaltyCount: drawn.length,
+    });
+    callback?.({ success: true });
+  });
+
+  // ── God Mode: silently give a specific card to a player ──
+  socket.on('god_give_card', ({ roomCode, targetPlayerId, color, type }, callback) => {
+    const room = roomManager.getRoom(roomCode);
+    if (!room || !room.gameState) return callback?.({ error: 'No active game' });
+
+    const god = getGodSpectator(room, socket);
+    if (!god) return callback?.({ error: 'God mode required' });
+
+    if (!room.gameState.playerIds.includes(targetPlayerId)) {
+      return callback?.({ error: 'Target not in game' });
+    }
+
+    const result = gameLogic.giveCardToPlayer(room.gameState, targetPlayerId, color, type);
+    if (result.error) return callback?.({ error: result.error });
+
+    const targetPlayer = room.players.find(p => p.id === targetPlayerId);
+    if (targetPlayer?.socketId) {
+      const targetSock = getSocketById(targetPlayer.socketId);
+      if (targetSock) sendHandToPlayer(targetSock, targetPlayerId, room.gameState);
+    }
+
+    // Silent for other players — only cardCounts update via game_state
+    broadcastGameState(roomCode);
+
+    const elim = gameLogic.checkElimination(room.gameState, targetPlayerId);
+    if (elim?.eliminated) handleElimination(roomCode, room, elim.eliminated);
+    if (elim?.winner) {
+      emitPlayerWon(roomCode, room, elim.winner);
+      recordGameEnd(roomCode, elim.winner);
+    }
+
+    socket.emit('god_give_ack', {
+      targetNickname: targetPlayer?.nickname || 'Player',
+      card: result.card,
+    });
+    callback?.({ success: true, card: result.card });
+  });
+
   // ── Send Emote (any room member incl. spectators; rate-limited) ──
   socket.on('send_emote', ({ roomCode, emote }) => {
     const playerId = socket.data?.playerId;
@@ -1526,7 +1626,29 @@ io.on('connection', (socket) => {
     room.status = 'lobby';
     room.gameState = null;
 
-    io.to(roomCode).emit('game_restarted', {});
+    // Promote connected non-god spectators into the player list for the next round
+    const { promoted, stillSpectating } = roomManager.promoteSpectators(roomCode);
+    const promotedIds = new Set(promoted.map(p => p.id));
+    const stillIds = new Set(stillSpectating.map(s => s.id));
+
+    // Personalized restart so spectators learn whether they were promoted
+    for (const p of room.players) {
+      if (!p.socketId) continue;
+      const sock = getSocketById(p.socketId);
+      if (!sock) continue;
+      sock.emit('game_restarted', promotedIds.has(p.id) ? { promoted: true } : {});
+    }
+    for (const s of stillSpectating) {
+      if (!s.socketId || stillIds.has(s.id) === false) continue;
+      const sock = getSocketById(s.socketId);
+      if (!sock) continue;
+      sock.emit('game_restarted', {
+        promoted: false,
+        stillSpectating: true,
+        reason: s.isGodMode ? 'god_mode' : 'room_full',
+      });
+    }
+
     broadcastRoomUpdate(roomCode);
   });
 

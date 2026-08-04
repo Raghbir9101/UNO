@@ -14,6 +14,54 @@ const Renderer = (() => {
 
   function vs(v) { return v * s; }
 
+  /**
+   * Shared center-table metrics for piles, diamonds, timer, and fly helpers.
+   * Keeping one source of truth stops the draw-count / timer / god-bar overlaps.
+   */
+  function centerLayout(W, H) {
+    const SW = W * 0.16, TH = H * 0.26, HH = H * 0.26;
+    const CW = W - 2 * SW, CH = H - TH - HH;
+    const CX = SW + CW / 2, CY = TH + CH / 2;
+    const cw = Math.min(CW * 0.17, CH * 0.52, vs(90));
+    const ch = cw * 1.45;
+    const gap = Math.max(cw * 0.15, vs(12));
+    const dx = CX - cw - gap;   // deck left edge
+    const dcx = CX + gap;       // discard left edge
+    const dy = CY - ch / 2;     // card top edge
+
+    // Diamond size clamped so rotated squares stay inside the side margin
+    let sideBtnSz = cw * 0.45;
+    const halfDiag = sideBtnSz * 0.707;
+    const clear = vs(12) + halfDiag;
+    const maxLeft = dx - SW;           // room left of draw pile inside side margin
+    const maxRight = (W - SW) - (dcx + cw);
+    const maxBtn = Math.min(maxLeft, maxRight) / 0.707 - vs(12) / 0.707;
+    if (Number.isFinite(maxBtn) && maxBtn > vs(18)) {
+      sideBtnSz = Math.min(sideBtnSz, maxBtn);
+    } else {
+      sideBtnSz = Math.min(sideBtnSz, vs(28));
+    }
+    const halfD = sideBtnSz * 0.707;
+    const btnClear = vs(12) + halfD;
+
+    return {
+      SW, TH, HH, CW, CH, CX, CY, cw, ch, gap, dx, dcx, dy,
+      sideBtnSz,
+      // Diamond centers clear of pile cards
+      smCX: dx - btnClear,
+      smCY: CY - vs(36),
+      unoCX: dx - btnClear,
+      unoCY: CY + vs(36),
+      ciCX: dcx + cw + btnClear,
+      ciCY: CY - vs(36),
+      passCX: dcx + cw + btnClear,
+      passCY: CY + vs(36),
+      // Labels under piles — split so they never stack on each other
+      countY: dy + ch + vs(16),
+      dirY: dy + ch + vs(16),
+    };
+  }
+
   function rr(ctx, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
     ctx.beginPath();
@@ -841,23 +889,16 @@ const Renderer = (() => {
 
 
   function drawPiles(ctx, discardTop, activeColor, drawCount, W, H) {
-    const _SW = W * 0.16, _TH = H * 0.26, _HH = H * 0.26;
-    const _CW = W - 2 * _SW, _CH = H - _TH - _HH;
-    const _CX = _SW + _CW / 2, _CY = _TH + _CH / 2;
-    const _cw = Math.min(_CW * 0.17, _CH * 0.52, vs(90));
-    const _ch = _cw * 1.45;
-    const _gap = Math.max(_cw * 0.15, vs(12));
-    const _dx = _CX - _cw - _gap;   // deck left edge
-    const _dcx = _CX + _gap;         // discard left edge
-    const _dy = _CY - _ch / 2;         // card top edge
+    const L = centerLayout(W, H);
+    const { CX, CY, cw, ch, dx, dcx, dy, sideBtnSz, smCX, smCY, countY, dirY } = L;
 
     const rects = {};
 
     // ── Projection core: the holographic diamond the piles sit on ──
     ctx.save();
-    ctx.translate(_CX, _CY);
+    ctx.translate(CX, CY);
     ctx.rotate(Math.PI / 4);
-    const bgSize = _cw * 1.8;
+    const bgSize = cw * 1.8;
     ctx.fillStyle = 'rgba(19,26,43,0.35)';
     ctx.strokeStyle = 'rgba(139,147,168,0.18)';
     ctx.lineWidth = vs(1.5);
@@ -875,11 +916,7 @@ const Renderer = (() => {
     ctx.stroke();
     ctx.restore();
 
-    const sideBtnSz = _cw * 0.45;
-
     // ── Special Mode (Top Left) — glass diamond, blue emissive edge ──
-    const smCX = _dx - vs(15) - sideBtnSz / 2;
-    const smCY = _CY - vs(30);
     ctx.save();
     ctx.translate(smCX, smCY);
     ctx.rotate(Math.PI / 4);
@@ -897,18 +934,18 @@ const Renderer = (() => {
     ctx.restore();
 
     // Deck (left)
-    for (let i = 2; i >= 0; i--) _cardBack(ctx, _dx + i * vs(1.5), _dy - i * vs(1.5), _cw, _ch);
-    rects.draw = { x: _dx, y: _dy, w: _cw, h: _ch };
+    for (let i = 2; i >= 0; i--) _cardBack(ctx, dx + i * vs(1.5), dy - i * vs(1.5), cw, ch);
+    rects.draw = { x: dx, y: dy, w: cw, h: ch };
 
-    // Draw Deck Count — glass counter in the data face
+    // Draw Deck Count — under the draw pile only
     ctx.save();
     ctx.beginPath();
-    ctx.arc(_dx + _cw / 2, _dy + _ch + vs(12), vs(10), 0, Math.PI * 2);
+    ctx.arc(dx + cw / 2, countY, vs(10), 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(5,7,13,0.8)'; ctx.fill();
     ctx.strokeStyle = 'rgba(139,147,168,0.4)'; ctx.lineWidth = vs(1); ctx.stroke();
     ctx.fillStyle = '#e8ebf3'; ctx.font = `600 ${vs(9)}px ${dataFont}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(drawCount, _dx + _cw / 2, _dy + _ch + vs(12));
+    ctx.fillText(drawCount, dx + cw / 2, countY);
     ctx.restore();
 
     // Discard (right)
@@ -917,32 +954,32 @@ const Renderer = (() => {
       const depth = Math.min(stack.length, 4);
       for (let si = 0; si < depth - 1; si++) {
         const e = stack[si];
-        ctx.save(); ctx.translate(_dcx + _cw / 2, _dy + _ch / 2);
+        ctx.save(); ctx.translate(dcx + cw / 2, dy + ch / 2);
         ctx.rotate((e.rot || 0) * Math.PI / 180);
-        _cardBack(ctx, -_cw / 2, -_ch / 2, _cw, _ch); ctx.restore();
+        _cardBack(ctx, -cw / 2, -ch / 2, cw, ch); ctx.restore();
       }
       // Active color halo under the top discard — the table's "current light"
       if (activeColor && activeColor !== 'wild' && CardColors[activeColor]) {
         ctx.save();
-        const halo = ctx.createRadialGradient(_dcx + _cw / 2, _CY, _cw * 0.2, _dcx + _cw / 2, _CY, _cw * 1.1);
+        const halo = ctx.createRadialGradient(dcx + cw / 2, CY, cw * 0.2, dcx + cw / 2, CY, cw * 1.1);
         halo.addColorStop(0, hexA(CardColors[activeColor].fill, 0.22));
         halo.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = halo;
-        ctx.fillRect(_dcx - _cw * 0.6, _dy - _cw * 0.4, _cw * 2.2, _ch + _cw * 0.8);
+        ctx.fillRect(dcx - cw * 0.6, dy - cw * 0.4, cw * 2.2, ch + cw * 0.8);
         ctx.restore();
       }
-      ctx.save(); ctx.translate(_dcx + _cw / 2, _dy + _ch / 2);
-      drawCard(ctx, discardTop, -_cw / 2, -_ch / 2, _cw, _ch, { faceUp: true, foilPhase: 0.5 });
+      ctx.save(); ctx.translate(dcx + cw / 2, dy + ch / 2);
+      drawCard(ctx, discardTop, -cw / 2, -ch / 2, cw, ch, { faceUp: true, foilPhase: 0.5 });
       ctx.restore();
     }
-    rects.discard = { x: _dcx, y: _dy, w: _cw, h: _ch };
+    rects.discard = { x: dcx, y: dy, w: cw, h: ch };
 
-    // Direction arrow below piles (center between them)
+    // Direction arrow under the discard pile (same Y as count, different X)
     const _pulse = osc(500);
     ctx.save(); ctx.globalAlpha = 0.45 + _pulse * 0.25;
     ctx.fillStyle = '#e8ebf3'; ctx.font = `400 ${vs(20)}px ${font}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(dir_global === 1 ? '↻' : '↺', _CX, _dy + _ch + vs(24));
+    ctx.fillText(dir_global === 1 ? '↻' : '↺', dcx + cw / 2, dirY);
     ctx.restore();
 
     return rects;
@@ -953,26 +990,14 @@ const Renderer = (() => {
   function drawDirectionArrow(ctx, dir) { dir_global = dir; }
 
   function drawActionButtons(ctx, state, W, H) {
-    const _SW = W * 0.16, _TH = H * 0.26, _HH = H * 0.26;
-    const _CW = W - 2 * _SW, _CH = H - _TH - _HH;
-    const _CX = _SW + _CW / 2, _CY = _TH + _CH / 2;
-    const _cw = Math.min(_CW * 0.17, _CH * 0.52, vs(90));
-    const _ch = _cw * 1.45;
-    const _gap = Math.max(_cw * 0.15, vs(12));
-    const _dx = _CX - _cw - _gap;   // deck left edge
-    const _dcx = _CX + _gap;         // discard left edge
-    const _dy = _CY - _ch / 2;         // card top edge
+    const L = centerLayout(W, H);
+    const { CX, sideBtnSz, unoCX, unoCY, ciCX: cix, ciCY: ciy, passCX, passCY } = L;
 
     const rects = {};
     const hasDrawn = state.hasDrawnThisTurn || false;
     const pulse3 = osc(180);
 
-    const sideBtnSz = _cw * 0.45;
-
     // ── UNO Button (Bottom Left 4-color Diamond) ──────────────────────────
-    const unoCX = _dx - vs(15) - sideBtnSz / 2;
-    const unoCY = _CY + vs(30);
-
     ctx.save();
     ctx.translate(unoCX, unoCY);
     if (state.unoClickTime && Date.now() - state.unoClickTime < 200) ctx.scale(0.7, 0.7);
@@ -1016,9 +1041,6 @@ const Renderer = (() => {
     rects.uno = { x: unoCX - sideBtnSz / 2, y: unoCY - sideBtnSz / 2, w: sideBtnSz, h: sideBtnSz };
 
     // ── Color indicator (Top Right) — the active light source ─────────────
-    const cix = _dcx + _cw + vs(15) + sideBtnSz / 2;
-    const ciy = _CY - vs(30);
-
     if (state.activeColor && state.activeColor !== 'wild') {
       const ci = CardColors[state.activeColor];
       ctx.save();
@@ -1036,8 +1058,6 @@ const Renderer = (() => {
     }
 
     // ── Pass/Draw Arrow Button (Bottom Right) ──────────────────────────
-    const passCX = cix;
-    const passCY = _CY + vs(30);
     ctx.save();
     ctx.translate(passCX, passCY);
     ctx.rotate(Math.PI / 4);
@@ -1079,34 +1099,51 @@ const Renderer = (() => {
     ctx.restore();
     rects.draw = { x: passCX - sideBtnSz / 2, y: passCY - sideBtnSz / 2, w: sideBtnSz, h: sideBtnSz };
 
-    // ── God Mode Controls ──────────────────────────────────────────────────
+    // ── God Mode Controls — measured glass pill above the hand ─────────────
     if (state.isGodMode && state.spectatingPlayerName) {
       const HAND_H = H * 0.26;
       const handTopY = H - HAND_H - vs(4);
-      const gmY = handTopY - vs(55); // Position just above the YOUR TURN indicator
+      const gmY = handTopY - vs(22);
+      const label = `👁 God Mode: ${state.spectatingPlayerName}`;
 
       ctx.save();
-      ctx.font = `700 ${vs(14)}px ${displayFont}`;
-      ctx.fillStyle = '#fff';
+      ctx.font = `700 ${vs(13)}px ${displayFont}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.shadowColor = '#000'; ctx.shadowBlur = vs(4);
-      ctx.fillText(`👁 God Mode: ${state.spectatingPlayerName}`, _CX, gmY);
+      const tw = ctx.measureText(label).width;
+      const ph = vs(26);
+      const pw = tw + vs(28);
+      const px = CX - pw / 2;
+      const py = gmY - ph / 2;
 
-      const arrW = vs(40);
-      const arrH = vs(30);
-      const leftX = _CX - vs(100);
-      ctx.beginPath(); rr(ctx, leftX - arrW/2, gmY - arrH/2, arrW, arrH, vs(5));
+      rr(ctx, px, py, pw, ph, vs(13));
+      ctx.fillStyle = 'rgba(11,15,26,0.88)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(139,147,168,0.35)';
+      ctx.lineWidth = vs(1);
+      ctx.stroke();
+
+      ctx.fillStyle = '#fff';
+      ctx.shadowColor = '#000'; ctx.shadowBlur = vs(3);
+      ctx.fillText(label, CX, gmY);
+      ctx.shadowBlur = 0;
+
+      const arrW = vs(36);
+      const arrH = vs(28);
+      const gap = vs(8);
+      const leftX = px - gap - arrW / 2;
+      const rightX = px + pw + gap + arrW / 2;
+
+      ctx.beginPath(); rr(ctx, leftX - arrW / 2, gmY - arrH / 2, arrW, arrH, vs(5));
       ctx.fillStyle = 'rgba(5,7,13,0.6)'; ctx.fill();
       ctx.strokeStyle = 'rgba(139,147,168,0.3)'; ctx.lineWidth = vs(1); ctx.stroke();
       ctx.fillStyle = '#fff'; ctx.fillText('◀', leftX, gmY);
-      rects.godLeft = { x: leftX - arrW/2, y: gmY - arrH/2, w: arrW, h: arrH };
+      rects.godLeft = { x: leftX - arrW / 2, y: gmY - arrH / 2, w: arrW, h: arrH };
 
-      const rightX = _CX + vs(100);
-      ctx.beginPath(); rr(ctx, rightX - arrW/2, gmY - arrH/2, arrW, arrH, vs(5));
+      ctx.beginPath(); rr(ctx, rightX - arrW / 2, gmY - arrH / 2, arrW, arrH, vs(5));
       ctx.fillStyle = 'rgba(5,7,13,0.6)'; ctx.fill();
       ctx.strokeStyle = 'rgba(139,147,168,0.3)'; ctx.lineWidth = vs(1); ctx.stroke();
       ctx.fillStyle = '#fff'; ctx.fillText('▶', rightX, gmY);
-      rects.godRight = { x: rightX - arrW/2, y: gmY - arrH/2, w: arrW, h: arrH };
+      rects.godRight = { x: rightX - arrW / 2, y: gmY - arrH / 2, w: arrW, h: arrH };
       ctx.restore();
     }
 
@@ -1264,25 +1301,16 @@ const Renderer = (() => {
     const fraction = remaining / durationMs;
     const secs = Math.ceil(remaining / 1000);
 
-    const _SW = W * 0.16, _TH = H * 0.26, _HH = H * 0.26;
-    const _CW = W - 2 * _SW, _CH = H - _TH - _HH;
-    const _CX = _SW + _CW / 2, _CY = _TH + _CH / 2;
-    const _cw = Math.min(_CW * 0.17, _CH * 0.52, vs(90));
-    const _ch = _cw * 1.45;
-    const _gap = Math.max(_cw * 0.45, vs(34));
-    const _dx = _CX - _cw - _gap;   // deck left edge
-    const _dcx = _CX + _gap;         // discard left edge
-    const _dy = _CY - _ch / 2;         // card top edge
-
+    const L = centerLayout(W, H);
     const isMe = playerId === myId;
     const DANGER = fraction < 0.33;
     const color = DANGER
       ? hexA('#ff3b5c', REDUCED ? 0.9 : 0.75 + Math.sin(Date.now() / 150) * 0.25)
       : 'rgba(255,210,63,0.9)';
 
-    // Position: exact center above the cards
-    const timerX = _CX;
-    const timerY = _dy - vs(26);
+    // Position: exact center above the cards (same gap as piles)
+    const timerX = L.CX;
+    const timerY = L.dy - vs(26);
     const r = vs(14);
     const startAngle = -Math.PI / 2;
     const endAngle = startAngle + 2 * Math.PI * fraction;
@@ -1310,36 +1338,24 @@ const Renderer = (() => {
 
   /** Returns the deck (draw pile) center and card dimensions in canvas pixels. */
   function getDeckPosition(W, H) {
-    const _SW = W * 0.16, _TH = H * 0.26, _HH = H * 0.26;
-    const _CW = W - 2 * _SW, _CH = H - _TH - _HH;
-    const _CX = _SW + _CW / 2, _CY = _TH + _CH / 2;
-    const _cw = Math.min(_CW * 0.17, _CH * 0.52, vs(90));
-    const _ch = _cw * 1.45;
-    const _gap = Math.max(_cw * 0.15, vs(12));
-    const _dx = _CX - _cw - _gap; // deck left edge
+    const L = centerLayout(W, H);
     return {
-      cx: _dx + _cw / 2,
-      cy: _CY,
-      w: _cw,
-      h: _ch,
+      cx: L.dx + L.cw / 2,
+      cy: L.CY,
+      w: L.cw,
+      h: L.ch,
     };
   }
 
   /** Returns the discard pile center and card dimensions in canvas pixels.
    *  MUST mirror drawPiles() exactly — fly animations land on this point. */
   function getDiscardPosition(W, H) {
-    const _SW = W * 0.16, _TH = H * 0.26, _HH = H * 0.26;
-    const _CW = W - 2 * _SW, _CH = H - _TH - _HH;
-    const _CX = _SW + _CW / 2, _CY = _TH + _CH / 2;
-    const _cw = Math.min(_CW * 0.17, _CH * 0.52, vs(90));
-    const _ch = _cw * 1.45;
-    const _gap = Math.max(_cw * 0.15, vs(12));
-    const _dcx = _CX + _gap; // discard left edge
+    const L = centerLayout(W, H);
     return {
-      cx: _dcx + _cw / 2,
-      cy: _CY,
-      w: _cw,
-      h: _ch,
+      cx: L.dcx + L.cw / 2,
+      cy: L.CY,
+      w: L.cw,
+      h: L.ch,
     };
   }
 

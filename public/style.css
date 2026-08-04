@@ -1516,6 +1516,43 @@ input[type="password"]:focus {
   display: flex;
 }
 
+/* ── God Mode: Give Card button ───────────────────────────────────────────── */
+.btn-god-give {
+  position: fixed;
+  bottom: 112px;
+  left: 16px;
+  z-index: 800;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 210, 63, 0.45);
+  color: #ffd23f;
+  font-size: 18px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s, transform 0.15s, border-color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.btn-god-give:hover {
+  background: var(--void-800);
+  border-color: rgba(255, 210, 63, 0.7);
+}
+
+.btn-god-give:active {
+  transform: scale(0.92);
+}
+
+#game-screen.active .btn-god-give.visible {
+  display: flex;
+}
+
 /* ── Card Style Button ─────────────────────────────────────────────────────── */
 .btn-card-style {
   position: fixed;
@@ -2281,6 +2318,73 @@ input[type="password"]:focus {
   font-size: 12px;
   color: var(--steel-300);
   font-variant-numeric: tabular-nums;
+}
+
+/* ── God Mode modals ──────────────────────────────────────────────────────── */
+.god-modal-hint {
+  font-size: 12px;
+  color: var(--steel-300);
+  margin: 0 0 12px;
+  line-height: 1.4;
+}
+
+.god-give-step-title {
+  font-size: 13px;
+  color: var(--steel-100);
+  margin: 0 0 8px;
+}
+
+.god-give-back {
+  margin-bottom: 10px;
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.god-give-colors,
+.god-give-types,
+.god-give-wilds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.god-give-chip {
+  min-width: 44px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(139, 147, 168, 0.35);
+  background: var(--void-800);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: transform 0.12s, border-color 0.15s;
+}
+
+.god-give-chip:hover {
+  transform: scale(1.05);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.god-give-chip.selected {
+  outline: 2px solid #ffd23f;
+  outline-offset: 1px;
+}
+
+.god-give-chip.color-red { background: #e53935; }
+.god-give-chip.color-blue { background: #1e88e5; }
+.god-give-chip.color-green { background: #43a047; }
+.god-give-chip.color-yellow { background: #fdd835; color: #111; }
+.god-give-chip.color-wild { background: linear-gradient(135deg, #e53935, #fdd835, #43a047, #1e88e5); }
+
+.god-fine-uno-badge {
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #ff3b5c;
+  letter-spacing: 0.4px;
 }
 
 /* ── Post-Game Stats Panel ────────────────────────────────────────────────── */
