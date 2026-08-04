@@ -2320,6 +2320,26 @@ input[type="password"]:focus {
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Spectate / God Mode entry modal ─────────────────────────────────────── */
+.spectate-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 10px;
+  color: var(--steel-300);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.spectate-divider::before,
+.spectate-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(139, 147, 168, 0.2);
+}
+
 /* ── God Mode modals ──────────────────────────────────────────────────────── */
 .god-modal-hint {
   font-size: 12px;

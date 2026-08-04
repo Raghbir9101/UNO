@@ -490,6 +490,27 @@
     </div>
   </div>
 
+  <!-- Joining a table that already started: watch, or unlock God Mode -->
+  <div id="spectate-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>👁 Game in progress</h3>
+        <button id="btn-close-spectate" class="btn-close">✕</button>
+      </div>
+      <p class="god-modal-hint">This table has already started. Watch this round — you'll be added to the
+        player list when the host starts the next one.</p>
+      <button id="btn-spectate-normal" class="btn btn-primary btn-large" style="width:100%;">Watch as
+        Spectator</button>
+      <div class="spectate-divider"><span>or</span></div>
+      <div class="input-group">
+        <label class="input-label" for="spectate-god-pass">God Mode password</label>
+        <input type="password" id="spectate-god-pass" autocomplete="off" placeholder="Reveals every hand" />
+      </div>
+      <p id="spectate-error" class="auth-error" hidden></p>
+      <button id="btn-spectate-god" class="btn btn-secondary btn-large" style="width:100%;">Enter God Mode</button>
+    </div>
+  </div>
+
   <!-- God Mode: fine any player -->
   <div id="god-fine-modal" class="modal" style="display: none;">
     <div class="modal-content">

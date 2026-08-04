@@ -80,3 +80,30 @@ FIXES
 
 FILES TOUCHED
 - public/main.js, server/roomManager.js, WORKLOG.txt
+
+
+2026-08-05 — Fix: God Mode still lost on refresh + replaced prompt() entry
+-------------------------------------------------------------------------
+
+FURTHER ROOT CAUSES
+4. The invite-link branch that runs on every page load rewrote uno_session from
+   the URL query (?room&playerId&nickname) with no spectator/god fields. Because
+   history.replaceState keeps those params in the URL, each refresh wiped the
+   flags saved a moment earlier, so the reconnect announced itself as a normal
+   spectator. It now merges with the stored session when room + playerId match.
+5. God Mode entry relied on window.prompt(). Browsers can suppress prompts, and
+   submitting it empty silently produced a plain spectator with no feedback,
+   which looked identical to the bug.
+
+FIXES
+- Invite-link session write merges instead of clobbering (preserves isSpectator
+  and isGodMode for the same seat).
+- Replaced the prompt with a #spectate-modal dialog: "Watch as Spectator" vs a
+  password field + "Enter God Mode". Wrong passwords show inline and keep the
+  dialog open instead of silently downgrading; a warning toast fires if a
+  password was supplied but God Mode was not granted.
+- God Mode join toast now reads "God Mode active — every hand is revealed" so
+  the granted mode is unambiguous.
+
+FILES TOUCHED
+- public/main.js, public/index.html, public/style.css, WORKLOG.txt

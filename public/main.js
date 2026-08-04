@@ -327,10 +327,20 @@
   const _urlNickname = _urlParams.get('nickname');
 
   if (_inviteCode && _urlPlayerId && _urlNickname) {
+    // history.replaceState keeps room/playerId/nickname in the URL, so this runs
+    // on every refresh. Merge instead of overwrite: blowing the stored session
+    // away here would drop the spectator/God Mode flags the reconnect needs.
+    let _prevSession = null;
+    try { _prevSession = JSON.parse(sessionStorage.getItem('uno_session')); } catch { _prevSession = null; }
+    const _sameSeat = _prevSession
+      && _prevSession.roomCode === _inviteCode
+      && _prevSession.playerId === _urlPlayerId;
     sessionStorage.setItem('uno_session', JSON.stringify({
       roomCode: _inviteCode,
       playerId: _urlPlayerId,
-      nickname: _urlNickname
+      nickname: _urlNickname,
+      isSpectator: _sameSeat ? !!_prevSession.isSpectator : false,
+      isGodMode: _sameSeat ? !!_prevSession.isGodMode : false,
     }));
   }
 
@@ -835,7 +845,9 @@
     renderPlayerList();
 
     if (res.gameInProgress && (res.reconnected || res.isSpectator)) {
-      showToast(res.isSpectator ? (res.isGodMode ? 'Joined God Mode Spectator' : 'Joined as Spectator') : 'Reconnected!');
+      showToast(res.isSpectator
+        ? (res.isGodMode ? '👁 God Mode active — every hand is revealed' : 'Joined as Spectator')
+        : 'Reconnected!');
       startGameUI();
 
       // Populate game players for spectators/reconnects using the guaranteed res.players from server
@@ -846,27 +858,80 @@
     }
   }
 
-  // Shared spectate join (manual join when game in progress + room browser Spectate)
+  // ── Spectate / God Mode entry ──────────────────────────────────────────────
+  // Used by the manual join (game already started) and the room browser's
+  // Spectate button. A real modal rather than window.prompt(): browsers can
+  // suppress prompts, and an empty prompt silently downgraded God Mode to a
+  // plain spectator with no way to tell why.
+  const $spectateModal = document.getElementById('spectate-modal');
+  const $spectateGodPass = document.getElementById('spectate-god-pass');
+  const $spectateError = document.getElementById('spectate-error');
+  const $btnSpectateNormal = document.getElementById('btn-spectate-normal');
+  const $btnSpectateGod = document.getElementById('btn-spectate-god');
+  let _spectateCtx = null; // { code, nick, onDone }
+
+  function closeSpectateModal(res) {
+    $spectateModal.style.display = 'none';
+    $spectateGodPass.value = '';
+    $spectateError.hidden = true;
+    const done = _spectateCtx?.onDone;
+    _spectateCtx = null;
+    if (done) done(res || null);
+  }
+
   function spectateJoin(code, nick, onDone) {
-    const pass = prompt("Game is in progress! Enter password for God Mode spectator, or leave blank for normal spectator. Click Cancel to abort.");
-    if (pass === null) {
-      if (onDone) onDone(null);
-      return;
-    }
+    _spectateCtx = { code, nick, onDone };
+    $spectateGodPass.value = '';
+    $spectateError.hidden = true;
+    $spectateModal.style.display = 'flex';
+  }
+
+  function submitSpectateJoin(godPassword) {
+    if (!_spectateCtx) return;
+    const { code, nick } = _spectateCtx;
+    $btnSpectateNormal.disabled = true;
+    $btnSpectateGod.disabled = true;
     socket.emit('join_room', {
       roomCode: code,
       nickname: nick,
       playerId: null,
       spectator: true,
-      godPassword: pass,
+      godPassword,
       uid: myUid,
       picture: myPicture(),
     }, (spectateRes) => {
-      if (onDone) onDone(spectateRes);
-      if (spectateRes?.error) return showToast(spectateRes.error, true);
-      handleJoinSuccess(spectateRes, code);
+      $btnSpectateNormal.disabled = false;
+      $btnSpectateGod.disabled = false;
+
+      if (spectateRes?.error) {
+        // Keep the dialog open so a mistyped password can be corrected
+        $spectateError.textContent = spectateRes.error;
+        $spectateError.hidden = false;
+        return;
+      }
+      const res = spectateRes;
+      closeSpectateModal(res);
+      handleJoinSuccess(res, code);
+      if (godPassword && !res.isGodMode) {
+        showToast('God Mode was not granted — watching as a normal spectator', true);
+      }
     });
   }
+
+  document.getElementById('btn-close-spectate').addEventListener('click', () => closeSpectateModal(null));
+  $btnSpectateNormal.addEventListener('click', () => submitSpectateJoin(''));
+  $btnSpectateGod.addEventListener('click', () => {
+    const pass = $spectateGodPass.value.trim();
+    if (!pass) {
+      $spectateError.textContent = 'Enter the God Mode password, or choose Watch as Spectator.';
+      $spectateError.hidden = false;
+      return;
+    }
+    submitSpectateJoin(pass);
+  });
+  $spectateGodPass.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') $btnSpectateGod.click();
+  });
 
   $btnJoin.addEventListener('click', () => {
     const nick = $nickname.value.trim();
