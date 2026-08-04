@@ -163,3 +163,44 @@ VERIFICATION
 FILES TOUCHED
 - server/roomManager.js, public/main.js, public/renderer.js, public/index.html,
   public/style.css, WORKLOG.txt
+
+
+2026-08-05 — Fix: stale service-worker cache hid every client change after deploy
+--------------------------------------------------------------------------------
+
+SYMPTOM
+After deploying, the new God Mode buttons still did not appear — the in-game rail
+showed only the emote and surrender buttons. Verified the live site was serving
+the new markup and the new main.js, and that the running server answered the new
+god_fine / god_give_card events, so the deploy itself was complete.
+
+ROOT CAUSE
+public/sw.js caches ?v= assets cache-first ("immutable by contract"), and none of
+the ?v= numbers in index.html were bumped during this work. /play is served
+no-store so the markup updated immediately, but the browser kept the old
+main.js?v=48, renderer.js?v=41, game.js?v=39 and style.css?v=45 from the service
+worker cache. The new buttons were therefore present in the DOM but no code
+existed to reveal them, and a hard refresh could not help because a cache-first
+service worker answers subresource requests from its own cache. This is the same
+reason earlier rounds of fixes appeared to have no effect on the live site.
+
+FIXES
+- Bumped the asset versions: style.css 45 -> 46, renderer.js 41 -> 42,
+  game.js 39 -> 40, main.js 48 -> 49.
+- Bumped sw.js CACHE_VERSION uno-v48 -> uno-v49 and updated CORE_ASSETS to the
+  new URLs, so the activate handler purges the previous cache.
+- Registered the worker with updateViaCache:'none' so the worker script itself is
+  never served from the HTTP cache, which is what let a stale worker keep pinning
+  stale assets.
+
+NOTE FOR FUTURE CHANGES
+Any edit to main.js, game.js, renderer.js or style.css must bump that file's ?v=
+number in index.html and CACHE_VERSION in sw.js, or returning visitors keep
+running the old code.
+
+VERIFICATION
+- Every versioned URL returns 200 locally, the served /play references the new
+  versions, and main.js?v=49 contains updateGodButtons and the new button ids.
+
+FILES TOUCHED
+- public/index.html, public/sw.js, public/main.js, WORKLOG.txt

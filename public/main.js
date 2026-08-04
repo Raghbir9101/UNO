@@ -3138,7 +3138,9 @@
   // ── PWA: register the service worker (installable app + faster loads) ─────
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      // updateViaCache:'none' — the worker script itself must never come from
+      // the HTTP cache, or a stale worker keeps serving stale ?v= assets.
+      navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).catch(() => {});
     });
   }
 
