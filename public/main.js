@@ -454,6 +454,19 @@
     $btnAppMenu.setAttribute('aria-expanded', 'false');
   });
 
+  // ── Session persistence ────────────────────────────────────────────────────
+  // Spectator/god flags ride along so a page reload can re-announce them: the
+  // in-memory Game.isGodMode is gone by the time the reconnect fires.
+  function persistSession(roomCode, playerId, nickname) {
+    sessionStorage.setItem('uno_session', JSON.stringify({
+      roomCode,
+      playerId,
+      nickname,
+      isSpectator: !!Game.isSpectator,
+      isGodMode: !!Game.isGodMode,
+    }));
+  }
+
   // ── Toast Notifications ────────────────────────────────────────────────────
   function showToast(message, isError = false) {
     const toast = document.createElement('div');
@@ -811,11 +824,7 @@
     if (_lastServerSeq === 0) players = res.players;
 
     // Persist session so refresh reconnects automatically
-    sessionStorage.setItem('uno_session', JSON.stringify({
-      roomCode: code,
-      playerId: res.playerId,
-      nickname: res.nickname,
-    }));
+    persistSession(code, res.playerId, res.nickname);
     // Remember name for next visit
     localStorage.setItem('uno_nickname', res.nickname);
 
@@ -1197,13 +1206,31 @@
     showReconnectOverlay();
     updateReconnectMessage('Rejoining your room...');
 
-    // Attempt to re-join the saved room silently
-    socket.emit('join_room', { roomCode: saved.roomCode, nickname: saved.nickname, playerId: saved.playerId, uid: myUid, picture: myPicture() }, (res) => {
+    // Attempt to re-join the saved room silently. The saved spectator/god flags
+    // matter here: a page reload wipes Game.isGodMode, so without them a god
+    // spectator whose seat had to be recreated would come back as a plain one.
+    socket.emit('join_room', {
+      roomCode: saved.roomCode,
+      nickname: saved.nickname,
+      playerId: saved.playerId,
+      spectator: !!saved.isSpectator,
+      godPassword: saved.isGodMode ? 'admin' : '',
+      uid: myUid,
+      picture: myPicture(),
+    }, (res) => {
       hideReconnectOverlay();
 
       if (res.error) {
         sessionStorage.removeItem('uno_session');
         resetRoomState(); // room gone — don't carry its seq into the next one
+        // Seat expired but the table is still running — offer to spectate
+        // (this is also how a God Mode spectator gets back in after a restart).
+        if (res.canSpectate) {
+          showToast('Your seat expired — rejoin as a spectator', true);
+          startPingMonitoring();
+          spectateJoin(saved.roomCode, saved.nickname);
+          return;
+        }
         showToast(`Could not reconnect: ${res.error}`, true);
         showScreen($lobby);
         startPingMonitoring();
@@ -1215,25 +1242,29 @@
       hostId = res.hostId;
       if (_lastServerSeq === 0) players = res.players;
 
-      sessionStorage.setItem('uno_session', JSON.stringify({
-        roomCode: saved.roomCode,
-        playerId: res.playerId,
-        nickname: res.nickname,
-      }));
+      // The server is the authority on spectator/god status — a reload has no
+      // in-memory flags left, and god_hands is already on its way.
+      Game.isSpectator = !!res.isSpectator;
+      Game.isGodMode = !!res.isGodMode;
+
+      persistSession(saved.roomCode, res.playerId, res.nickname);
 
       history.replaceState({}, '', `?room=${saved.roomCode}&playerId=${res.playerId}&nickname=${encodeURIComponent(res.nickname)}`);
 
       $displayCode.textContent = saved.roomCode;
       applySettings(res.settings);
 
-      if (res.gameInProgress && res.reconnected) {
-        showToast('✓ Reconnected successfully!');
+      if (res.gameInProgress && (res.reconnected || res.isSpectator)) {
+        showToast(res.isSpectator
+          ? (res.isGodMode ? '✓ Reconnected as God Mode Spectator' : '✓ Reconnected as Spectator')
+          : '✓ Reconnected successfully!');
         // Build player list with known card counts (will be updated by game_state)
         const playerOrder = res.players.map(p => ({
           id: p.id, nickname: p.nickname, cardCount: 7, picture: p.picture,
         }));
         startGameUI();
         Game.setPlayers(playerOrder);
+        Game.applyGodView(); // god_hands may already have landed
       } else {
         renderPlayerList();
         showScreen($waitingRoom);
@@ -1832,18 +1863,22 @@
       hostId = res.hostId;
       isHost = myPlayerId === hostId;
       players = res.players;
-      Game.isSpectator = res.isSpectator;
-      Game.isGodMode = res.isGodMode;
+      Game.isSpectator = !!res.isSpectator;
+      Game.isGodMode = !!res.isGodMode;
       if (res.settings) applySettings(res.settings);
+      persistSession(currentRoomCode, res.playerId, myNickname);
 
       // Only enter the game canvas when a game is actually running — otherwise a
       // lobby reconnect (e.g. right after creating a room) would open a blank
       // game page. Mirrors the gameInProgress gate in the other reconnect paths.
       if (res.gameInProgress && (res.reconnected || res.isSpectator)) {
         const playerOrder = players.map(p => ({ id: p.id, nickname: p.nickname, cardCount: 7, picture: p.picture }));
-        showToast(res.isSpectator ? 'Reconnected as Spectator!' : 'Reconnected!');
+        showToast(res.isSpectator
+          ? (res.isGodMode ? 'Reconnected as God Mode Spectator!' : 'Reconnected as Spectator!')
+          : 'Reconnected!');
         startGameUI();
         Game.setPlayers(playerOrder);
+        Game.applyGodView(); // god_hands may already have landed
       } else {
         // Reconnected into a lobby that hasn't started — back to the waiting room
         renderPlayerList();

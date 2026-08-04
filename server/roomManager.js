@@ -111,8 +111,14 @@ function joinRoom(roomCode, nickname, existingPlayerId, options = {}) {
 
   // Check if this is a reconnect — match by stored playerId first, then fall
   // back to a disconnected slot with the same nickname (legacy path).
+  //
+  // The playerId match deliberately ignores `connected`: on a fast refresh the
+  // browser reconnects before the server has processed the old socket's
+  // disconnect, and requiring !connected made us mint a brand-new seat instead.
+  // For spectators that silently downgraded God Mode to a plain spectator.
+  // Holding the playerId is already the credential for that seat.
   let disconnected = existingPlayerId
-    ? room.players.find(p => p.id === existingPlayerId && !p.connected) || room.spectators.find(p => p.id === existingPlayerId && !p.connected)
+    ? room.players.find(p => p.id === existingPlayerId) || room.spectators.find(p => p.id === existingPlayerId)
     : room.players.find(p => p.nickname === nickname && !p.connected) || room.spectators.find(p => p.nickname === nickname && !p.connected);
 
   if (disconnected) {

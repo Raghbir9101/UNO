@@ -44,3 +44,39 @@ FILES TOUCHED
   public/style.css
 - server/index.js, server/roomManager.js, server/gameLogic.js
 - WORKLOG.txt (this file)
+
+
+2026-08-05 — Fix: God Mode lost after refresh / reconnect
+--------------------------------------------------------
+
+SYMPTOM
+Joining as a God Mode spectator sometimes rendered the plain spectator view
+(all seats as opponents, no revealed hand, no God Mode bar), typically right
+after the "Reconnected successfully" toast.
+
+ROOT CAUSES
+1. The page-refresh auto-reconnect handler in public/main.js never applied
+   res.isSpectator / res.isGodMode. A reload wipes the in-memory flags, so the
+   client treated an acknowledged god spectator as a normal player and ignored
+   the incoming god_hands payload.
+2. roomManager.joinRoom() only matched a stored playerId when the seat was
+   already flagged disconnected. On a fast refresh the browser reconnects before
+   the server processes the old socket's disconnect, so the lookup missed and a
+   brand-new spectator seat was minted with isGodMode = false.
+3. The persisted session never recorded spectator/god status, so the reconnect
+   could not re-announce the god password when a new seat was unavoidable.
+
+FIXES
+- Refresh reconnect now applies the server's isSpectator / isGodMode, enters the
+  game for spectators (not just reconnected players), calls Game.applyGodView()
+  after seating players, and reports god status in its toast.
+- joinRoom() matches a supplied playerId regardless of connected state (holding
+  the id is already the credential), so a refresh reuses the same seat with its
+  god flag intact.
+- Added persistSession() so roomCode/playerId/nickname plus isSpectator and
+  isGodMode are stored together; the reconnect re-sends the god password.
+- If a seat truly expired while the game runs, the reconnect now offers the
+  spectate flow instead of dropping the user back to the lobby.
+
+FILES TOUCHED
+- public/main.js, server/roomManager.js, WORKLOG.txt
