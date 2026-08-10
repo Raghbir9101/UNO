@@ -1,0 +1,26 @@
+    </article>
+
+    <div class="cta-banner">
+      <h3>Ready to Put This Into Practice?</h3>
+      <p>Start a free game right now — no download, no signup, up to 20 players.</p>
+      <a href="/play" class="btn btn-hero">Play UNO Free</a>
+    </div>
+
+    <% if (typeof related !== 'undefined' && related.length) { %>
+    <section class="read-next" aria-label="More from the blog">
+      <h2 class="read-next-title">Read Next</h2>
+      <div class="blog-grid">
+        <% related.forEach(function(r) { %>
+        <article class="blog-card">
+          <p class="blog-meta"><%= r.category %> • <%= r.readTime %></p>
+          <h3><a href="/blog/<%= r.slug %>"><%= r.title %></a></h3>
+          <p><%= r.excerpt %></p>
+          <a href="/blog/<%= r.slug %>" class="blog-read-more">Read the guide →</a>
+        </article>
+        <% }); %>
+      </div>
+    </section>
+    <% } %>
+  </div>
+</main>
+<%- include('footer') %>

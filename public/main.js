@@ -91,6 +91,8 @@
     isHost = false;
     players = [];
     _lastServerSeq = 0;
+    // Voice is per-room — a live mic must never follow you to another table
+    if (window.Voice) Voice.leave();
   }
 
   // ── Ping measurement ───────────────────────────────────────────────────────
@@ -172,6 +174,10 @@
   const $manageModal = document.getElementById('manage-players-modal');
   const $btnCloseManage = document.getElementById('btn-close-manage');
   const $managePlayerList = document.getElementById('manage-player-list');
+  const $btnVoice = document.getElementById('btn-voice');
+  const $voiceBar = document.getElementById('voice-bar');
+  const $voiceRoster = document.getElementById('voice-roster');
+  const $btnVoiceLeave = document.getElementById('btn-voice-leave');
 
   // ── Pre-fill nickname from last session ───────────────────────────────────
   const _savedNick = localStorage.getItem('uno_nickname');
@@ -447,6 +453,7 @@
     if (screen === $gameScreen) {
       setTimeout(() => Game.resizeCanvas(), 50);
     }
+    renderVoiceUI();
   }
 
   // ── App Bar menu (☰) ───────────────────────────────────────────────────────
@@ -518,6 +525,7 @@
   let _dragSrcIndex = null;
 
   function renderPlayerList() {
+    renderVoiceUI(); // seat changes decide who may talk
     $playerList.innerHTML = '';
     $playerCount.textContent = players.length;
     const amHost = myPlayerId === hostId;
@@ -2867,6 +2875,7 @@
     // Escape hatch for a spectator who skipped (or mistyped) the password: the
     // seat can be upgraded in place instead of leaving and re-joining.
     show($btnGodUnlock, inGame && Game.isSpectator && !Game.isGodMode);
+    renderVoiceUI(); // unlocking God Mode also unlocks voice
   }
 
   function openGodGiveModal() {
@@ -3021,6 +3030,107 @@
     Sound.toggleMute();
     refreshSoundBtn();
     if (!Sound.muted) Sound.play('card');
+  });
+
+  // ── Voice Chat ─────────────────────────────────────────────────────────────
+  // One voice channel per game room. Seated players get it, and so does a God
+  // Mode spectator — they watch every hand, so they hear and talk too. A plain
+  // spectator only watches, so the button never appears for them.
+  function voiceEligible() {
+    if (!currentRoomCode) return false;
+    const inRoomScreen = $waitingRoom.classList.contains('active') ||
+      $gameScreen.classList.contains('active');
+    if (!inRoomScreen) return false;
+    if (Game.isGodMode) return true;
+    // Seat, not turn state: an eliminated player is still at the table and
+    // still holds a seat server-side, so they keep talking.
+    return players.some(p => p.id === myPlayerId);
+  }
+
+  function renderVoiceUI() {
+    if (!$btnVoice) return;
+
+    const eligible = voiceEligible();
+    $btnVoice.classList.toggle('visible', eligible);
+    if (!eligible) {
+      $voiceBar.hidden = true;
+      return;
+    }
+
+    const st = Voice.getState();
+    const me = st.participants.find(p => p.isLocal);
+
+    let icon = '🎧';
+    let title = 'Join voice chat';
+    if (st.status === 'connecting') {
+      icon = '⏳';
+      title = 'Connecting to voice…';
+    } else if (st.status === 'connected') {
+      if (st.audioBlocked) {
+        icon = '🔈';
+        title = 'Tap to enable voice audio';
+      } else if (st.micDenied) {
+        icon = '🚫';
+        title = 'Microphone blocked in your browser — you can still listen';
+      } else if (st.muted) {
+        icon = '🔇';
+        title = 'Unmute microphone';
+      } else {
+        icon = '🎙';
+        title = 'Mute microphone';
+      }
+    }
+
+    $btnVoice.textContent = icon;
+    $btnVoice.title = title;
+    $btnVoice.setAttribute('aria-label', title);
+    $btnVoice.disabled = st.status === 'connecting';
+    $btnVoice.classList.toggle('voice-on', st.status === 'connected' && st.muted);
+    $btnVoice.classList.toggle('voice-live', st.status === 'connected' && !st.muted);
+    $btnVoice.classList.toggle('voice-speaking', !!me && me.speaking);
+
+    $voiceBar.hidden = st.status !== 'connected';
+    if ($voiceBar.hidden) return;
+
+    $voiceRoster.innerHTML = '';
+    st.participants.forEach(p => {
+      const chip = document.createElement('span');
+      chip.className = 'voice-chip' +
+        (p.speaking ? ' is-speaking' : '') +
+        (p.muted ? ' is-muted' : '');
+      chip.textContent = `${p.muted ? '🔇' : '🎙'} ${p.isLocal ? 'You' : p.name}`;
+      $voiceRoster.appendChild(chip);
+    });
+  }
+
+  Voice.onChange(renderVoiceUI);
+
+  $btnVoice.addEventListener('click', async () => {
+    if (!voiceEligible() || Voice.status === 'connecting') return;
+
+    if (Voice.status !== 'connected') {
+      const res = await Voice.join(socket, currentRoomCode);
+      if (!res.ok) return showToast(res.error, true);
+      showToast(res.micDenied
+        ? '🎧 In voice — mic is blocked, but you can hear everyone'
+        : '🎧 Joined voice chat — tap again to unmute');
+      return;
+    }
+
+    // Some browsers hold remote audio hostage until a gesture; this is one.
+    if (Voice.getState().audioBlocked) await Voice.resumeAudio();
+
+    const res = await Voice.toggleMute();
+    if (!res.ok) {
+      if (res.error) showToast(res.error, true);
+      return;
+    }
+    showToast(Voice.muted ? '🔇 Microphone muted' : '🎙 Microphone live');
+  });
+
+  $btnVoiceLeave.addEventListener('click', async () => {
+    await Voice.leave();
+    showToast('Left voice chat');
   });
 
   // ── Post-Game Stats Panel ──────────────────────────────────────────────────

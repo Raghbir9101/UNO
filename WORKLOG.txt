@@ -204,3 +204,140 @@ VERIFICATION
 
 FILES TOUCHED
 - public/index.html, public/sw.js, public/main.js, WORKLOG.txt
+
+
+2026-08-09 — Feature: per-room voice chat (WebRTC via LiveKit), God Mode included
+---------------------------------------------------------------------------------
+
+SUMMARY
+Added optional voice chat scoped to each game room. Everyone seated at a table
+can hear and talk to each other, and a God Mode spectator joins the same channel
+so they hear the table and can speak back. Plain spectators are excluded. The
+game's own traffic is unchanged — audio runs browser -> SFU and never passes
+through the Node process.
+
+WHY LIVEKIT AND NOT SOCKET.IO
+Streaming microphone audio over socket.io is unusable in practice (latency,
+bandwidth, mobile battery). Browsers expect WebRTC. A plain peer-to-peer mesh
+would need every player connected to every other player, which collapses well
+before the platform's 20-player room cap, so the design uses an SFU: each
+client uploads once and the server fans the audio out.
+
+SERVER
+- New server/voice.js: wraps livekit-server-sdk. isConfigured(), voiceRoomName(),
+  createToken() and removeParticipant(). LiveKit room name is "uno-<roomCode>",
+  prefixed so a shared LiveKit deployment cannot collide with our room codes.
+- Tokens are minted per request with a 3h TTL and identity = playerId, so a
+  refresh replaces the old session instead of duplicating it. Grants are
+  roomJoin/canPublish/canSubscribe with canPublishData disabled — game traffic
+  stays on socket.io.
+- server/index.js: new voice_token socket event. It verifies the caller is in
+  the room it claims (socket.data.roomCode), then grants a token only to a
+  seated non-bot player or a spectator with isGodMode. Plain spectators are
+  refused. Rate limited to one token per 3s per connection.
+- Kick, surrender and normal leave now also call voice.removeParticipant(), so
+  a removed player is cut off from the audio immediately rather than talking
+  until their token expires.
+- Fully optional: with LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET unset
+  the module logs "voice chat disabled" at boot and every token request returns
+  enabled:false. Verified the server still boots clean with them unset.
+
+CLIENT
+- New public/voice.js (window.Voice): loads the livekit-client UMD build from
+  jsDelivr lazily, only on the first join, so players who never use voice pay
+  nothing. Handles connect/disconnect, mute, remote track attach/detach into a
+  hidden audio host, active-speaker tracking, and browser autoplay unlocking
+  (startAudio on the click that joined).
+- Mic is published but muted on join. The permission prompt therefore fires on
+  a deliberate click, and unmuting afterwards is instant. Denying the mic leaves
+  the player connected in listen-only mode instead of failing the join.
+- public/main.js: eligibility mirrors the server rule — God Mode, or holding a
+  seat in the players list. Deliberately keyed off the seat rather than
+  Game.isSpectator so an eliminated player keeps talking (they still hold a
+  seat server-side). renderVoiceUI() is refreshed from showScreen(),
+  renderPlayerList() and updateGodButtons().
+- resetRoomState() now leaves voice, which covers leaving, surrendering and
+  being kicked in one place — a live mic can never follow you to another table.
+
+UI
+- New 🎧 mic button on the right-hand rail (above the card-style button). Unlike
+  its neighbours it is also visible in the waiting room, so its visibility is
+  driven by a class from main.js instead of #game-screen.active. Icon states:
+  🎧 join, ⏳ connecting, 🔇 in voice and muted, 🎙 live, 🚫 mic blocked,
+  🔈 audio needs a tap. Live mic gets a green ring that pulses while speaking.
+- New VOICE roster pill at the top of the screen listing everyone in the
+  channel, with the speaker highlighted green and a ✕ to leave voice without
+  leaving the game. Repositioned on narrow screens so it clears the ping chip,
+  and rotated with the rest of the rail in landscape mode.
+
+CACHE VERSIONS
+- style.css 46 -> 47, main.js 49 -> 50, added voice.js?v=1.
+- sw.js CACHE_VERSION uno-v49 -> uno-v50 and CORE_ASSETS updated to match,
+  per the note left by the 2026-08-05 stale-cache entry.
+
+DEPLOYMENT (Ubuntu VPS, self-hosted SFU)
+DEPLOYMENT.md gained a Voice Chat section written specifically for a box that
+already runs nginx on 80/443:
+- Explicit warning NOT to use the official installer (curl get.livekit.io) or
+  the livekit/generate cloud-init output. Both bundle Caddy and seize ports 80
+  and 443, which nginx already owns for the game.
+- Manual docker-compose install of livekit-server with network_mode: host, since
+  NAT-mapping a 10,000-port UDP range through Docker is slow and unreliable.
+- LiveKit's built-in TURN is used, so coturn is not required. TURN/TLS is on
+  5349 rather than 443 to stay clear of nginx.
+- Certbot for the livekit.<domain> subdomain, with the letsencrypt live AND
+  archive directories mounted (live/ holds symlinks into archive/, so mounting
+  only live/ gives the container dangling links).
+- A renewal deploy hook: LiveKit reads the TURN cert once at startup and would
+  otherwise keep serving an expired one ~90 days in.
+- Firewall rules (7881/tcp, 3478/udp, 5349/tcp, 50000-60000/udp) plus a note
+  that 7880 must stay closed since nginx reaches it on localhost.
+- A local dev-mode recipe (livekit-server --dev, devkey/secret, ws://localhost)
+  for testing without a VPS or certificates, including the --node-ip flag that
+  Docker Desktop requires (see below).
+
+GOTCHA HIT DURING LOCAL TESTING
+First local run failed with "ConnectionError: could not establish pc connection"
+even though the signal channel connected and the logs showed the participant
+joining the room. Cause: on Docker Desktop (Windows/macOS) containers run inside
+a VM, so LiveKit advertised its internal Docker address as the ICE candidate and
+the browser could not reach it. Publishing the ports is not enough — the
+advertised address has to be reachable too. Fixed by passing --node-ip with the
+host's LAN address; verify via docker logs showing "nodeIP" as the LAN address
+rather than a 172.x one. Not an issue on Linux, where --network host is used.
+- Cloudflare guidance, sizing, and a troubleshooting table.
+The LIVEKIT_* variables were added to the environment variable list.
+
+PRODUCTION ENVIRONMENT NOTES (discovered while writing the deploy steps)
+- The live app runs on port 5000, not the 3000 the older parts of DEPLOYMENT.md
+  assume. Added a callout above those nginx snippets so nobody copies them into
+  a dead upstream.
+- playunofree.com is proxied through Cloudflare (confirmed via the Server and
+  CF-RAY response headers). The origin certificate only covers a leftover
+  uno.draftly.co.in, which is invisible to visitors because Cloudflare
+  re-terminates TLS, and implies the SSL/TLS mode is Full rather than
+  Full (strict).
+- That matters for voice: the livekit subdomain must be grey-clouded, since
+  Cloudflare's proxy will not carry WebRTC media. Grey-clouding means the
+  browser validates the ORIGIN certificate directly, so that subdomain needs a
+  genuine Let's Encrypt cert — the main site's tolerance of a mismatched origin
+  cert does not extend to it. Creating the record grey from the start also lets
+  the HTTP-01 challenge reach the server without fighting the proxy.
+- Documented the trade-off that a grey-clouded record publishes the origin IP.
+  Unavoidable: WebRTC media needs a hostname resolving to the real server.
+
+VERIFICATION
+- livekit-server-sdk installed; token minting verified end to end — decoded JWT
+  shows the expected room, identity and grants.
+- node --check passes on all modified JS; no linter errors.
+- Server boots with voice disabled and logs the expected message; /play serves
+  voice.js and the new markup.
+
+NOT INCLUDED
+Voice for plain spectators, recording, push-to-talk, and a host toggle to
+disable voice for a room.
+
+FILES TOUCHED
+- server/voice.js (new), public/voice.js (new), server/index.js, public/main.js,
+  public/index.html, public/style.css, public/sw.js, package.json,
+  package-lock.json, DEPLOYMENT.md, WORKLOG.txt

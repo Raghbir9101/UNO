@@ -1,0 +1,43 @@
+<%- include('../partials/article-top') %>
+
+<p>"Card counting" sounds like something you do at a blackjack table with a visor and a grudge against the casino. In UNO it is far gentler — and far more useful than most players realize. The entire deck is knowable, the numbers are small, and you do not need to track every card to gain an edge. You just need to understand what is in the deck, notice what has left it, and let that shape the handful of decisions each turn actually offers. Here is the math, made practical.</p>
+
+<h2>Know the deck cold</h2>
+<p>A standard UNO deck is 108 cards, and its composition never changes:</p>
+<ul>
+  <li><strong>76 number cards.</strong> Each color (red, yellow, green, blue) has one 0 and two each of 1 through 9. That is 19 number cards per color.</li>
+  <li><strong>24 action cards.</strong> Two Skips, two Reverses, and two Draw Twos in each of the four colors.</li>
+  <li><strong>8 wild cards.</strong> Four Wilds and four Wild Draw Fours, colorless until played.</li>
+</ul>
+<p>In our game an optional pair of Wild Draw Eight cards and Shuffle Hands cards can join the deck, and tables of 11 or more players use a double deck (216 cards). But the ratios stay the same, and that is what matters. Burn these numbers into memory once and you never have to recount them.</p>
+
+<h2>The one number that changes everything</h2>
+<p>Here is the single most useful fact in UNO probability: there are only <strong>four Wild Draw Fours in the deck</strong>. That scarcity is why the card is so powerful and why spending one carelessly is such a mistake. If two have already been played, the odds of another appearing to rescue an opponent — or to threaten you — have halved. Tracking just this one card type, "how many +4s are still out there," already puts you ahead of most players.</p>
+
+<h2>Count colors by feel, not by tally</h2>
+<p>You do not need an exact count of every card. You need a running sense of which colors are getting thin. Each color starts with 25 cards total (19 numbers + 6 action). As a color piles up on the discard heap, fewer of those cards remain in play. Why does this matter?</p>
+<ul>
+  <li><strong>Action cards get stronger in depleted colors.</strong> If most reds are gone, a red Skip is hard for anyone to answer or bounce — there are simply fewer red cards left to respond with.</li>
+  <li><strong>Your held color may be a trap.</strong> If you are hoarding blue but blue has flooded the pile, you may struggle to keep playing it, because the matching numbers to bridge to it are gone.</li>
+  <li><strong>Wild color choices get smarter.</strong> When you play a Wild, choosing a color that is still rich in the deck keeps your own options alive longer.</li>
+</ul>
+
+<h2>The odds of drawing what you need</h2>
+<p>Say you are stuck and must draw, hoping for anything green. Early in a hand roughly a quarter of the deck is green-playable, so your odds on a single draw are decent — better than one in four once you count wilds, which are always playable. But those odds shift as the game goes. If green has been heavily played, that same draw might be one in six. This is why "just draw and hope" is a weak plan late in a hand: the deck you are drawing from is not the fresh deck you imagine. Knowing the color is depleted tells you to change your approach — trade for a wild, or steer the pile — rather than trusting a draw that is worse than it feels.</p>
+
+<h2>Track the dangerous cards, ignore the rest</h2>
+<p>You will drive yourself mad trying to remember every number card, and it would not help much anyway. Focus your attention on the cards that actually swing games:</p>
+<ul>
+  <li><strong>Wild Draw Fours</strong> — the four most powerful cards. Always know roughly how many remain.</li>
+  <li><strong>Draw Twos and Skips</strong> — especially in a <a href="/rules/stacking">stacking game</a>, where knowing both blue +2s are already gone means a blue attack cannot be extended in that color.</li>
+  <li><strong>Reverses</strong> — in tight endgames, knowing whether a Reverse could still flip the turn order tells you whether the player to your left is truly the next victim.</li>
+</ul>
+<p>Everything else is noise. Counting the action and wild cards — maybe a dozen card types worth watching — is entirely doable and gives you nearly all the benefit.</p>
+
+<h2>Use the count to inform, not to obsess</h2>
+<p>The goal is not a perfect ledger in your head. It is to turn vague hunches into informed ones. "I feel like I should hold this +4" becomes "two +4s are already out and the leader is at two cards, so mine is worth holding one more turn." "I'll just draw" becomes "green is thin, I should change color with my wild instead." Card counting in UNO is really just structured attention — the same attention that separates players who win occasionally from players who win a lot.</p>
+
+<h2>Where the math meets the table</h2>
+<p>Probability gives you the odds; the table tells you the story. Combine a rough count with reading how people play — <a href="/blog/how-to-win-at-uno">the broader strategy of watching hand sizes and behavior</a> — and you are no longer guessing. You are making the best available bet on every turn, which over many hands is exactly what winning looks like. Start with the four +4s. Add colors next. The rest will come on its own once you notice how much clearer the game gets.</p>
+
+<%- include('../partials/article-bottom') %>

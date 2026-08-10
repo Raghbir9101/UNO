@@ -261,12 +261,153 @@ router.get('/uno-unblocked', (req, res) => {
 });
 
 // ── Blog ──
+// Single source of truth for the blog: the index grid, the per-article routes,
+// the sitemap entries, and each post's Article structured data are all driven
+// from this one array. To publish a new post: add an entry here and create the
+// matching view at views/blog/<slug>.ejs. `date` is ISO (YYYY-MM-DD).
+const BLOG_POSTS = [
+  {
+    slug: 'how-to-win-at-uno',
+    title: 'How to Win at UNO: 12 Strategies That Actually Work',
+    description: 'Twelve practical UNO strategies used by strong players — hand management, card counting, when to hold wilds, bluffing the UNO call, and reading the table. Then play free online.',
+    category: 'Strategy',
+    readTime: '9 min read',
+    date: '2026-07-22',
+    excerpt: 'UNO looks like luck, but the same players keep winning. Here are twelve concrete tactics — from wild-card timing to counting colors — that turn a coin-flip into an edge.',
+  },
+  {
+    slug: 'uno-no-mercy-strategy',
+    title: 'UNO No Mercy Strategy: How to Survive Stacking and Elimination',
+    description: 'A complete strategy guide to UNO No Mercy: managing stack wars, hoarding +2s and +4s, dodging elimination at 25 cards, and using Wild +8 and Shuffle Hands to win.',
+    category: 'Strategy',
+    readTime: '10 min read',
+    date: '2026-07-25',
+    excerpt: 'No Mercy rewards a completely different instinct than Classic. Stacking, Wild +8s, and elimination at 25 cards mean survival beats speed. Here is how to outlast everyone.',
+  },
+  {
+    slug: 'uno-house-rules-ranked',
+    title: 'Every UNO House Rule, Ranked From Worst to Best',
+    description: 'Seven-Zero, Jump-In, stacking, Draw to Match, Force Play, Wild Challenge and more — every popular UNO house rule ranked by how much fun it actually adds to the game.',
+    category: 'House Rules',
+    readTime: '8 min read',
+    date: '2026-07-28',
+    excerpt: 'Some house rules make UNO unforgettable. Others just make games drag. We rank the most popular variants by how much chaos and fun they add per minute.',
+  },
+  {
+    slug: 'uno-card-counting-and-odds',
+    title: 'UNO Card Counting and Odds: The Math Behind Better Decisions',
+    description: 'You do not need a photographic memory to count UNO cards. Learn the deck composition, the odds of drawing what you need, and simple counting habits that sharpen every turn.',
+    category: 'Strategy',
+    readTime: '9 min read',
+    date: '2026-07-30',
+    excerpt: 'The 108-card deck is completely knowable. Understanding what is left — and the real odds of drawing it — is the closest thing UNO has to a cheat code.',
+  },
+  {
+    slug: 'best-uno-variants-for-big-groups',
+    title: '8 Ways to Play UNO With Big Groups (5 to 20 Players)',
+    description: 'Standard UNO drags with big groups. These eight formats and house-rule combinations keep 5, 10, or even 20 players engaged — including tips for double decks and teams.',
+    category: 'Multiplayer',
+    readTime: '8 min read',
+    date: '2026-08-01',
+    excerpt: 'Four players is easy. Fifteen is a different game. Here are eight formats — teams, elimination, speed rounds — that keep a huge table from grinding to a halt.',
+  },
+  {
+    slug: 'uno-two-player-rules-and-strategy',
+    title: 'UNO With 2 Players: Rules, Reverse Tricks, and Strategy',
+    description: 'How the UNO rules change in a two-player game, why Reverse acts like Skip, and the head-to-head strategy that wins duels. Play 1v1 UNO free online in your browser.',
+    category: 'Rules',
+    readTime: '7 min read',
+    date: '2026-08-03',
+    excerpt: 'Two-player UNO is a duel, not a party. Reverse becomes Skip, bluffing disappears, and card counting gets brutally precise. Here is how to win one on one.',
+  },
+  {
+    slug: 'common-uno-mistakes',
+    title: '10 Common UNO Mistakes (and How to Stop Making Them)',
+    description: 'From dumping high cards too early to forgetting to call UNO, these ten mistakes quietly cost you games. Learn to spot and fix each one, then play free online.',
+    category: 'Strategy',
+    readTime: '7 min read',
+    date: '2026-08-05',
+    excerpt: 'Most losses are self-inflicted. These ten habits — hoarding the wrong cards, blowing your +4 early, tunnel-visioning on your own hand — are fixable today.',
+  },
+  {
+    slug: 'when-to-play-wild-cards',
+    title: 'When to Play Your Wild and +4 Cards (Timing Guide)',
+    description: 'Your Wild and Wild Draw Four cards are your most powerful tools — and most players waste them. A timing guide to holding, bluffing, and unleashing wilds to win.',
+    category: 'Strategy',
+    readTime: '7 min read',
+    date: '2026-08-07',
+    excerpt: 'A Wild Draw Four can swing a whole game — or be dead weight you played three turns too early. Here is a clear framework for when to hold and when to strike.',
+  },
+];
+
+const blogBySlug = new Map(BLOG_POSTS.map(p => [p.slug, p]));
+
+// Blog index (grid of real articles, newest first)
 router.get('/blog', (req, res) => {
   const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
+  const posts = [...BLOG_POSTS].sort((a, b) => b.date.localeCompare(a.date));
   renderPage(res, 'blog', {
-    title: 'Play UNO Free Blog — Tips, Strategies & Updates',
-    description: 'Free UNO tips, strategies, game updates, and card game knowledge. Learn to play better and discover new free features.',
+    title: 'Play UNO Free Blog — Tips, Strategies & Guides',
+    description: 'Original UNO strategy guides, house-rule breakdowns, and tips for winning more games. Learn to play better, then jump into a free online game.',
     canonical: `${base}/blog`,
+    posts,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Blog",
+      "name": "Play UNO Free Blog",
+      "url": `${base}/blog`,
+      "description": "UNO strategy guides, house-rule breakdowns, and tips.",
+      "blogPost": posts.map(p => ({
+        "@type": "BlogPosting",
+        "headline": p.title,
+        "description": p.description,
+        "datePublished": p.date,
+        "url": `${base}/blog/${p.slug}`,
+        "author": { "@type": "Organization", "name": SITE_NAME },
+      })),
+    },
+  });
+});
+
+// Individual blog article: /blog/<slug> → views/blog/<slug>.ejs
+router.get('/blog/:slug', (req, res, next) => {
+  const post = blogBySlug.get(req.params.slug);
+  if (!post) return next(); // fall through to the 404 handler in index.js
+  const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
+  const url = `${base}/blog/${post.slug}`;
+  renderPage(res, `blog/${post.slug}`, {
+    title: `${post.title} | Play UNO Free`,
+    description: post.description,
+    canonical: url,
+    ogType: 'article',
+    post,
+    // "Read next" strip: the three most recent OTHER posts
+    related: BLOG_POSTS.filter(p => p.slug !== post.slug)
+      .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3),
+    jsonLd: [
+      {
+        "@context": "https://schema.org", "@type": "Article",
+        "headline": post.title,
+        "description": post.description,
+        "author": { "@type": "Organization", "name": SITE_NAME },
+        "publisher": {
+          "@type": "Organization", "name": SITE_NAME,
+          "logo": { "@type": "ImageObject", "url": `${base}/images/icon-512.png` },
+        },
+        "datePublished": post.date,
+        "dateModified": post.date,
+        "mainEntityOfPage": url,
+        "articleSection": post.category,
+      },
+      {
+        "@context": "https://schema.org", "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Home", "item": base },
+          { "@type": "ListItem", "position": 2, "name": "Blog", "item": `${base}/blog` },
+          { "@type": "ListItem", "position": 3, "name": post.title, "item": url },
+        ],
+      },
+    ],
   });
 });
 
@@ -349,6 +490,7 @@ router.get('/sitemap.xml', (req, res) => {
     { url: '/multiplayer', changefreq: 'monthly', priority: '0.7' },
     { url: '/uno-unblocked', changefreq: 'monthly', priority: '0.7' },
     { url: '/blog', changefreq: 'weekly', priority: '0.7' },
+    ...BLOG_POSTS.map(p => ({ url: `/blog/${p.slug}`, changefreq: 'monthly', priority: '0.6', lastmod: p.date })),
     { url: '/about', changefreq: 'yearly', priority: '0.5' },
     { url: '/contact', changefreq: 'yearly', priority: '0.4' },
     { url: '/privacy-policy', changefreq: 'yearly', priority: '0.3' },
@@ -359,7 +501,7 @@ router.get('/sitemap.xml', (req, res) => {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${pages.map(p => `  <url>
-    <loc>${base}${p.url}</loc>
+    <loc>${base}${p.url}</loc>${p.lastmod ? `\n    <lastmod>${p.lastmod}</lastmod>` : ''}
     <changefreq>${p.changefreq}</changefreq>
     <priority>${p.priority}</priority>
   </url>`).join('\n')}

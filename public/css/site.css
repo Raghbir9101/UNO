@@ -778,7 +778,48 @@ a:hover { color: #fff; }
   margin-bottom: 12px !important;
 }
 .blog-read-more { font-size: 0.9rem; font-weight: 600; }
+.blog-card h3 { margin: 0 0 6px; font-size: 1.1rem; }
+.blog-card h3 a { color: var(--steel-100); }
+.blog-card h3 a:hover { color: var(--uno-yellow); }
 @media (max-width: 700px) { .blog-grid { grid-template-columns: 1fr; } }
+
+/* ── Blog article layout ── */
+.blog-article { display: block; }
+.article-meta {
+  font-family: var(--font-data);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 20px;
+}
+.article-tag {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  color: var(--uno-yellow);
+  letter-spacing: 0.08em;
+}
+.article-lead {
+  font-size: 1.15rem !important;
+  color: var(--steel-200) !important;
+  border-left: 3px solid var(--uno-yellow);
+  padding-left: 18px;
+  margin-bottom: 36px !important;
+}
+.blog-article h2 { margin-top: 40px; }
+.blog-article p + h2, .blog-article ul + h2, .blog-article ol + h2 { margin-top: 44px; }
+.read-next { margin-top: 64px; border-top: 1px solid var(--glass-border); padding-top: 8px; }
+.read-next-title {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  margin-top: 24px;
+}
 
 /* ── 404 — the misdealt card ── */
 .card-404 {

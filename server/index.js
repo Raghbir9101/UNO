@@ -17,6 +17,7 @@ const ogImage = require('./routes/ogImage');
 const statePersistence = require('./statePersistence');
 const statsStore = require('./statsStore');
 const progressStore = require('./progressStore');
+const voice = require('./voice');
 const rewardsEngine = require('./rewards/engine');
 const { connectDB, dbReady } = require('./db');
 const cloudSync = require('./cloudSync'); // wires store→MongoDB mirroring hooks
@@ -875,6 +876,7 @@ const EMOTES = [
 ];
 
 const EMOTE_COOLDOWN_MS = 1500;
+const VOICE_TOKEN_COOLDOWN_MS = 3000;
 
 // ─── Socket.io Events ────────────────────────────────────────────────────────
 
@@ -884,6 +886,7 @@ io.on('connection', (socket) => {
   // Emote cooldown lives on the connection, not socket.data — join_room
   // replaces socket.data wholesale, which would reset the cooldown.
   let lastEmoteAt = 0;
+  let lastVoiceTokenAt = 0;
 
   // ── Ping Measurement ──
   socket.on('ping_measure', () => {
@@ -1002,6 +1005,52 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ── Voice Chat: mint a LiveKit token for this room ──
+  // Seated players and God Mode spectators get one; plain spectators are
+  // watching, not participating, so they are refused.
+  socket.on('voice_token', async ({ roomCode }, callback) => {
+    const respond = typeof callback === 'function' ? callback : () => { };
+
+    if (!voice.isConfigured()) return respond({ enabled: false });
+
+    const playerId = socket.data?.playerId;
+    const code = (roomCode || '').trim().toUpperCase();
+    if (!playerId || socket.data?.roomCode !== code) {
+      return respond({ enabled: true, error: 'Not in this room' });
+    }
+
+    const room = roomManager.getRoom(code);
+    if (!room) return respond({ enabled: true, error: 'Room not found' });
+
+    const player = room.players.find(p => p.id === playerId && !p.isBot);
+    const spectator = room.spectators?.find(s => s.id === playerId);
+    const member = player || (spectator?.isGodMode ? spectator : null);
+    if (!member) {
+      return respond({ enabled: true, error: 'Voice chat is for players only' });
+    }
+
+    // A burst of token requests is either a bug or someone probing — one every
+    // few seconds is plenty for join + reconnect.
+    const now = Date.now();
+    if (now - lastVoiceTokenAt < VOICE_TOKEN_COOLDOWN_MS) {
+      return respond({ enabled: true, error: 'Slow down' });
+    }
+    lastVoiceTokenAt = now;
+
+    try {
+      const token = await voice.createToken({
+        roomCode: code,
+        playerId,
+        nickname: member.nickname,
+      });
+      respond({ enabled: true, url: voice.url, token, identity: playerId });
+      console.log(`[voice] token issued for ${member.nickname} (${playerId}) in ${code}`);
+    } catch (err) {
+      console.error('[voice] token mint failed:', err);
+      respond({ enabled: true, error: 'Could not start voice chat' });
+    }
+  });
+
   // ── Kick Player ──
   socket.on('kick_player', ({ roomCode, targetPlayerId }) => {
     const room = roomManager.getRoom(roomCode);
@@ -1056,6 +1105,8 @@ io.on('connection', (socket) => {
 
     // ── Step 3: Permanently remove from room (no reconnect window) ──
     roomManager.forceRemovePlayer(roomCode, targetPlayerId);
+    // Their voice token is still valid for hours — cut the audio too
+    voice.removeParticipant(roomCode, targetPlayerId);
 
     // ── Step 4: Notify remaining players ──
     io.to(roomCode).emit('player_kicked', { nickname, playerId: targetPlayerId });
@@ -1118,6 +1169,7 @@ io.on('connection', (socket) => {
       if (result.winner) recordGameEnd(roomCode, result.winner);
 
       roomManager.forceRemovePlayer(roomCode, playerId);
+      voice.removeParticipant(roomCode, playerId);
       socket.leave(roomCode);
       socket.data = {};
 
@@ -1142,6 +1194,7 @@ io.on('connection', (socket) => {
 
     // ── Normal leave (lobby, or a spectator) ──
     roomManager.removePlayer(roomCode, playerId);
+    voice.removeParticipant(roomCode, playerId);
 
     // Leave socket room
     socket.leave(roomCode);
