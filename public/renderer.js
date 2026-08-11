@@ -659,6 +659,74 @@ const Renderer = (() => {
     return (p && p.picture && p.picture.startsWith('emoji:')) ? p.picture.slice(6) : null;
   }
 
+  // ── Voice mic pip ───────────────────────────────────────────────────────────
+  // 'off' for anyone not in the voice channel, so tables that never use voice
+  // look exactly as they did before.
+  function voiceStatusFor(playerId) {
+    return (window.Voice && window.Voice.statusFor) ? window.Voice.statusFor(playerId) : 'off';
+  }
+
+  // Mic glyph drawn beside a seat name. Three readable states:
+  //   muted    → grey mic with a red slash
+  //   live     → white mic (unmuted, silent)
+  //   speaking → green mic, glowing, with sound waves
+  function micPip(ctx, cx, cy, h, state) {
+    if (!state || state === 'off') return;
+    const isMuted = state === 'muted';
+    const isTalking = state === 'speaking';
+    const color = isMuted ? 'rgba(139,147,168,0.8)' : (isTalking ? '#2ee88a' : '#e8ebf3');
+
+    const capW = h * 0.40, capH = h * 0.54;
+    const capTop = cy - h / 2;
+    const cradleY = capTop + capH * 0.72;
+    const cradleR = capW * 0.80;
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = Math.max(h * 0.10, 0.7);
+    ctx.lineCap = 'round';
+    if (isTalking) { ctx.shadowColor = '#2ee88a'; ctx.shadowBlur = h * 0.55; }
+
+    rr(ctx, cx - capW / 2, capTop, capW, capH, capW / 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(cx, cradleY, cradleR, 0, Math.PI);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cradleY + cradleR);
+    ctx.lineTo(cx, cy + h / 2);
+    ctx.stroke();
+
+    if (isTalking) {
+      // Waves breathe with the speech indicator so "talking" reads at a glance
+      const p = osc(220);
+      ctx.globalAlpha = 0.45 + p * 0.55;
+      ctx.lineWidth = Math.max(h * 0.08, 0.6);
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.arc(cx, cradleY, cradleR + h * (0.20 + p * 0.10),
+                side > 0 ? -Math.PI * 0.30 : Math.PI * 1.30,
+                side > 0 ? Math.PI * 0.30 : Math.PI * 0.70);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    if (isMuted) {
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#ff3b5c';
+      ctx.lineWidth = Math.max(h * 0.12, 0.9);
+      ctx.beginPath();
+      ctx.moveTo(cx - h * 0.36, cy + h * 0.40);
+      ctx.lineTo(cx + h * 0.36, cy - h * 0.40);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   // NOTE: getOpponentPositions() mirrors this function's seat geometry so fly
   // animations land on the exact drawn seats — change layout math in BOTH.
   function drawOpponents(ctx, players, myId, curPlayer, dir, W, H) {
@@ -804,11 +872,13 @@ const Renderer = (() => {
       const nameRowY = fy + tch + vs(4);
       const avR = vs(7 * uiSf);
       const avX = slotCX;
+      const vState = voiceStatusFor(p.id);
+      const micH = vState === 'off' ? 0 : vs(11 * uiSf);
       ctx.font = `600 ${vs(9 * uiSf)}px ${font}`;
-      const nm = fitName(ctx, p.nickname, topSlotW / 2 - vs(12));
+      const nm = fitName(ctx, p.nickname, topSlotW / 2 - vs(12) - micH);
       const nmW = ctx.measureText(nm).width;
       const chipX = avX - avR * 2 - vs(6);
-      const chipW = avR * 2 + vs(8) + nmW + vs(8);
+      const chipW = avR * 2 + vs(8) + nmW + (micH ? micH * 0.75 + vs(5) : 0) + vs(8);
       ctx.save();
       rr(ctx, chipX, nameRowY - vs(2), chipW, avR * 2 + vs(4), vs(9));
       ctx.fillStyle = 'rgba(11,15,26,0.6)'; ctx.fill();
@@ -822,6 +892,8 @@ const Renderer = (() => {
       ctx.font = `600 ${vs(9 * uiSf)}px ${font}`;
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       ctx.fillText(nm, avX + vs(2), nameRowY + avR);
+
+      if (micH) micPip(ctx, chipX + chipW - vs(8) - micH * 0.375, nameRowY + avR, micH, vState);
 
       badge(fx + fanW + vs(3), fy + vs(3), cc);
       if (cc === 1) unoTag(slotCX, fy + tch + nameRowH + vs(3));
@@ -865,7 +937,13 @@ const Renderer = (() => {
       const nameY = fy + fanH + vs(3);
       const avR = vs(6 * uiSf);
 
-      seatAvatar(pileCX, nameY + avR, avR, pColor(p), isCur, p);
+      const vState = voiceStatusFor(p.id);
+      const micH = vState === 'off' ? 0 : vs(10 * uiSf);
+      // Avatar shifts left to keep the avatar+mic pair centered in the column
+      const avCX = pileCX - (micH ? (micH * 0.375 + vs(3)) : 0);
+
+      seatAvatar(avCX, nameY + avR, avR, pColor(p), isCur, p);
+      if (micH) micPip(ctx, avCX + avR + vs(4), nameY + avR, micH, vState);
 
       // Name below avatar — full width of the side column before truncating
       ctx.font = `600 ${vs(8 * uiSf)}px ${font}`;

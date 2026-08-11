@@ -52,6 +52,26 @@ window.Voice = (function () {
     };
   }
 
+  /**
+   * Voice state for one player, keyed by playerId (which is also their LiveKit
+   * identity). Drives the mic pip drawn on each seat.
+   * off = not in the voice channel at all.
+   */
+  function statusFor(identity) {
+    if (!room || status !== 'connected' || !identity) return 'off';
+
+    const local = room.localParticipant;
+    if (local && local.identity === identity) {
+      if (muted) return 'muted';
+      return speaking.has(identity) ? 'speaking' : 'live';
+    }
+
+    const p = room.remoteParticipants?.get(identity);
+    if (!p) return 'off';
+    if (!p.isMicrophoneEnabled) return 'muted';
+    return speaking.has(identity) ? 'speaking' : 'live';
+  }
+
   function listParticipants() {
     if (!room) return [];
     const out = [];
@@ -274,6 +294,7 @@ window.Voice = (function () {
     resumeAudio,
     onChange,
     getState,
+    statusFor,
     get status() { return status; },
     get muted() { return muted; },
     get active() { return status === 'connected'; },

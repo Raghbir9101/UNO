@@ -175,9 +175,6 @@
   const $btnCloseManage = document.getElementById('btn-close-manage');
   const $managePlayerList = document.getElementById('manage-player-list');
   const $btnVoice = document.getElementById('btn-voice');
-  const $voiceBar = document.getElementById('voice-bar');
-  const $voiceRoster = document.getElementById('voice-roster');
-  const $btnVoiceLeave = document.getElementById('btn-voice-leave');
 
   // ── Pre-fill nickname from last session ───────────────────────────────────
   const _savedNick = localStorage.getItem('uno_nickname');
@@ -627,6 +624,8 @@
       if (!p.connected) name.style.opacity = '0.4';
       li.appendChild(name);
 
+      if (!p.isBot) li.appendChild(makeVoicePip(p.id));
+
       if (p.isBot) {
         const bot = document.createElement('span');
         bot.className = 'bot-badge';
@@ -662,6 +661,8 @@
 
       $playerList.appendChild(li);
     });
+
+    updateVoicePips();
 
     if (amHost && N > 1) {
       const hint = document.createElement('p');
@@ -3047,15 +3048,43 @@
     return players.some(p => p.id === myPlayerId);
   }
 
+  // Mic indicator shown next to a name in the waiting room. The in-game seats
+  // get the same four states painted straight onto the canvas.
+  function voicePipLabel(state) {
+    switch (state) {
+      case 'muted': return 'In voice — mic muted';
+      case 'live': return 'In voice — mic on';
+      case 'speaking': return 'Talking';
+      default: return 'Not in voice chat';
+    }
+  }
+
+  function makeVoicePip(playerId) {
+    const pip = document.createElement('span');
+    pip.className = 'voice-pip';
+    pip.dataset.voiceFor = playerId;
+    return pip;
+  }
+
+  function updateVoicePips() {
+    document.querySelectorAll('.voice-pip').forEach(pip => {
+      const state = (window.Voice && Voice.statusFor)
+        ? Voice.statusFor(pip.dataset.voiceFor)
+        : 'off';
+      pip.dataset.state = state;
+      pip.textContent = state === 'off' ? '' : (state === 'muted' ? '🔇' : '🎙');
+      pip.title = voicePipLabel(state);
+    });
+  }
+
   function renderVoiceUI() {
     if (!$btnVoice) return;
 
+    updateVoicePips();
+
     const eligible = voiceEligible();
     $btnVoice.classList.toggle('visible', eligible);
-    if (!eligible) {
-      $voiceBar.hidden = true;
-      return;
-    }
+    if (!eligible) return;
 
     const st = Voice.getState();
     const me = st.participants.find(p => p.isLocal);
@@ -3079,6 +3108,7 @@
         icon = '🎙';
         title = 'Mute microphone';
       }
+      title += ' · hold to leave voice';
     }
 
     $btnVoice.textContent = icon;
@@ -3088,24 +3118,35 @@
     $btnVoice.classList.toggle('voice-on', st.status === 'connected' && st.muted);
     $btnVoice.classList.toggle('voice-live', st.status === 'connected' && !st.muted);
     $btnVoice.classList.toggle('voice-speaking', !!me && me.speaking);
-
-    $voiceBar.hidden = st.status !== 'connected';
-    if ($voiceBar.hidden) return;
-
-    $voiceRoster.innerHTML = '';
-    st.participants.forEach(p => {
-      const chip = document.createElement('span');
-      chip.className = 'voice-chip' +
-        (p.speaking ? ' is-speaking' : '') +
-        (p.muted ? ' is-muted' : '');
-      chip.textContent = `${p.muted ? '🔇' : '🎙'} ${p.isLocal ? 'You' : p.name}`;
-      $voiceRoster.appendChild(chip);
-    });
   }
 
   Voice.onChange(renderVoiceUI);
 
+  // Hold the mic button to drop out of voice entirely. A stray long-press must
+  // not also fire the mute toggle, so the click that follows is swallowed.
+  let _voiceHoldTimer = null;
+  let _voiceHeld = false;
+
+  function startVoiceHold() {
+    if (Voice.status !== 'connected') return;
+    _voiceHeld = false;
+    clearTimeout(_voiceHoldTimer);
+    _voiceHoldTimer = setTimeout(async () => {
+      _voiceHeld = true;
+      await Voice.leave();
+      showToast('Left voice chat');
+    }, 600);
+  }
+  function cancelVoiceHold() { clearTimeout(_voiceHoldTimer); }
+
+  $btnVoice.addEventListener('pointerdown', startVoiceHold);
+  $btnVoice.addEventListener('pointerup', cancelVoiceHold);
+  $btnVoice.addEventListener('pointerleave', cancelVoiceHold);
+  $btnVoice.addEventListener('pointercancel', cancelVoiceHold);
+  $btnVoice.addEventListener('contextmenu', e => e.preventDefault());
+
   $btnVoice.addEventListener('click', async () => {
+    if (_voiceHeld) { _voiceHeld = false; return; }
     if (!voiceEligible() || Voice.status === 'connecting') return;
 
     if (Voice.status !== 'connected') {
@@ -3126,11 +3167,6 @@
       return;
     }
     showToast(Voice.muted ? '🔇 Microphone muted' : '🎙 Microphone live');
-  });
-
-  $btnVoiceLeave.addEventListener('click', async () => {
-    await Voice.leave();
-    showToast('Left voice chat');
   });
 
   // ── Post-Game Stats Panel ──────────────────────────────────────────────────

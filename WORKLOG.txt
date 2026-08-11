@@ -285,13 +285,24 @@ already runs nginx on 80/443:
   NAT-mapping a 10,000-port UDP range through Docker is slow and unreliable.
 - LiveKit's built-in TURN is used, so coturn is not required. TURN/TLS is on
   5349 rather than 443 to stay clear of nginx.
-- Certbot for the livekit.<domain> subdomain, with the letsencrypt live AND
-  archive directories mounted (live/ holds symlinks into archive/, so mounting
-  only live/ gives the container dangling links).
+- Certbot for the livekit.<domain> subdomain, with the WHOLE /etc/letsencrypt
+  tree mounted at the same path inside the container. Everything under live/ is
+  a symlink to ../../archive/<domain>/fullchainN.pem, and that relative path
+  only resolves if the directory sits at the same depth in the container as on
+  the host. An earlier draft mounted live/<domain> at /etc/livekit/certs and
+  archive at /etc/letsencrypt/archive; the symlink then resolved to
+  /etc/archive/... which does not exist, and LiveKit crash-looped with
+  "TURN tls cert required: ... no such file or directory". Hit for real during
+  the first production deploy.
 - A renewal deploy hook: LiveKit reads the TURN cert once at startup and would
   otherwise keep serving an expired one ~90 days in.
-- Firewall rules (7881/tcp, 3478/udp, 5349/tcp, 50000-60000/udp) plus a note
-  that 7880 must stay closed since nginx reaches it on localhost.
+- Firewall rules (7881/tcp, 3478/udp, 5349/tcp, 50000-60000/udp and
+  30000-40000/udp) plus a note that 7880 must stay closed since nginx reaches it
+  on localhost. The TURN relay range (30000-40000 by default) is separate from
+  the RTC media range and was missing from the first draft — leaving it closed
+  makes voice work for most people and fail silently for anyone on a restrictive
+  network, which is the worst kind of bug to diagnose later.
+- turn.udp_port must be set explicitly or TURN listens on TLS only.
 - A local dev-mode recipe (livekit-server --dev, devkey/secret, ws://localhost)
   for testing without a VPS or certificates, including the --node-ip flag that
   Docker Desktop requires (see below).
@@ -341,3 +352,72 @@ FILES TOUCHED
 - server/voice.js (new), public/voice.js (new), server/index.js, public/main.js,
   public/index.html, public/style.css, public/sw.js, package.json,
   package-lock.json, DEPLOYMENT.md, WORKLOG.txt
+
+
+2026-08-09 — UI change: voice status moved onto player names (roster pill removed)
+-----------------------------------------------------------------------------------
+
+SUMMARY
+Replaced the separate VOICE roster pill with a mic indicator shown next to each
+player's own name. Mic state is a property of a player, so it now lives with the
+player instead of in a second list you had to cross-reference against the table.
+The pill also covered the top of the board and duplicated names already on
+screen.
+
+WHERE THE INDICATOR APPEARS
+- In game: painted onto the canvas seats, inside the existing name chip for top
+  seats and beside the avatar for the side columns. Side-seat avatars shift left
+  by half the icon width so the avatar+mic pair stays centred in the column.
+- Waiting room: a .voice-pip span appended after each name in the player list.
+  Bots never get one.
+- Your own state stays on the 🎧 rail button as before, since you have no seat
+  of your own on the board.
+
+FOUR STATES, DELIBERATELY DISTINCT
+- off      — nothing drawn at all. A table where nobody uses voice looks exactly
+             as it did before this change; no empty icons, no wasted width.
+- muted    — grey mic with a red slash.
+- live     — white/green mic, unmuted but silent.
+- speaking — green mic, glowing, with animated sound waves that breathe in time
+             with the shared osc() so "talking" reads instantly at a glance.
+Muted vs live is a colour AND a shape difference (the slash), not colour alone,
+so it survives a colourblind viewer and a dim phone screen.
+
+IMPLEMENTATION
+- public/voice.js: new Voice.statusFor(identity) returning
+  off | muted | live | speaking. Keyed on playerId, which is already the LiveKit
+  identity, so no extra mapping is needed. Returns 'off' whenever voice is not
+  connected, which is what makes the no-voice table render unchanged.
+- public/renderer.js: new micPip() draws the glyph as vectors rather than an
+  emoji — emoji mic/mute glyphs render differently per platform and cannot be
+  recoloured per state. voiceStatusFor() wraps the global lookup so the renderer
+  degrades to 'off' if voice.js has not loaded.
+- The canvas already runs a continuous rAF loop, so speaking indicators update
+  with no extra plumbing between the voice events and the board.
+- public/main.js: makeVoicePip()/updateVoicePips() for the waiting-room list,
+  driven by the existing Voice.onChange subscription.
+
+LEAVING VOICE WITHOUT LEAVING THE GAME
+The pill carried the ✕ that did this, so the gesture moved onto the mic button:
+tap toggles mute, hold 600ms leaves voice. The click that follows a completed
+hold is swallowed so leaving cannot also flip the mute state. The button title
+advertises the gesture while connected.
+
+KNOWN LIMITATION
+A God Mode spectator has no seat on the board, so other players hear them
+without seeing an indicator. Left as-is on purpose: showing one would reveal
+that the room is being spectated, which defeats God Mode.
+
+CACHE VERSIONS
+- style.css 47 -> 48, main.js 50 -> 51, renderer.js 42 -> 43, voice.js 1 -> 2.
+- sw.js CACHE_VERSION uno-v50 -> uno-v51.
+
+VERIFICATION
+- node --check passes on all modified JS; no linter errors.
+- Server still boots with voice unconfigured.
+- Grepped public/ for the removed ids and classes (voice-bar, voice-roster,
+  voice-chip, voice-leave): no references left.
+
+FILES TOUCHED
+- public/voice.js, public/renderer.js, public/main.js, public/index.html,
+  public/style.css, public/sw.js, WORKLOG.txt

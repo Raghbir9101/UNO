@@ -266,10 +266,15 @@ keys:
 turn:
   enabled: true
   domain: livekit.playunofree.com
+  udp_port: 3478
   tls_port: 5349
-  cert_file: /etc/livekit/certs/fullchain.pem
-  key_file: /etc/livekit/certs/privkey.pem
+  cert_file: /etc/letsencrypt/live/livekit.playunofree.com/fullchain.pem
+  key_file: /etc/letsencrypt/live/livekit.playunofree.com/privkey.pem
 ```
+
+Omitting `udp_port` leaves TURN reachable over TLS only. That still works, but
+plain UDP is the cheaper path and worth having as well. Confirm both appear in
+the startup log as `turn.portTLS` and `turn.portUDP`.
 
 Then `/opt/livekit/docker-compose.yaml`:
 
@@ -282,14 +287,26 @@ services:
     network_mode: host
     volumes:
       - ./livekit.yaml:/etc/livekit.yaml:ro
-      - /etc/letsencrypt/live/livekit.playunofree.com:/etc/livekit/certs:ro
-      - /etc/letsencrypt/archive:/etc/letsencrypt/archive:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
 ```
 
 `network_mode: host` matters — mapping a 10,000-port UDP range through Docker's
-NAT is slow to start and unreliable in practice. The `archive` mount is there
-because the files under `live/` are symlinks into it, so without it the
-container sees dangling links.
+NAT is slow to start and unreliable in practice.
+
+Mount the **whole** `/etc/letsencrypt` tree at the same path, and point
+`cert_file` at the `live/` path. Everything in `live/` is a symlink to
+`../../archive/<domain>/fullchainN.pem`, and that relative path only resolves if
+the directory sits at the same depth inside the container as it does on the
+host. Mounting just `live/<domain>` somewhere shorter, such as
+`/etc/livekit/certs`, makes the symlink point at a path that does not exist and
+LiveKit crash-loops with:
+
+```
+TURN tls cert required: open .../fullchain.pem: no such file or directory
+```
+
+This also means renewals keep working, since the new `fullchainN.pem` is already
+inside the mounted tree.
 
 ```bash
 cd /opt/livekit && docker compose up -d && docker compose logs -f
@@ -308,13 +325,28 @@ Wi-Fi and fail on mobile data.
 ufw allow 7881/tcp        # LiveKit RTC over TCP fallback
 ufw allow 3478/udp        # TURN over UDP
 ufw allow 5349/tcp        # TURN over TLS
-ufw allow 50000:60000/udp # RTC media
+ufw allow 50000:60000/udp # RTC media (rtc.port_range_*)
+ufw allow 30000:40000/udp # TURN relay (turn.relay_range_*)
 ```
+
+The TURN relay range is separate from the RTC media range and defaults to
+30000-40000. Miss it and TURN accepts the connection but has no port to relay
+through, which looks like voice working for most people and silently failing for
+anyone on a restrictive network. Check the `Starting TURN server` line in the
+log for the actual values.
 
 Port 443/tcp is already open for the site. Port 7880 must **not** be opened —
 it is reached only through nginx on localhost.
 
 ### 4. nginx for the SFU
+
+> **Do not write this block before the certificate exists.** nginx refuses to
+> load a config referencing a missing certificate file, and `nginx -t` fails
+> with `cannot load certificate ... No such file or directory`. The already
+> running nginx keeps serving the old config, so the site stays up — but a
+> `systemctl restart` at that point takes the whole site down. If you hit this,
+> cut the file back to just the `listen 80` block from step 1, reload, run
+> certbot, and then come back here.
 
 Add a second server block. Certbot will have already added the `ssl_*` lines
 for this subdomain when you ran it in step 1.
