@@ -421,3 +421,53 @@ VERIFICATION
 FILES TOUCHED
 - public/voice.js, public/renderer.js, public/main.js, public/index.html,
   public/style.css, public/sw.js, WORKLOG.txt
+
+
+2026-08-09 — Fix: seat mic indicator collided with the avatar
+--------------------------------------------------------------
+
+PROBLEM
+Reported with a screenshot of a side seat: the mic glyph was drawn on top of the
+seat avatar, and the avatar/mic/name group looked off-balance.
+
+ROOT CAUSE
+Two compounding mistakes in the first cut of the indicator.
+1. The glyph's drawn width changed with its state. The "speaking" variant added
+   sound-wave arcs at radius h*0.62 on each side, so the icon was 1.24*h wide
+   while talking but only 0.40*h wide otherwise. The spacing had been reserved
+   against the narrow figure, so the waves grew straight into the avatar the
+   moment somebody spoke — meaning the bug only appeared while talking, which is
+   also why it was easy to miss.
+2. The mic was sized in absolute units, vs(10*uiSf), while the side-seat avatar
+   is vs(6*uiSf). The indicator was therefore LARGER than the avatar it was
+   annotating, in the narrowest column on the board.
+
+FIX
+- Rebuilt micPip as a fixed circular badge: dark disc, coloured ring, mic glyph
+  inside — deliberately the same construction as the neighbouring card-count
+  badge, so it reads as part of the seat rather than something bolted on. Its
+  footprint is a circle of radius r in EVERY state; speaking now changes only
+  ring brightness and glow, never geometry, so no state can grow into anything.
+- Sized relative to the avatar (r = avR * 0.8) instead of absolutely, so it
+  stays proportional at every player count and viewport.
+- Both seat types now lay the row out as [mic][avatar][name] with explicit
+  gaps and a centered group, rather than nudging the avatar sideways to make
+  room. Top seats also center the whole name chip on the seat now, which they
+  did not do before; the chip used to be anchored so it leaned right of centre.
+- Name truncation budget subtracts the mic footprint, so a long name loses a
+  character or two instead of pushing the chip into the next seat.
+
+VERIFICATION
+Wrote a throwaway harness that loads renderer.js in a VM against a stubbed 2D
+context, records every arc() and fillText(), and asserts that within a seat the
+mic disc, avatar and name never intersect. Ran it for 1/2/3/4/5/6/8/12 players
+at 1280x720 and at a 420x780 phone viewport, with every player forced through
+all three visible voice states: no overlaps. Mutation-tested the harness by
+shrinking the mic gap to a negative value and confirming it reports the failure,
+so the pass is meaningful rather than vacuous. Harness deleted afterwards.
+
+CACHE VERSIONS
+- renderer.js 43 -> 44, sw.js CACHE_VERSION uno-v51 -> uno-v52.
+
+FILES TOUCHED
+- public/renderer.js, public/index.html, public/sw.js, WORKLOG.txt

@@ -19,15 +19,15 @@ The keystone everything else builds on.
   standing), **Custom** (every rule host-configurable).
 - **Engine** (`server/gameLogic.js`): granular stacking (+2/+4/mixed families,
   Skip Dodge, Reverse Bounce), Force Play, Draw-to-Match, Seven-Zero, Jump-In,
-  Wild Challenge (with legality tracking), Shuffle Hands card, elimination,
+  Wild Challenge (with legality tracking), Swap Hands card, elimination,
   configurable starting cards, per-room turn timer and max players.
 - **Server** (`server/index.js`): shared `applyPlayResult` pipeline used by both
   the socket handler and bot/AFK auto-play (no duplicated emit logic), new
-  events (`set_mode`, `challenge_wild4`, `player_eliminated`, `hands_shuffled`,
+  events (`set_mode`, `challenge_wild4`, `player_eliminated`, `hands_swapped`,
   `stack_passed`, `challenge_result`), registry-validated `set_rule`.
 - **Client**: mode selector + fully dynamic rules panel (rendered from the
   registry; visible to all players, editable by host), challenge prompt bar,
-  elimination/shuffle animations, mode badges in the room browser, shuffle
+  elimination animations, mode badges in the room browser, swap
   card face — new card types render with zero renderer changes
   (`getCardDisplayText` / `isWildCard` are data-driven).
 - **Verified**: 125-game engine simulation across all modes (card conservation,

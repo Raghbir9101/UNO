@@ -22,7 +22,7 @@ const CardTypeDisplay = {
   wild:    () => '★',
   wild4:   () => '+4',
   wild8:   () => '+8',
-  shuffle: () => '🔀',
+  swap:    () => '🔄',
 };
 
 function getCardDisplayText(card) {
@@ -39,7 +39,7 @@ function getCardColor(card, activeColor) {
 }
 
 function isWildCard(card) {
-  // Covers every wild-family card (wild, wild4, wild8, shuffle, and any
+  // Covers every wild-family card (wild, wild4, wild8, swap, and any
   // future wild types) — wilds are identified by color, not type.
   return card.color === 'wild';
 }

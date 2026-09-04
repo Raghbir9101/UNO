@@ -210,11 +210,20 @@ const Game = (() => {
       for (const cr of hitRegions.colorRects) {
         if (hit(x, y, cr)) {
           state.showColorPicker = false;
+          const wildCardId = state.pendingWildCardId;
+          state.pendingWildCardId = null; state.selectedCardIndex = -1;
+          // Wild Swap Hands: color chosen, now pick who to swap hands with.
+          // The play is finished by playSwapWithTarget once a target is picked
+          // (skipped when it's the winning card — no one left to swap with).
+          const wildCard = state.myHand.find(c => c.id === wildCardId);
+          if (wildCard && wildCard.type === 'swap' && state.myHand.length > 1) {
+            Game.onSwapTarget?.(wildCardId, cr.color);
+            return;
+          }
           if (!_actionInFlight) {
             lockAction();
-            Game.onPlayCard?.(state.pendingWildCardId, cr.color);
+            Game.onPlayCard?.(wildCardId, cr.color);
           }
-          state.pendingWildCardId = null; state.selectedCardIndex = -1;
           return;
         }
       }
@@ -496,7 +505,7 @@ const Game = (() => {
       return;
     }
 
-    // Every wild-family card (wild, +4, +8, shuffle) needs a color choice
+    // Every wild-family card (wild, +4, +8, swap) needs a color choice
     if (card.color === 'wild') {
       state.showColorPicker = true; state.pendingWildCardId = card.id; return;
     }
@@ -524,6 +533,18 @@ const Game = (() => {
     if (cr) flyCardToDiscard(cr, card);
     lockAction();
     Game.onPlayCard?.(cardId, null, swapTargetId);
+  }
+
+  // Called by the swap-target modal once a color + target are chosen for a
+  // Wild Swap Hands card
+  function playSwapWithTarget(cardId, chosenColor, swapTargetId) {
+    const idx = state.myHand.findIndex(c => c.id === cardId);
+    if (idx === -1 || _actionInFlight) return;
+    const card = state.myHand[idx];
+    const cr = hitRegions.cardRects.find(r => r.cardId === cardId);
+    if (cr) flyCardToDiscard(cr, card);
+    lockAction();
+    Game.onPlayCard?.(cardId, chosenColor, swapTargetId);
   }
 
   // Public API
@@ -1148,11 +1169,11 @@ const Game = (() => {
   return {
     init, destroy, state, setPlayers, setHand, updateGameState,
     setWinner, resetGame, triggerAnimation, resizeCanvas, discardStack, showDomAnim,
-    setTurnTimer, flyCardToPlayer, showEmoteBubble, playSevenWithSwap,
+    setTurnTimer, flyCardToPlayer, showEmoteBubble, playSevenWithSwap, playSwapWithTarget,
     applyGodView, resolveSpectatingPlayer,
     isCardPlayable: clientIsPlayable,
     onPlayCard: null, onDrawCard: null, onPassTurn: null, onCallUno: null,
     onCatchUno: null, onRestartGame: null, onShowToast: null, onSevenSwap: null,
-    onGodFine: null, onGodGiveCard: null,
+    onSwapTarget: null, onGodFine: null, onGodGiveCard: null,
   };
 })();

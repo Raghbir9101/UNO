@@ -1681,7 +1681,7 @@
         Game.triggerAnimation('skip');
       } else if (cardType === 'wild') {
         Game.triggerAnimation('color_change', { color: chosenColor });
-      } else if (cardType === 'shuffle') {
+      } else if (cardType === 'swap') {
         Game.triggerAnimation('color_change', { color: chosenColor });
       } else if (playedBy !== myPlayerId) {
         // Own number-card ripple is fired by the flight's landing instead
@@ -1797,13 +1797,6 @@
   socket.on('stack_passed', (data) => {
     const verb = data.via === 'reverse' ? 'bounced' : 'dodged';
     showToast(`🛡️ ${data.nickname} ${verb} the stack — +${data.count} heads to ${data.targetNickname}!`);
-  });
-
-  // ── Wild Shuffle Hands card ────────────────────────────────────────────────
-  socket.on('hands_shuffled', (data) => {
-    showToast(`🔀 ${data.nickname} shuffled everyone's hands!`);
-    Game.showDomAnim('anim-shuffle-burst', '🔀', 1800);
-    Sound.play('card');
   });
 
   // ── Elimination (No Mercy / elimination rule) ──────────────────────────────
@@ -1991,6 +1984,11 @@
 
     // Seven-Zero: canvas hands a played 7 to the DOM target picker
     Game.onSevenSwap = (cardId) => openSevenSwapModal(cardId);
+
+    // Wild Swap Hands: canvas hands off the card + chosen color to the picker,
+    // then playSwapWithTarget finishes the play once a target is chosen
+    Game.onSwapTarget = (cardId, chosenColor) =>
+      openHandSwapModal((targetId) => Game.playSwapWithTarget(cardId, chosenColor, targetId));
 
     Game.onDrawCard = () => {
       socket.emit('draw_card', { roomCode: currentRoomCode });
@@ -2763,7 +2761,9 @@
     $sevenModal.style.display = 'none';
   });
 
-  function openSevenSwapModal(cardId) {
+  // Shared "swap hands with…" picker for both the Seven-Zero rule and the
+  // Wild Swap Hands card. `onPick(targetId)` finishes the play.
+  function openHandSwapModal(onPick) {
     $sevenList.innerHTML = '';
     const opponents = (Game.state.players || []).filter(p => p.id !== myPlayerId);
     if (!opponents.length) return;
@@ -2786,11 +2786,15 @@
 
       li.addEventListener('click', () => {
         $sevenModal.style.display = 'none';
-        Game.playSevenWithSwap(cardId, p.id);
+        onPick(p.id);
       });
       $sevenList.appendChild(li);
     });
     $sevenModal.style.display = 'flex';
+  }
+
+  function openSevenSwapModal(cardId) {
+    openHandSwapModal((targetId) => Game.playSevenWithSwap(cardId, targetId));
   }
 
   // ── God Mode: Fine picker ──────────────────────────────────────────────────
@@ -2956,7 +2960,7 @@
       ['wild4', '+4'],
     ];
     if (Game.state.settings?.wildDraw8) wildOpts.push(['wild8', '+8']);
-    if (Game.state.settings?.shuffleHands) wildOpts.push(['shuffle', '🔀']);
+    if (Game.state.settings?.swapHands) wildOpts.push(['swap', '🔄']);
     wildOpts.forEach(([type, label]) => {
       const btn = document.createElement('button');
       btn.type = 'button';

@@ -2,7 +2,7 @@
 // Server-authoritative UNO rules engine.
 // Deck building, shuffling, dealing, turn management, special cards,
 // stacking, UNO call/catch, win detection, elimination, wild challenge,
-// shuffle-hands, draw pile reshuffling.
+// hand swapping, draw pile reshuffling.
 //
 // The engine is mode-agnostic: it reads a flat, normalized settings object
 // (see public/shared/game-modes.js). New rules are added by reading a new
@@ -63,10 +63,10 @@ function buildSingleDeck(settings) {
       cards.push(makeCard('wild', 'wild8', 'wild8'));
     }
   }
-  // Wild Shuffle Hands ×2 (rule-gated)
-  if (settings.shuffleHands) {
+  // Wild Swap Hands ×2 (rule-gated)
+  if (settings.swapHands) {
     for (let i = 0; i < 2; i++) {
-      cards.push(makeCard('wild', 'shuffle', 'shuffle'));
+      cards.push(makeCard('wild', 'swap', 'swap'));
     }
   }
 
@@ -307,41 +307,13 @@ function rotateHands(state) {
   bumpMaxHandStats(state, state.playerIds);
 }
 
-// 7 played: the player swaps hands with a chosen opponent.
+// Played by a 7 (Seven-Zero) or a Wild Swap Hands card: the player swaps their
+// entire hand with a chosen opponent.
 function swapHands(state, a, b) {
   [state.hands[a], state.hands[b]] = [state.hands[b], state.hands[a]];
   delete state.unoState[a];
   delete state.unoState[b];
   bumpMaxHandStats(state, [a, b]);
-}
-
-// Wild Shuffle Hands: collect every active hand, shuffle, redeal round-robin
-// starting with the player after whoever played the card.
-function shuffleAllHands(state, playedById) {
-  const pool = [];
-  for (const pid of state.playerIds) {
-    pool.push(...(state.hands[pid] || []));
-    state.hands[pid] = [];
-  }
-  shuffle(pool);
-
-  const startIdx = nextPlayerIndex(state.playerIds.indexOf(playedById), state.direction, state.playerCount);
-  let i = 0;
-  while (pool.length > 0) {
-    const pid = state.playerIds[(startIdx + i) % state.playerCount];
-    state.hands[pid].push(pool.pop());
-    i++;
-  }
-
-  // Fresh UNO state: anyone now holding one card gets a fresh (called) entry —
-  // being shuffled to one card isn't a failure to call UNO.
-  state.unoState = {};
-  for (const pid of state.playerIds) {
-    if (state.hands[pid].length === 1) {
-      state.unoState[pid] = { called: true, timestamp: Date.now() };
-    }
-  }
-  bumpMaxHandStats(state, state.playerIds);
 }
 
 function bumpMaxHandStats(state, playerIds) {
@@ -406,15 +378,16 @@ function playCard(state, playerId, cardId, chosenColor, swapTargetId) {
     };
   }
 
-  // Validate chosen color for wild cards (wild, wild4, wild8, shuffle)
+  // Validate chosen color for wild cards (wild, wild4, wild8, swap)
   if (isWild(card) && !COLORS.includes(chosenColor)) {
     return { error: 'You must choose a color' };
   }
 
-  // Seven-Zero: playing a 7 (that isn't the winning card) requires choosing
-  // a valid opponent to swap hands with. Validate BEFORE mutating anything.
-  const needsSwapTarget = s.sevenZero && card.type === 'number' &&
-    card.value === 7 && hand.length > 1;
+  // A Wild Swap Hands card, or a 7 under Seven-Zero, requires choosing a valid
+  // opponent to swap hands with — unless it's the winning card (nothing left to
+  // swap). Validate BEFORE mutating anything.
+  const isSevenSwap = s.sevenZero && card.type === 'number' && card.value === 7;
+  const needsSwapTarget = (isSevenSwap || card.type === 'swap') && hand.length > 1;
   if (needsSwapTarget) {
     if (!swapTargetId || swapTargetId === playerId || !state.playerIds.includes(swapTargetId)) {
       return { error: 'Choose a player to swap hands with', needsSwapTarget: true };
@@ -615,11 +588,13 @@ function playCard(state, playerId, cardId, chosenColor, swapTargetId) {
       }
       break;
 
-    case 'shuffle':
+    case 'swap':
       state.activeColor = chosenColor;
       result.effects.push({ type: 'color_change', color: chosenColor });
-      shuffleAllHands(state, playerId);
-      result.effects.push({ type: 'hands_shuffled', playerId });
+      if (needsSwapTarget) {
+        swapHands(state, playerId, swapTargetId);
+        result.effects.push({ type: 'hands_swapped', a: playerId, b: swapTargetId });
+      }
       advanceTurn(state);
       break;
   }
@@ -815,22 +790,22 @@ function catchUno(state, catcherId, targetId) {
  * color/type vocabulary matches buildSingleDeck.
  * For number cards, `type` is the number 0–9 (or string "0"–"9").
  * For actions, type is skip|reverse|draw2.
- * For wilds, color is ignored and type is wild|wild4|wild8|shuffle.
+ * For wilds, color is ignored and type is wild|wild4|wild8|swap.
  */
 function giveCardToPlayer(state, playerId, color, type) {
   if (!state.hands[playerId]) return { error: 'Player not in game' };
 
   const COLORS_SET = new Set(COLORS);
   const ACTIONS_SET = new Set(['skip', 'reverse', 'draw2']);
-  const WILDS = new Set(['wild', 'wild4', 'wild8', 'shuffle']);
+  const WILDS = new Set(['wild', 'wild4', 'wild8', 'swap']);
 
   let card;
   if (WILDS.has(type)) {
     if (type === 'wild8' && !(state.settings && state.settings.wildDraw8)) {
       return { error: 'Wild +8 is not enabled in this room' };
     }
-    if (type === 'shuffle' && !(state.settings && state.settings.shuffleHands)) {
-      return { error: 'Shuffle Hands is not enabled in this room' };
+    if (type === 'swap' && !(state.settings && state.settings.swapHands)) {
+      return { error: 'Swap Hands is not enabled in this room' };
     }
     card = makeCard('wild', type, type);
   } else if (ACTIONS_SET.has(type)) {

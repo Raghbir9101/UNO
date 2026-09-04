@@ -65,9 +65,9 @@
       type: 'bool', default: false, group: 'gameplay', icon: '⚔️', label: 'Wild Challenge',
       desc: 'Think the +4 was not allowed? Challenge it! If you are right, they draw 4 cards. If you are wrong, you draw 6.',
     },
-    shuffleHands: {
-      type: 'bool', default: false, group: 'gameplay', icon: '🔀', label: 'Shuffle Hands Card',
-      desc: 'Adds 2 special cards. When played, everyone’s cards are mixed together and dealt out again.',
+    swapHands: {
+      type: 'bool', default: false, group: 'gameplay', icon: '🔄', label: 'Swap Hands Card',
+      desc: 'Adds 2 Wild Swap Hands cards. Play one to swap your whole hand with any player you choose.',
     },
     wildDraw8: {
       type: 'bool', default: false, group: 'gameplay', icon: '💥', label: 'Wild +8 Card',
@@ -118,7 +118,7 @@
       locked: [
         'stackDraw2', 'stackDraw4', 'stackMix', 'stackSkip', 'stackReverse',
         'jumpIn', 'sevenZero', 'drawToMatch', 'forcePlay', 'wildChallenge',
-        'shuffleHands', 'wildDraw8', 'elimination', 'eliminationLimit', 'playForPlaces',
+        'swapHands', 'wildDraw8', 'elimination', 'eliminationLimit', 'playForPlaces',
       ],
     },
     noMercy: {
@@ -126,12 +126,12 @@
       tagline: 'Big penalties, card stacking. Get 25 cards and you are OUT!',
       rules: {
         stackDraw2: true, stackDraw4: true, stackMix: true,
-        wildDraw8: true, shuffleHands: true, wildChallenge: true,
+        wildDraw8: true, swapHands: true, wildChallenge: true,
         elimination: true, eliminationLimit: 25,
       },
       locked: [
         'stackDraw2', 'stackDraw4', 'stackMix',
-        'wildDraw8', 'shuffleHands', 'elimination',
+        'wildDraw8', 'swapHands', 'elimination',
         'jumpIn', 'drawToMatch', 'forcePlay',
         // Elimination (last-standing) is No Mercy's win model — Play-for-Places
         // would conflict, so it stays off here.

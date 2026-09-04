@@ -3400,7 +3400,7 @@ body.landscape .btn-sound:active {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   New rule animations: elimination + shuffle hands
+   New rule animations: elimination
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .anim-eliminated {
@@ -3424,23 +3424,8 @@ body.landscape .btn-sound:active {
   100% { opacity: 0; transform: translate(-50%, -60%) scale(0.95); }
 }
 
-.anim-shuffle-burst {
-  top: 42%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 84px;
-  animation: animShuffleBurst 1.8s ease-in-out forwards;
-}
-
-@keyframes animShuffleBurst {
-  0%   { opacity: 0; transform: translate(-50%, -50%) rotate(0deg) scale(0.4); }
-  20%  { opacity: 1; transform: translate(-50%, -50%) rotate(180deg) scale(1.15); }
-  55%  { opacity: 1; transform: translate(-50%, -50%) rotate(360deg) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -50%) rotate(540deg) scale(0.6); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .anim-eliminated, .anim-shuffle-burst { animation: none; }
+  .anim-eliminated { animation: none; }
   #challenge-bar { animation: none; }
 }
 

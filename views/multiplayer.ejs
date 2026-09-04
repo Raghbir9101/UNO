@@ -6,44 +6,59 @@
       <a href="/">Home</a><span class="sep">›</span><span>Multiplayer</span>
     </nav>
     <h1>Multiplayer UNO Online — Play With Friends or Strangers</h1>
-    <p class="page-subtitle">Create a room and share the link with friends, or join a public game with strangers. No downloads, no signups.</p>
+    <p class="page-subtitle">Create a room, share one link, and play real-time UNO with 2 to 20 people — whether they're on the couch next to you or on the other side of the world. No downloads, no signups.</p>
 
-    <h2>Real-Time Multiplayer</h2>
-    <p>Our game uses WebSocket technology for instant, lag-free communication. Every card play, draw, and UNO call is synchronized across all players in real-time. There's no page refreshing, no waiting — just seamless gameplay.</p>
+    <p>UNO was built for a table full of people, and playing it online should feel the same way. Play UNO Free is a real-time multiplayer card game: when you drop a Draw Four, everyone at the table sees it land the instant you play it, reacts with an emote, and groans in real time. This page explains exactly how online multiplayer works here, the different ways to get friends into a game, and how to host a smooth night even when half your group has never used the site before.</p>
 
-    <h2>3 Ways to Play Together</h2>
-    <h3>1. Private Rooms</h3>
-    <p>Create a private room and share the room code or invite link with your friends. Only people with the code can join — perfect for friend groups and family.</p>
+    <h2>How Online Multiplayer UNO Works</h2>
+    <p>Every room runs on a persistent WebSocket connection rather than page refreshes, so the game state — whose turn it is, what's on the discard pile, how many cards each player is holding — stays perfectly in sync for everyone at once. There's no "your move hasn't registered yet" lag and no refreshing to see what happened while you looked away. A single authoritative copy of the game lives on the server, so two people can never accidentally play over each other, and nobody can peek at hidden cards by inspecting the page.</p>
+    <p>Because the whole game lives on the server, a dropped Wi-Fi signal isn't the end of your night. Your hand is preserved, and you'll reconnect to exactly the same position within a few seconds of getting back online. If you're gone longer than the turn timer, <a href="/how-to-play">auto-play</a> takes a sensible turn for you so the table never freezes waiting on one person.</p>
 
-    <h3>2. Public Rooms</h3>
-    <p>Create a public room and it appears in the room browser. Anyone can join and play — the easiest way to play UNO online with strangers when your friends aren't around. Great for meeting new opponents and playing pickup games.</p>
+    <h2>Three Ways to Play With Other People</h2>
+    <h3>1. Private Rooms — Play UNO Online With Friends</h3>
+    <p>This is the most common way people use the site. Create a private room, and it stays hidden from the public list — the only way in is the room code or invite link you share. Send that link to a group chat and everyone who taps it lands directly in your lobby. It's ideal for a friend group, a family spread across different cities, or a Discord server that wants its own table. Private rooms support the full 2–20 player range, so the same setup works for a quick 1v1 and a 16-person party.</p>
 
-    <h3>3. Invite Links</h3>
-    <p>One-click invite links work on any platform. Share via WhatsApp, Discord, iMessage, email, or any messaging app. Friends tap the link and they're in the game.</p>
+    <h3>2. Public Rooms — Play UNO With Strangers</h3>
+    <p>Don't have friends free right now? Open a public room, or browse the list of open games, and jump into a pickup match with players from around the world. Public rooms are the fastest way to get a full table without organizing anything — useful for a quick game on a break, or when you just want to practice against unpredictable opponents instead of bots. You can always add a couple of <a href="/play">bots</a> to fill empty seats and start immediately.</p>
 
-    <h2>Host Controls</h2>
-    <p>The room host has full control over the game experience:</p>
+    <h3>3. Invite Links — One Tap to Join</h3>
+    <p>Every room generates a one-click invite link that works on any platform: WhatsApp, Discord, iMessage, Slack, email, or a plain text. When you paste it into a chat, it unfurls into a preview card showing your room, so friends know exactly what they're tapping. There's no account step in the way — pick a nickname and you're in. That low-friction join is the single biggest reason a group actually finishes a game instead of losing half the players to a download screen.</p>
+
+    <h2>Hosting a Smooth Game Night</h2>
+    <p>The player who creates the room becomes the host and gets a set of controls that keep a big, casual group moving:</p>
     <ul>
-      <li><strong>Start & Restart</strong> — Begin new rounds whenever you're ready</li>
-      <li><strong>Kick Players</strong> — Remove disruptive players at any time</li>
-      <li><strong>Toggle Stacking</strong> — Enable or disable card stacking rules</li>
-      <li><strong>Reorder Seats</strong> — Arrange the playing order before starting</li>
+      <li><strong>Pick the mode before you start</strong> — <a href="/game-modes">Classic</a> for newcomers, <a href="/uno-no-mercy">No Mercy</a> for a chaotic night, or Custom to hand-pick <a href="/house-rules">house rules</a> like stacking, Seven-Zero, and Jump-In.</li>
+      <li><strong>Set the turn timer</strong> — 15 to 90 seconds. Shorter timers keep large tables brisk; longer ones suit relaxed family games.</li>
+      <li><strong>Kick and reorder</strong> — remove a disruptive player, or drag the seating order so teammates or family members sit where you want them.</li>
+      <li><strong>Restart in one tap</strong> — when a round ends, start the next hand immediately without rebuilding the room.</li>
+    </ul>
+    <p>A practical tip for mixed groups: start in Classic mode for the first hand so everyone remembers the basics, then switch on a house rule or two once the table warms up. New players learn far faster by playing one clean round than by reading the rules first.</p>
+
+    <h2>Playing Across Devices and Distances</h2>
+    <p>Everyone joins from their own device — phone, tablet, laptop, or desktop — so a single game can mix an iPhone in one city, a Chromebook in another, and a desktop somewhere else entirely. The layout adapts to each screen automatically, dealing larger cards on tablets and a compact, thumb-friendly hand on phones. Because there's nothing to install, a friend who's never visited before can be dealt into your game within about ten seconds of receiving the link, which is exactly what makes remote game nights actually happen.</p>
+
+    <h2>Multiplayer at a Glance</h2>
+    <ul>
+      <li>2 to 20 players in a single real-time room</li>
+      <li>Automatic double deck (220 cards) for games of 11 or more</li>
+      <li>Instant reconnection — your hand is saved on the server</li>
+      <li>Spectator mode so latecomers can watch until the next round</li>
+      <li>Preset emote reactions instead of open chat, so games stay friendly and safe for all ages</li>
+      <li>Works in any modern browser with no app, plugin, or signup</li>
     </ul>
 
-    <h2>Reconnection & AFK</h2>
-    <p>Life happens. If you disconnect, your cards are preserved on the server and you'll automatically reconnect when you return. If a player is AFK for 30 seconds, the game plays for them so nobody is left waiting.</p>
+    <h2>Multiplayer Questions</h2>
+    <h3>How many people can play UNO online together?</h3>
+    <p>Up to 20 players in one room — far more than the usual 4-player cap on most online UNO games. Tables of 11 or more automatically switch to a double deck so there are always enough cards. See <a href="/20-player-uno">20-player UNO</a> for how the big games work.</p>
 
-    <h2>Spectator Mode</h2>
-    <p>Game already started? No problem. Join as a spectator and watch the action unfold. You'll see all public game state — cards on the table, player card counts, and who's winning.</p>
+    <h3>Can I play UNO online with friends for free?</h3>
+    <p>Yes. Creating a room, sharing the link, and playing with friends is completely free with no signup. The game is funded by a few unobtrusive ads, never by paywalls, and no feature is locked behind a purchase.</p>
 
-    <h2>Supported Configurations</h2>
-    <ul>
-      <li>2 to 20 players per room</li>
-      <li>Automatic double-deck for 11+ players</li>
-      <li>Works on any device with a modern browser</li>
-      <li>No app installation required</li>
-      <li>Free — no premium tiers or paywalls</li>
-    </ul>
+    <h3>Do my friends need to make an account?</h3>
+    <p>No. Anyone can join with just a nickname. A free account is optional and only exists to save your stats, coins, and cosmetics across devices — it's never required to play.</p>
+
+    <h3>Can we play if we're in different countries?</h3>
+    <p>Absolutely — that's the most common way people use the site. As long as everyone has an internet connection and the invite link, distance doesn't matter. The server keeps every player perfectly in sync.</p>
 
     <div class="cta-banner">
       <h3>Start a Multiplayer Game Now</h3>

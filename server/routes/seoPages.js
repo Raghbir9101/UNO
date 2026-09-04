@@ -101,7 +101,7 @@ router.get('/how-to-play', (req, res) => {
 // Answers may contain HTML links (rendered on-page, stripped for JSON-LD).
 const FAQS = [
   { q: 'How many players can play UNO online?', a: 'Up to 20 players can play in a single room. This makes it perfect for large groups, parties, and classrooms. Games with 11+ players automatically use two decks.' },
-  { q: 'Is Play UNO Free really free?', a: 'Yes, 100% free forever! There is no signup, no credit card, no ads, and no hidden fees. Just open the website and start playing.' },
+  { q: 'Is Play UNO Free really free?', a: 'Yes, 100% free forever! There is no signup, no credit card, no paywalls, and nothing is ever locked behind a purchase. A few unobtrusive ads keep the servers running — the game itself stays completely free.' },
   { q: 'Do I need to download anything?', a: 'No. The game runs entirely in your web browser. It works on Chrome, Firefox, Safari, Edge, and most modern browsers.' },
   { q: 'Can I play on my phone?', a: 'Yes! The game has full touch support on both iOS and Android. The interface adapts automatically to your screen size.' },
   { q: 'Can I play on a tablet or iPad?', a: 'Absolutely. Tablets provide a great UNO experience with more screen space for cards and player information.' },
@@ -247,6 +247,27 @@ router.get('/multiplayer', (req, res) => {
     title: 'Multiplayer UNO Online — Play With Friends or Strangers',
     description: 'Play UNO online with friends via invite link, or join a public room and play with strangers. Real-time multiplayer, host controls, up to 20 players — all free.',
     canonical: `${base}/multiplayer`,
+    jsonLd: [
+      {
+        "@context": "https://schema.org", "@type": "Article",
+        "headline": "Multiplayer UNO Online — Play With Friends or Strangers",
+        "description": "How real-time multiplayer UNO works online: private rooms, public rooms, invite links, host controls, and playing across devices with 2 to 20 players.",
+        "author": { "@type": "Organization", "name": SITE_NAME },
+        "publisher": { "@type": "Organization", "name": SITE_NAME },
+        "datePublished": "2026-07-05",
+        "dateModified": "2026-08-27",
+        "mainEntityOfPage": `${base}/multiplayer`
+      },
+      {
+        "@context": "https://schema.org", "@type": "FAQPage",
+        "mainEntity": [
+          { "@type": "Question", "name": "How many people can play UNO online together?", "acceptedAnswer": { "@type": "Answer", "text": "Up to 20 players in one room — far more than the usual 4-player cap. Tables of 11 or more automatically switch to a double deck so there are always enough cards." } },
+          { "@type": "Question", "name": "Can I play UNO online with friends for free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Creating a room, sharing the link, and playing with friends is completely free with no signup. The game is funded by a few unobtrusive ads, never paywalls." } },
+          { "@type": "Question", "name": "Do my friends need to make an account?", "acceptedAnswer": { "@type": "Answer", "text": "No. Anyone can join with just a nickname. A free account is optional and only saves stats, coins, and cosmetics across devices." } },
+          { "@type": "Question", "name": "Can we play if we're in different countries?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. As long as everyone has an internet connection and the invite link, distance doesn't matter — the server keeps every player perfectly in sync." } },
+        ]
+      }
+    ],
   });
 });
 
@@ -459,6 +480,14 @@ router.get('/cookie-policy', (req, res) => {
     description: 'Play UNO Free cookie policy. Essential, analytics, and advertising cookies explained.',
     canonical: `${base}/cookie-policy`,
   });
+});
+
+// ── ads.txt (Authorized Digital Sellers — required by AdSense once approved) ──
+// Declares Google as an authorized seller of this site's ad inventory. The
+// publisher ID matches the AdSense loader in views/partials/head.ejs.
+router.get('/ads.txt', (req, res) => {
+  res.type('text/plain');
+  res.send('google.com, pub-5274802993197394, DIRECT, f08c47fec0942fa0\n');
 });
 
 // ── robots.txt ──

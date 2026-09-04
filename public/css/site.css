@@ -749,6 +749,18 @@ a:hover { color: #fff; }
 .cta-banner h3 { font-family: var(--font-display); font-size: 1.3rem; margin-bottom: 8px; }
 .cta-banner p { color: var(--steel-300); margin-bottom: 16px; }
 
+/* ── Homepage long-form content block (real, indexable prose) ── */
+.container--readable { max-width: 820px; }
+.home-article .section-title { margin-bottom: 28px; }
+.home-article h3 {
+  font-family: var(--font-display);
+  font-size: 1.35rem; font-weight: 700;
+  margin: 36px 0 14px; color: var(--steel-100);
+}
+.home-article p { color: var(--steel-300); line-height: 1.8; margin-bottom: 18px; font-size: 1.02rem; }
+.home-article strong { color: var(--steel-100); }
+.home-article em { color: var(--steel-100); font-style: italic; }
+
 /* ── Blog ── */
 .blog-grid {
   display: grid;

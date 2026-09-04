@@ -399,7 +399,7 @@ function cardPlayAnimMs(cardType, drawCount, isSelfPlay) {
   // Effect overlays (skip, reverse, +N flash) — shown after effectDelay
   const effectDelay = isSelfPlay ? 620 : 0;
   if (cardType === 'draw2' || cardType === 'wild4' || cardType === 'wild8' ||
-      cardType === 'skip' || cardType === 'reverse' || cardType === 'shuffle') {
+      cardType === 'skip' || cardType === 'reverse' || cardType === 'swap') {
     ms = Math.max(ms, effectDelay + ANIM_EFFECT_MS);
   }
 
@@ -459,10 +459,11 @@ function performAutoAction(roomCode, currentId, { isBot } = {}) {
   };
 
   const playCardAs = (card, chosenColor) => {
-    // Seven-Zero: bots and AFK auto-play swap with whoever holds the fewest cards
+    // Seven-Zero 7s and Wild Swap Hands both need a target: bots and AFK
+    // auto-play swap with whoever holds the fewest cards.
     let swapTargetId;
-    if (gs.settings.sevenZero && card.type === 'number' && card.value === 7 &&
-        (gs.hands[currentId] || []).length > 1) {
+    const isSevenSwap = gs.settings.sevenZero && card.type === 'number' && card.value === 7;
+    if ((isSevenSwap || card.type === 'swap') && (gs.hands[currentId] || []).length > 1) {
       for (const pid of gs.playerIds) {
         if (pid === currentId) continue;
         if (!swapTargetId || (gs.hands[pid] || []).length < (gs.hands[swapTargetId] || []).length) {
@@ -723,19 +724,17 @@ function recordGameEnd(roomCode, winnerId, standings) {
   }
 }
 
-// Toast/sound events for whole-hand exchanges (Seven-Zero + Shuffle card)
+// Toast/sound events for whole-hand exchanges (Seven-Zero rotate/swap + Swap card)
 function emitHandExchangeEvents(roomCode, room, effects) {
   const nameOf = (id) => room.players.find(p => p.id === id)?.nickname || 'Player';
   const rot = effects.find(e => e.type === 'hands_rotated');
   const swp = effects.find(e => e.type === 'hands_swapped');
-  const shf = effects.find(e => e.type === 'hands_shuffled');
   if (rot) io.to(roomCode).emit('hands_rotated', { direction: rot.direction });
   if (swp) {
     io.to(roomCode).emit('hands_swapped', {
       a: swp.a, b: swp.b, aNickname: nameOf(swp.a), bNickname: nameOf(swp.b),
     });
   }
-  if (shf) io.to(roomCode).emit('hands_shuffled', { playerId: shf.playerId, nickname: nameOf(shf.playerId) });
 }
 
 // ─── Winner announcement ──────────────────────────────────────────────────────
@@ -787,7 +786,7 @@ function applyPlayResult(roomCode, room, playerId, result, chosenColor, { isSelf
   sendHandTo(playerId);
 
   // 2. Whole-hand exchanges reassign everyone's cards — resend all hands
-  if (result.effects.some(e => e.type === 'hands_rotated' || e.type === 'hands_swapped' || e.type === 'hands_shuffled')) {
+  if (result.effects.some(e => e.type === 'hands_rotated' || e.type === 'hands_swapped')) {
     for (const pl of room.players) {
       if (!pl.isBot && pl.socketId) sendHandTo(pl.id);
     }
