@@ -159,6 +159,16 @@ router.get('/game-modes', (req, res) => {
     title: 'UNO Game Modes — Classic, No Mercy & Custom Rules | Play Free',
     description: 'Three free ways to play UNO online: Classic official rules, brutal No Mercy with stacking and elimination, or Custom mode with every house rule. 2-20 players.',
     canonical: `${base}/game-modes`,
+    jsonLd: {
+      "@context": "https://schema.org", "@type": "Article",
+      "headline": "UNO Game Modes — Classic, No Mercy & Custom",
+      "description": "How the three UNO game modes work and when to pick each: Classic official rules, No Mercy one-tap chaos, and Custom mode with every house rule as an individual switch.",
+      "author": { "@type": "Organization", "name": SITE_NAME },
+      "publisher": { "@type": "Organization", "name": SITE_NAME },
+      "datePublished": "2026-07-18",
+      "dateModified": "2026-09-04",
+      "mainEntityOfPage": `${base}/game-modes`
+    },
   });
 });
 
@@ -358,6 +368,42 @@ const BLOG_POSTS = [
     readTime: '7 min read',
     date: '2026-08-07',
     excerpt: 'A Wild Draw Four can swing a whole game — or be dead weight you played three turns too early. Here is a clear framework for when to hold and when to strike.',
+  },
+  {
+    slug: 'uno-rules-for-beginners',
+    title: 'UNO Rules for Beginners: How to Play Your First Game',
+    description: 'New to UNO? This beginner-friendly guide walks you through setup, your turn, every card type, calling UNO, and winning — everything you need to play your first game with confidence.',
+    category: 'Rules',
+    readTime: '8 min read',
+    date: '2026-08-28',
+    excerpt: 'Never played UNO before, or teaching someone who hasn\'t? This is the friendliest possible walkthrough — from dealing the first hand to shouting "UNO" — with nothing assumed.',
+  },
+  {
+    slug: 'what-uno-cards-mean',
+    title: 'What Every UNO Card Does: A Guide to the 108-Card Deck',
+    description: 'A complete card-by-card guide to the UNO deck: how many of each card exist, what number, Skip, Reverse, Draw Two, Wild, and Wild Draw Four do, and what the symbols mean.',
+    category: 'Rules',
+    readTime: '8 min read',
+    date: '2026-08-31',
+    excerpt: 'The UNO deck has exactly 108 cards, and knowing what each one does — and how many exist — is the quiet foundation of every good decision you make at the table.',
+  },
+  {
+    slug: 'history-of-uno',
+    title: 'The History of UNO: From a Barbershop Table to a Billion Games',
+    description: 'The story of UNO: how a barber invented it in 1971 to settle a family argument, sold it from his shop, and watched it grow into one of the best-selling card games on Earth.',
+    category: 'Culture',
+    readTime: '9 min read',
+    date: '2026-09-02',
+    excerpt: 'UNO began as a homemade deck a barber used to settle a rules argument with his son. Fifty years later it has sold hundreds of millions of copies. Here is how it happened.',
+  },
+  {
+    slug: 'uno-flip-explained',
+    title: 'UNO Flip Rules Explained: How the Double-Sided Deck Works',
+    description: 'UNO Flip turns the whole deck double-sided, with a Light side and a brutal Dark side. Here is how the Flip card, Dark-side Draw Five and Skip Everyone, and the strategy all work.',
+    category: 'Variants',
+    readTime: '7 min read',
+    date: '2026-09-04',
+    excerpt: 'UNO Flip takes the game you know and gives every card a dark side. One Flip card swaps the entire deck to a nastier ruleset mid-game — here is how it all works.',
   },
 ];
 
