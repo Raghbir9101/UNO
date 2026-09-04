@@ -77,6 +77,22 @@ const Renderer = (() => {
   // 0..1 oscillator; `ms` = half-period. REDUCED freezes it mid-swing.
   function osc(ms) { return REDUCED ? 0.5 : (Math.sin(Date.now() / ms) + 1) / 2; }
 
+  // ── Button press feedback ──────────────────────────────────────────────────
+  // game.js sets the currently-pressed button id + its animated scale each frame
+  // (see Renderer.setPress); each on-canvas button wraps its draw in _pressWrap()
+  // so a tap visibly pushes it in and springs back on release.
+  let _press = { id: null, scale: 1 };
+  function setPress(p) { _press = (p && p.id) ? p : { id: null, scale: 1 }; }
+  function pressSc(id) { return _press.id === id ? _press.scale : 1; }
+  // Opens a ctx.save() and scales everything drawn until the caller's matching
+  // restore() about center (cx,cy). Inner drawing code is untouched — it keeps
+  // using absolute coordinates. Always pair with exactly one ctx.restore().
+  function _pressWrap(ctx, id, cx, cy) {
+    ctx.save();
+    const sc = pressSc(id);
+    if (sc !== 1) { ctx.translate(cx, cy); ctx.scale(sc, sc); ctx.translate(-cx, -cy); }
+  }
+
   // Seat scale by opponent count: fewer opponents → bigger seats.
   // 1 opp ≈ 1.9x, tapering down to 1x at 6+ where space gets tight.
   function seatScaleFor(n) {
@@ -1022,7 +1038,9 @@ const Renderer = (() => {
     ctx.restore();
 
     // Deck (left)
+    _pressWrap(ctx, 'deck', dx + cw / 2, dy + ch / 2);
     for (let i = 2; i >= 0; i--) _cardBack(ctx, dx + i * vs(1.5), dy - i * vs(1.5), cw, ch);
+    ctx.restore();
     rects.draw = { x: dx, y: dy, w: cw, h: ch };
 
     // Draw Deck Count — under the draw pile only
@@ -1090,9 +1108,9 @@ const Renderer = (() => {
     // than drawn dead. God Mode keeps it as the shortcut for fining a player.
     const showUno = !state.isSpectator || state.isGodMode;
     if (showUno) {
+      _pressWrap(ctx, 'uno', unoCX, unoCY);
       ctx.save();
       ctx.translate(unoCX, unoCY);
-      if (state.unoClickTime && Date.now() - state.unoClickTime < 200) ctx.scale(0.7, 0.7);
       ctx.rotate(Math.PI / 4);
       ctx.beginPath();
       rr(ctx, -sideBtnSz / 2, -sideBtnSz / 2, sideBtnSz, sideBtnSz, vs(6));
@@ -1109,7 +1127,6 @@ const Renderer = (() => {
 
       ctx.save();
       ctx.translate(unoCX, unoCY);
-      if (state.unoClickTime && Date.now() - state.unoClickTime < 200) ctx.scale(0.7, 0.7);
       ctx.rotate(Math.PI / 4);
       if (state.unoHighlight) {
         ctx.shadowColor = '#fff'; ctx.shadowBlur = vs(10 + pulse3 * 10);
@@ -1122,7 +1139,6 @@ const Renderer = (() => {
 
       ctx.save();
       ctx.translate(unoCX, unoCY);
-      if (state.unoClickTime && Date.now() - state.unoClickTime < 200) ctx.scale(0.7, 0.7);
       ctx.fillStyle = state.unoHighlight ? '#fff' : 'rgba(255,255,255,0.6)';
       ctx.font = `700 ${vs(14)}px ${displayFont}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -1130,6 +1146,7 @@ const Renderer = (() => {
       ctx.fillText(state.isGodMode ? 'FINE' : 'UNO!', 0, 0);
       ctx.restore();
 
+      ctx.restore(); // close _pressWrap('uno')
       rects.uno = { x: unoCX - sideBtnSz / 2, y: unoCY - sideBtnSz / 2, w: sideBtnSz, h: sideBtnSz };
     }
 
@@ -1153,6 +1170,7 @@ const Renderer = (() => {
     // ── Pass/Draw Arrow Button (Bottom Right) ──────────────────────────
     // Spectators (God Mode included) never take a turn, so no pass control.
     if (!state.isSpectator) {
+      _pressWrap(ctx, 'pass', passCX, passCY);
       ctx.save();
       ctx.translate(passCX, passCY);
       ctx.rotate(Math.PI / 4);
@@ -1179,7 +1197,7 @@ const Renderer = (() => {
       ctx.lineWidth = vs(2); ctx.stroke();
       ctx.restore();
 
-      // Pass arrow text
+      // Icon — forced-draw count, else a chevron pointing the way play flows.
       ctx.save();
       ctx.fillStyle = state.isMyTurn ? '#fff' : 'rgba(232,235,243,0.25)';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -1188,10 +1206,25 @@ const Renderer = (() => {
         ctx.font = `700 ${vs(14)}px ${displayFont}`;
         ctx.fillText(`+${state.pendingDraw}`, passCX, passCY);
       } else {
-        ctx.font = `700 ${vs(24)}px ${displayFont}`;
-        ctx.fillText('›', passCX + vs(2), passCY - vs(2));
+        // Direction chevron pointing the way the turn passes: left when play is
+        // clockwise (direction 1), right when counter-clockwise (-1). Drawn as a
+        // vector, nudged toward its tip by ox so the arrowhead reads optically
+        // centred in the diamond (a bare chevron is bounding-box centred but
+        // leans back toward its tails).
+        const dirSign = state.direction === -1 ? 1 : -1; // +1 → point right
+        const hw = vs(6), hh = vs(7.5);
+        const ox = dirSign * hw * 0.3;
+        ctx.strokeStyle = ctx.fillStyle;
+        ctx.lineWidth = vs(3.2);
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(passCX + ox - dirSign * hw, passCY - hh);
+        ctx.lineTo(passCX + ox + dirSign * hw, passCY);
+        ctx.lineTo(passCX + ox - dirSign * hw, passCY + hh);
+        ctx.stroke();
       }
       ctx.restore();
+      ctx.restore(); // close _pressWrap('pass')
       rects.draw = { x: passCX - sideBtnSz / 2, y: passCY - sideBtnSz / 2, w: sideBtnSz, h: sideBtnSz };
     }
 
@@ -1233,16 +1266,20 @@ const Renderer = (() => {
       const leftX = px - gap - arrW / 2;
       const rightX = px + pw + gap + arrW / 2;
 
+      _pressWrap(ctx, 'god-left', leftX, gmY);
       ctx.beginPath(); rr(ctx, leftX - arrW / 2, gmY - arrH / 2, arrW, arrH, vs(5));
       ctx.fillStyle = 'rgba(5,7,13,0.6)'; ctx.fill();
       ctx.strokeStyle = 'rgba(139,147,168,0.3)'; ctx.lineWidth = vs(1); ctx.stroke();
       ctx.fillStyle = '#fff'; ctx.fillText('◀', leftX, gmY);
+      ctx.restore();
       rects.godLeft = { x: leftX - arrW / 2, y: gmY - arrH / 2, w: arrW, h: arrH };
 
+      _pressWrap(ctx, 'god-right', rightX, gmY);
       ctx.beginPath(); rr(ctx, rightX - arrW / 2, gmY - arrH / 2, arrW, arrH, vs(5));
       ctx.fillStyle = 'rgba(5,7,13,0.6)'; ctx.fill();
       ctx.strokeStyle = 'rgba(139,147,168,0.3)'; ctx.lineWidth = vs(1); ctx.stroke();
       ctx.fillStyle = '#fff'; ctx.fillText('▶', rightX, gmY);
+      ctx.restore();
       rects.godRight = { x: rightX - arrW / 2, y: gmY - arrH / 2, w: arrW, h: arrH };
       ctx.restore();
     }
@@ -1325,6 +1362,7 @@ const Renderer = (() => {
 
     cols.forEach((c, i) => {
       const bx = sx + i * (sz + gap);
+      _pressWrap(ctx, 'color-' + i, bx + sz / 2, sy + sz / 2);
       ctx.save();
       ctx.shadowColor = c.f; ctx.shadowBlur = vs(14);
       rr(ctx, bx, sy, sz, sz, vs(14));
@@ -1340,6 +1378,7 @@ const Renderer = (() => {
       ctx.textAlign = 'center'; ctx.textBaseline = 'top';
       ctx.fillText(c.l, bx + sz / 2, sy + sz + vs(6));
 
+      ctx.restore(); // close _pressWrap('color-'+i)
       rects.push({ x: bx, y: sy, w: sz, h: sz, color: c.k });
     });
     return rects;
@@ -1375,6 +1414,7 @@ const Renderer = (() => {
 
     if (isHost) {
       const bw = vs(160), bh = vs(48), bx = W / 2 - bw / 2, by = H * 0.52;
+      _pressWrap(ctx, 'play-again', W / 2, by + bh / 2);
       ctx.save(); ctx.shadowColor = '#ff3b5c'; ctx.shadowBlur = vs(14);
       rr(ctx, bx, by, bw, bh, vs(14));
       ctx.fillStyle = 'rgba(255,59,92,0.16)'; ctx.fill();
@@ -1384,6 +1424,7 @@ const Renderer = (() => {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.shadowBlur = 0; ctx.fillText('Play Again', W / 2, by + bh / 2);
       ctx.restore();
+      ctx.restore(); // close _pressWrap('play-again')
       return { playAgain: { x: bx, y: by, w: bw, h: bh } };
     }
     ctx.fillStyle = 'rgba(232,235,243,0.4)'; ctx.font = `500 ${vs(13)}px ${font}`;
@@ -1562,5 +1603,6 @@ const Renderer = (() => {
     drawPlayerHand, drawHandPlaceholders, drawOpponents, drawPiles, drawDirectionArrow,
     drawActionButtons, drawColorPicker, drawWinScreen, drawTurnIndicator, drawTurnTimer, vs,
     getDeckPosition, getDiscardPosition, getOpponentPositions, getHandTarget,
+    setPress,
   };
 })();

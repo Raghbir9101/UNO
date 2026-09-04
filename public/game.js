@@ -51,6 +51,44 @@ const Game = (() => {
   let hitRegions = { cardRects: [], pileRects: {}, buttonRects: {}, colorRects: [], winRects: {} };
   let touchStartX = 0, scrollStartOffset = 0, isDragging = false, dragDist = 0;
 
+  // ── Button press feedback ────────────────────────────────────────────────────
+  // Tactile scale-down on tap/click for the on-canvas buttons. The pressed
+  // button's id + timing lives here; the renderer reads the current animated
+  // scale each frame via Renderer.setPress(). Springs back on release.
+  const PRESS_DOWN = 0.88;   // held scale while the pointer is down
+  const PRESS_MS   = 150;    // spring-back duration after release
+  let _press = { id: null, downAt: 0, upAt: 0 };
+  function pressButton(id) { _press = { id, downAt: performance.now(), upAt: 0 }; }
+  function releaseButton() { if (_press.id && !_press.upAt) _press.upAt = performance.now(); }
+  function cancelPress()   { _press = { id: null, downAt: 0, upAt: 0 }; }
+
+  // Current {id, scale} for the frame; retires the press once the spring ends.
+  function currentPress() {
+    if (!_press.id) return { id: null, scale: 1 };
+    if (!_press.upAt) return { id: _press.id, scale: PRESS_DOWN };   // held down
+    const t = (performance.now() - _press.upAt) / PRESS_MS;
+    if (t >= 1) { _press = { id: null, downAt: 0, upAt: 0 }; return { id: null, scale: 1 }; }
+    const e = 1 - Math.pow(1 - t, 2);   // ease-out back to full size
+    return { id: _press.id, scale: PRESS_DOWN + (1 - PRESS_DOWN) * e };
+  }
+
+  // Which on-canvas button (if any) is under (x,y), using the last frame's rects.
+  function buttonAt(x, y) {
+    const b = hitRegions.buttonRects || {};
+    if (state.showColorPicker) {
+      const cr = hitRegions.colorRects || [];
+      for (let i = 0; i < cr.length; i++) if (hit(x, y, cr[i])) return 'color-' + i;
+      return null; // picker is modal — nothing behind it is pressable
+    }
+    if (state.winner) return hit(x, y, hitRegions.winRects?.playAgain) ? 'play-again' : null;
+    if (hit(x, y, b.uno)) return 'uno';
+    if (hit(x, y, b.draw)) return 'pass';
+    if (hit(x, y, b.godLeft)) return 'god-left';
+    if (hit(x, y, b.godRight)) return 'god-right';
+    if (hit(x, y, hitRegions.pileRects?.draw)) return 'deck';
+    return null;
+  }
+
   // ── DOM Animation System ──
   let animOverlay = null;
   function showDomAnim(className, innerHTML, duration) {
@@ -92,9 +130,16 @@ const Game = (() => {
     const vpW = window.innerWidth;
     const vpH = window.innerHeight;
 
+    // Cap the backing-store resolution at 2× CSS pixels. Modern phones report
+    // devicePixelRatio 3–3.5, which makes the canvas ~2.25× larger (in pixels)
+    // than a 2× canvas for no perceptible sharpness gain on cards — every frame
+    // then has to clear and repaint millions of extra pixels. Capping here is
+    // the single biggest mobile win and is visually invisible.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
     // Fill the full viewport — renderer scales content to fit inside
-    canvas.width  = Math.round(vpW * devicePixelRatio);
-    canvas.height = Math.round(vpH * devicePixelRatio);
+    canvas.width  = Math.round(vpW * dpr);
+    canvas.height = Math.round(vpH * dpr);
     canvas.style.width  = vpW + 'px';
     canvas.style.height = vpH + 'px';
     canvas.style.left   = '0px';
@@ -105,16 +150,33 @@ const Game = (() => {
   }
   function debResize() { clearTimeout(resizeTimeout); resizeTimeout = setTimeout(resizeCanvas, 150); }
 
-  function loop() {
+  // ── Frame pacing ────────────────────────────────────────────────────────────
+  // On touch / mobile devices, cap the canvas repaint rate. The ambient
+  // animations (foil sheen, breathing glows, pulsing rings) are slow sweeps that
+  // look essentially identical at 40fps but cost far less on mobile GPUs — and on
+  // 120Hz phones this stops us from repainting the whole scene 120×/second.
+  // Desktop keeps the uncapped rate (0 = no cap). The card-fly animations run on
+  // their own separate RAF loops, so this throttle never touches their smoothness.
+  const _isTouch = (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches)
+    || (typeof window !== 'undefined' && 'ontouchstart' in window);
+  const _frameInterval = _isTouch ? 1000 / 40 : 0;
+  let _lastFrameTs = 0;
+
+  function loop(ts) {
     if (!state.active) return;
+    animFrameId = requestAnimationFrame(loop);
+    // Skip this frame if we're pacing and not enough time has passed. Keeping the
+    // RAF chain alive (scheduled above) means a render throw can't kill the loop.
+    if (_frameInterval && ts - _lastFrameTs < _frameInterval) return;
+    _lastFrameTs = ts || 0;
     state.unoHighlight = Object.entries(state.unoState).some(([, u]) => !u.called);
     try { render(); } catch(err) { console.error('Render error:', err); }
-    animFrameId = requestAnimationFrame(loop);
   }
 
   function render() {
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
+    Renderer.setPress(currentPress()); // tactile press-scale for on-canvas buttons
     Renderer.drawBackground(ctx, W, H);
 
     if (state.winner) {
@@ -147,7 +209,8 @@ const Game = (() => {
       isMyTurn, pendingDraw: state.pendingDraw, unoHighlight: state.unoHighlight,
       activeColor: state.activeColor, hasDrawnThisTurn: state.hasDrawnThisTurn,
       isSpectator: Game.isSpectator, isGodMode: Game.isGodMode,
-      spectatingPlayerName: state.spectatingPlayerName, players: state.players
+      spectatingPlayerName: state.spectatingPlayerName, players: state.players,
+      direction: state.direction
     }, W, H);
 
     // Hand — skip the card currently in-flight; playable cards breathe
@@ -179,9 +242,11 @@ const Game = (() => {
 
   function onDown(e) {
     e.preventDefault();
-    const { x } = xy(e);
+    const { x, y } = xy(e);
     touchStartX = x; scrollStartOffset = state.scrollOffset;
     isDragging = false; dragDist = 0;
+    const id = buttonAt(x, y);      // tactile press feedback if a button was hit
+    if (id) pressButton(id);
   }
 
   function onMove(e) {
@@ -189,6 +254,7 @@ const Game = (() => {
     const { x } = xy(e);
     dragDist = Math.abs(x - touchStartX);
     if (dragDist > Renderer.vs(8)) {
+      if (_press.id) cancelPress();  // became a hand-scroll — don't leave a button stuck pressed
       isDragging = true;
       state.scrollOffset = scrollStartOffset + (x - touchStartX);
       // Clamp
@@ -202,6 +268,7 @@ const Game = (() => {
 
   function onUp(e) {
     e.preventDefault();
+    releaseButton();   // start the spring-back for whatever button was pressed
     if (isDragging) { isDragging = false; return; }
     const { x, y } = xy(e);
 
