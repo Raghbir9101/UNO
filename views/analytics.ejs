@@ -334,6 +334,25 @@
   font-style: normal;
 }
 
+.data-table a.join-btn {
+  display: inline-block;
+  padding: 5px 12px;
+  background: var(--series-2);
+  color: #fff;
+  border: 1px solid var(--series-2);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+
+.data-table a.join-btn:hover {
+  opacity: 0.85;
+  text-decoration: none;
+}
+
 .data-table .metric-cell {
   font-family: 'Consolas', 'Monaco', monospace;
   font-variant-numeric: tabular-nums;
@@ -517,6 +536,7 @@
               <th>Rules</th>
               <th>Visibility</th>
               <th>Created</th>
+              <th>Join</th>
             </tr>
           </thead>
           <tbody>
@@ -532,10 +552,11 @@
                   <td><%= fmtRules(r.rules) %></td>
                   <td><%= r.isPrivate ? '🔒 Private' : '🌐 Public' %></td>
                   <td class="metric-cell" style="white-space: nowrap;"><%= new Date(r.createdAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) %></td>
+                  <td><a class="join-btn" href="/play?room=<%= encodeURIComponent(r.code) %>" target="_blank" rel="noopener">Join →</a></td>
                 </tr>
               <% }); %>
             <% } else { %>
-              <tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted);">No rooms open right now.</td></tr>
+              <tr><td colspan="8" style="text-align: center; padding: 40px; color: var(--text-muted);">No rooms open right now.</td></tr>
             <% } %>
           </tbody>
         </table>

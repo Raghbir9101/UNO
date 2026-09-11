@@ -254,9 +254,17 @@ app.get('/play', (req, res) => {
 app.use(express.static(path.join(__dirname, '..', 'public'), {
   index: false,
   setHeaders(res, filePath) {
-    // Raw image files were showing up as web search results (og-image.jpg
-    // ranked as a page in GSC) — keep them out of search entirely
-    if (/\.(png|jpe?g|svg|webp|ico)$/i.test(filePath)) {
+    const base = path.basename(filePath).toLowerCase();
+    // Favicons / app icons MUST stay indexable — Google will not show a site's
+    // favicon in search results if the icon file is served with noindex.
+    const isIcon =
+      base === 'favicon.ico' ||
+      /^favicon[-.]/.test(base) ||
+      base === 'apple-touch-icon.png' ||
+      /^icon-\d+\.png$/.test(base);
+    // Raw content/OG images were showing up as web search results (og-image.jpg
+    // ranked as a page in GSC) — keep those out of search entirely.
+    if (!isIcon && /\.(png|jpe?g|svg|webp|ico)$/i.test(filePath)) {
       res.setHeader('X-Robots-Tag', 'noindex');
     }
   },

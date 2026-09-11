@@ -26,7 +26,12 @@
   <meta name="twitter:description" content="<%= typeof description !== 'undefined' ? description : 'Free browser-based UNO for up to 20 players. No download, no signup. Always free.' %>">
   <meta name="twitter:image" content="<%= typeof ogImage !== 'undefined' ? ogImage : '/images/og-image.jpg' %>">
 
-  <!-- Favicon -->
+  <!-- Favicon: .ico at the site root (Google Search + legacy), PNG raster
+       fallbacks (multiples of 48px per Google's guidance), then SVG for
+       modern browsers. -->
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="96x96" href="/images/favicon-96.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="/images/favicon-48.png">
   <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
   <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
   <link rel="manifest" href="/manifest.json">

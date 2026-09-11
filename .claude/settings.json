@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(unzip -o \"C:/Users/rkgam/OneDrive/Desktop/Projects/UNO/playunofree.com-Performance-on-Search-2026-09-09.zip\" -d gsc_data)"
+    ]
+  }
+}
