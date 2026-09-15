@@ -1,7 +1,24 @@
 {
   "permissions": {
     "allow": [
-      "Bash(unzip -o \"C:/Users/rkgam/OneDrive/Desktop/Projects/UNO/playunofree.com-Performance-on-Search-2026-09-09.zip\" -d gsc_data)"
+      "Bash(unzip -o \"C:/Users/rkgam/OneDrive/Desktop/Projects/UNO/playunofree.com-Performance-on-Search-2026-09-09.zip\" -d gsc_data)",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const d=require\\('./data/player-progress.json'\\); const ids=Object.keys\\(d.players\\); console.log\\('players:', ids.length\\); console.log\\('testuser present:', ids.some\\(i=>i.startsWith\\('testuser'\\)\\)\\);\")",
+      "Bash(grep -n \"showEmoteBubble\\(data.playerId\\\\|showToast\\(\\\\`\\\\${data.nickname}: \\\\${data.emote}\\\\`\\)\\\\|── Manage Players Modal\" public/main.js)",
+      "Bash(node --check public/shared/cosmetics.js)",
+      "Bash(node -e \"const d=require\\('./data/player-progress.json'\\);for\\(const k of Object.keys\\(d.players\\)\\)console.log\\(JSON.stringify\\(k\\), 'coins='+d.players[k].coins, 'len='+k.length\\)\")",
+      "Bash(curl -s http://localhost:3999/api/progress?uid=__TRACKED_VAR__)",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\('source',j.source,'coins',j.coins,'entries',j.entries.length,'reasons',j.entries.map\\(e=>e.r\\).join\\(','\\)\\);}\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -X POST http://localhost:3999/api/progress/gift -H 'Content-Type: application/json' -d \"{\\\\\"to\\\\\":\\\\\"x\\\\\",\\\\\"amount\\\\\":100}\")",
+      "Bash(node server/scripts/backfill-mongo.js)",
+      "Bash(curl -s \"http://localhost:3999/api/progress?uid=hydratetest00000000000000000001\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\('coins',j.coins,'level',j.level,'inventory',JSON.stringify\\(j.inventory\\)\\);}\\)\")",
+      "PowerShell($c = Get-NetTCPConnection -LocalPort 3999 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { $c | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue; \"stopped pid $_\" } } else { \"no listener on 3999\" })",
+      "Bash(node -e \"try{require.resolve\\('puppeteer'\\);console.log\\('puppeteer: yes'\\)}catch{try{require.resolve\\('playwright'\\);console.log\\('playwright: yes'\\)}catch{console.log\\('no puppeteer/playwright'\\)}}\")",
+      "Bash(node -e \"try{require.resolve\\('jsdom'\\);console.log\\('jsdom: yes'\\)}catch{console.log\\('jsdom: no'\\)}\")",
+      "Bash(node \"C:/Users/rkgam/AppData/Local/Temp/claude/c--Users-rkgam-OneDrive-Desktop-Projects-UNO/bbe7bba1-2973-4b09-b80a-66e3c7839653/scratchpad/jsdom-run.js\")",
+      "PowerShell($c = Get-NetTCPConnection -LocalPort 3999 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { $c | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue; \"stopped pid $_\" } } else { \"no listener\" })",
+      "PowerShell($c = Get-NetTCPConnection -LocalPort 3998 -State Listen -ErrorAction SilentlyContinue; if \\($c\\) { $c | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue; \"stopped pid $_\" } } else { \"no listener\" })"
     ]
   }
 }

@@ -93,8 +93,9 @@ app.get('/upi-qr.svg', async (req, res) => {
 // ── Compression ──
 app.use(compression());
 
-// ── JSON bodies (auth API) ──
-app.use(express.json({ limit: '50kb' }));
+// ── JSON bodies (auth API). Keep the raw bytes so the Razorpay webhook can
+//    verify its HMAC signature over the exact payload. ──
+app.use(express.json({ limit: '50kb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
 // ── Visit analytics (page navigations only; fire-and-forget, never blocks) ──
 app.use(analytics.middleware);
@@ -104,6 +105,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/analytics', analyticsApiRoutes);
 app.use('/api/bug-report', bugReportRoutes);
 app.use('/api/progress', require('./routes/progress'));
+app.use('/api/payments', require('./routes/payments'));
 
 // ── Password reset pages ──
 app.get('/forgot-password', (req, res) => {
@@ -885,6 +887,29 @@ const EMOTES = [
 const EMOTE_COOLDOWN_MS = 1500;
 const VOICE_TOKEN_COOLDOWN_MS = 3000;
 
+// ─── Room Chat ────────────────────────────────────────────────────────────────
+// Free-text chat (emoji are just unicode). Unlike emotes this IS a moderation
+// surface, so: length cap, rate limit, control-char stripping, and a light
+// profanity mask. History is a small per-room ring buffer for late joiners.
+const CHAT_MAX_LEN = 200;
+const CHAT_COOLDOWN_MS = 800;
+const CHAT_HISTORY = 40;
+const PROFANITY = [
+  /\bf+u+c+k+\w*\b/gi, /\bs+h+i+t+\w*\b/gi, /\bb+i+t+c+h+\w*\b/gi,
+  /\ba+s+s+h+o+l+e+\w*\b/gi, /\bc+u+n+t+\w*\b/gi, /\bd+i+c+k+h+e+a+d+\w*\b/gi,
+  /\bn+i+g+\w*\b/gi, /\bf+a+g+\w*\b/gi,
+];
+
+function sanitizeChat(text) {
+  let t = String(text == null ? '' : text)
+    .replace(/[ -]/g, '')   // control chars
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, CHAT_MAX_LEN);
+  for (const re of PROFANITY) t = t.replace(re, (m) => '*'.repeat(m.length));
+  return t;
+}
+
 // ─── Socket.io Events ────────────────────────────────────────────────────────
 
 io.on('connection', (socket) => {
@@ -894,6 +919,7 @@ io.on('connection', (socket) => {
   // replaces socket.data wholesale, which would reset the cooldown.
   let lastEmoteAt = 0;
   let lastVoiceTokenAt = 0;
+  let lastChatAt = 0;
 
   // ── Ping Measurement ──
   socket.on('ping_measure', () => {
@@ -1673,6 +1699,39 @@ io.on('connection', (socket) => {
     io.to(roomCode).emit('emote', { playerId, nickname: sender.nickname, emote });
   });
 
+  // ── Send Chat message (room members + spectators; rate-limited, sanitized) ──
+  socket.on('send_chat', ({ roomCode, text }) => {
+    const playerId = socket.data?.playerId;
+    if (!playerId || socket.data?.roomCode !== roomCode) return;
+
+    const now = Date.now();
+    if (now - lastChatAt < CHAT_COOLDOWN_MS) return;
+
+    const room = roomManager.getRoom(roomCode);
+    if (!room) return;
+    const sender = room.players.find(p => p.id === playerId) ||
+      room.spectators?.find(p => p.id === playerId);
+    if (!sender) return;
+
+    const clean = sanitizeChat(text);
+    if (!clean) return;
+
+    lastChatAt = now;
+    const msg = { playerId, nickname: sender.nickname, text: clean, ts: now };
+    if (!Array.isArray(room.chatLog)) room.chatLog = [];
+    room.chatLog.push(msg);
+    if (room.chatLog.length > CHAT_HISTORY) room.chatLog = room.chatLog.slice(-CHAT_HISTORY);
+    io.to(roomCode).emit('chat', msg);
+  });
+
+  // ── Chat history (sent to a client when it opens the chat panel / joins) ──
+  socket.on('chat_history', ({ roomCode }, callback) => {
+    if (typeof callback !== 'function') return;
+    if (socket.data?.roomCode !== roomCode) return callback({ messages: [] });
+    const room = roomManager.getRoom(roomCode);
+    callback({ messages: (room && room.chatLog) || [] });
+  });
+
   // ── Restart Game ──
   socket.on('restart_game', ({ roomCode }) => {
     const room = roomManager.getRoom(roomCode);
@@ -1817,8 +1876,15 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
 
-// Mongo powers accounts + analytics; the game itself never waits on it
-connectDB();
+// Mongo powers accounts + analytics; the game itself never waits on it.
+// When BACKFILL_ON_BOOT=1, once connected, sweep any file-store records that
+// aren't mirrored into Mongo yet (self-heals coin balances after a deploy).
+connectDB().then((connected) => {
+  if (connected && process.env.BACKFILL_ON_BOOT === '1') {
+    require('./scripts/backfill-mongo').runBackfill().catch(err =>
+      console.error('[backfill] boot sweep failed:', err.message));
+  }
+});
 
 server.listen(PORT, () => {
   console.log(`🃏 UNO server running on http://localhost:${PORT}`);

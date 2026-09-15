@@ -361,3 +361,7 @@ router.put('/profile', requireDb, requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+// Reusable gates for other economy routes (gifting, payments). Attaching to the
+// router keeps `require('./routes/auth')` → mountable router working unchanged.
+module.exports.requireAuth = requireAuth;
+module.exports.requireDb = requireDb;

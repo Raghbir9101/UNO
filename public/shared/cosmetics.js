@@ -169,6 +169,62 @@
     'victory-goldburst': { cat: 'victory', name: 'Golden Burst',   price: 1800, rarity: 'epic', fx: 'goldburst', emoji: '💰' },
     'victory-cardstorm': { cat: 'victory', name: 'Card Explosion', price: 1500, rarity: 'epic', fx: 'cardstorm', emoji: '🃏' },
     'victory-royale':    { cat: 'victory', name: 'Royale',         price: 5000, rarity: 'legendary', levelUnlock: 100, fx: 'royale', emoji: '👑' },
+
+    // ── Expanded catalog (Economy v2 — more ways to spend; still visual-only) ──
+    'card-theme-sakura': {
+      cat: 'cardTheme', name: 'Sakura', price: 1000, rarity: 'common',
+      palette: {
+        red:    { fill: '#ff6f9c', dark: '#80243f', light: '#ffb3cb', name: 'Red',    text: '#fff' },
+        blue:   { fill: '#7aa8ff', dark: '#2e4a80', light: '#b8cfff', name: 'Blue',   text: '#fff' },
+        green:  { fill: '#86e0a8', dark: '#2e6642', light: '#bff0cf', name: 'Green',  text: '#06351f' },
+        yellow: { fill: '#ffd98a', dark: '#8a6a20', light: '#ffeac2', name: 'Yellow', text: '#4a3600' },
+        wild:   { fill: '#2a1726', dark: '#120a10', light: '#5e3352', name: 'Wild',   text: '#ffd8ec' },
+      },
+    },
+    'card-theme-noir': {
+      cat: 'cardTheme', name: 'Noir', price: 1400, rarity: 'epic',
+      palette: {
+        red:    { fill: '#e85d6f', dark: '#6e2029', light: '#f2a0aa', name: 'Red',    text: '#fff' },
+        blue:   { fill: '#6f8ba3', dark: '#2e3d4a', light: '#b0c0cc', name: 'Blue',   text: '#fff' },
+        green:  { fill: '#7ba38b', dark: '#2e4a3a', light: '#b8ccc0', name: 'Green',  text: '#0a2418' },
+        yellow: { fill: '#cbb87a', dark: '#6e6030', light: '#e0d4a8', name: 'Yellow', text: '#3a3200' },
+        wild:   { fill: '#15171c', dark: '#070809', light: '#33373f', name: 'Wild',   text: '#fff' },
+      },
+    },
+    'card-theme-candy': {
+      cat: 'cardTheme', name: 'Candy', price: 2000, rarity: 'legendary',
+      palette: {
+        red:    { fill: '#ff4f8b', dark: '#80193f', light: '#ff9cc0', name: 'Red',    text: '#fff' },
+        blue:   { fill: '#4fd0ff', dark: '#196a80', light: '#a8ecff', name: 'Blue',   text: '#053744' },
+        green:  { fill: '#7bff9e', dark: '#1f8040', light: '#c2ffcf', name: 'Green',  text: '#05401d' },
+        yellow: { fill: '#ffe74f', dark: '#807019', light: '#fff3a8', name: 'Yellow', text: '#443c00' },
+        wild:   { fill: '#2a0f33', dark: '#120514', light: '#5e1f73', name: 'Wild',   text: '#fff' },
+      },
+    },
+    'table-aurora': {
+      cat: 'tableTheme', name: 'Aurora', price: 1500, rarity: 'epic',
+      table: { base: ['#07241f', '#051418', '#02090c'], grid: '#5fffd0', ringRgb: '95,255,208', spotRgb: '143,123,255' },
+    },
+    'table-royal': {
+      cat: 'tableTheme', name: 'Royal Velvet', price: 2500, rarity: 'legendary',
+      table: { base: ['#2a0d33', '#17061f', '#0b030e'], grid: '#d9a1ff', ringRgb: '217,161,255', spotRgb: '255,210,63' },
+    },
+    'back-circuit': {
+      cat: 'cardBack', name: 'Circuit', price: 900, rarity: 'common',
+      back: { top: '#0a2a24', bottom: '#041410', ring: ['46,232,138', '47,211,232', '46,232,138', '61,157,255'], label: '⬡', labelColor: 'rgba(150,255,220,0.95)' },
+    },
+    'back-rose': {
+      cat: 'cardBack', name: 'Rose', price: 1100, rarity: 'epic',
+      back: { top: '#331420', bottom: '#14070d', ring: ['255,92,158', '255,176,204', '255,59,92', '255,122,158'], label: '✿', labelColor: 'rgba(255,200,220,0.95)' },
+    },
+    'avatar-robot':   { cat: 'avatar', name: 'Robot',   price: 500,  rarity: 'common',    emoji: '🤖' },
+    'avatar-cat':     { cat: 'avatar', name: 'Cat',     price: 500,  rarity: 'common',    emoji: '🐱' },
+    'avatar-fox':     { cat: 'avatar', name: 'Fox',     price: 600,  rarity: 'common',    emoji: '🦊' },
+    'avatar-panda':   { cat: 'avatar', name: 'Panda',   price: 700,  rarity: 'common',    emoji: '🐼' },
+    'avatar-unicorn': { cat: 'avatar', name: 'Unicorn', price: 1200, rarity: 'epic',      emoji: '🦄' },
+    'avatar-ghost':   { cat: 'avatar', name: 'Ghost',   price: 500,  rarity: 'common',    emoji: '👻' },
+    'avatar-frog':    { cat: 'avatar', name: 'Frog',    price: 500,  rarity: 'common',    emoji: '🐸' },
+    'avatar-crown':   { cat: 'avatar', name: 'Royal',   price: 1500, rarity: 'legendary', emoji: '👑' },
   };
 
   // ── Helpers ─────────────────────────────────────────────────────────────────

@@ -139,7 +139,7 @@ mirrored to MongoDB (`PlayerProgress` model + `server/cloudSync.js`):
 
 - Share cards: `routes/ogImage.js` already generates room OG images — add a
   match-result variant (winner, MVP, duration) + share links.
-- Referrals: `?ref=uid` on invite links → coin grant when referee finishes a game.
+- ~~Referrals: `?ref=` invite links → coin grant when the referee finishes games.~~ ✅ **Shipped** (Economy v2 — referral codes, both-sided rewards; see `ECONOMY_SETUP.md`).
 - Friends system (requests, online status, invites) + party join.
 - Badges (early supporter, event winner) as cosmetics-registry entries.
 

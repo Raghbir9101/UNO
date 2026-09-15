@@ -15,6 +15,7 @@
 
 const { dbReady } = require('./db');
 const PlayerProgress = require('./models/PlayerProgress');
+const CoinLedger = require('./models/CoinLedger');
 const progressStore = require('./progressStore');
 const statsStore = require('./statsStore');
 const config = require('./rewards/config');
@@ -80,6 +81,38 @@ async function hydrate(uid) {
   } catch (err) {
     console.error('[cloud-sync] hydrate failed:', err.message);
     return false;
+  }
+}
+
+// On any read of a player who has no local record yet, pull their cloud copy
+// first. This is what makes anonymous balances survive a redeploy or a fresh
+// server instance: without it, getPlayer() would mint a new 0-coin record even
+// though the real balance is sitting in Mongo. Cheap — the findOne only fires
+// when the local record is genuinely absent.
+async function ensureHydrated(uid) {
+  if (!uid || progressStore.has(uid)) return false;
+  return hydrate(uid);
+}
+
+// ── Coin ledger (full durable history + audit trail) ──────────────────────────
+// Fire-and-forget: the file store already holds the authoritative balance and a
+// capped recent slice, so a failed ledger write never corrupts coins.
+function appendLedger(uid, delta, reason, balanceAfter, meta) {
+  if (!uid || !dbReady()) return;
+  CoinLedger.create({ uid, delta, reason, balanceAfter, meta: meta || undefined })
+    .catch(err => console.error('[cloud-sync] ledger append failed:', err.message));
+}
+
+// Recent transactions for the wallet view. Returns null when the DB is
+// unavailable so callers can fall back to the capped in-record ledger.
+async function recentLedger(uid, limit = 40) {
+  if (!uid || !dbReady()) return null;
+  try {
+    const rows = await CoinLedger.find({ uid }).sort({ createdAt: -1 }).limit(Math.min(limit, 100)).lean();
+    return rows.map(r => ({ t: +new Date(r.createdAt), d: r.delta, r: r.reason, b: r.balanceAfter, m: r.meta || null }));
+  } catch (err) {
+    console.error('[cloud-sync] ledger read failed:', err.message);
+    return null;
   }
 }
 
@@ -156,4 +189,7 @@ function mergeLocalInto(fromUid, toUid) {
 progressStore.onChange = markDirty;
 statsStore.onChange = markDirty;
 
-module.exports = { markDirty, flush, hydrate, mergeLocalInto };
+module.exports = {
+  markDirty, flush, hydrate, ensureHydrated, mergeLocalInto,
+  appendLedger, recentLedger,
+};

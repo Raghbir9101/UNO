@@ -150,8 +150,13 @@ function remove(uid) {
   saveSoon();
 }
 
+// Every record (for the one-time Mongo backfill and admin tooling).
+function all() {
+  return data.players;
+}
+
 module.exports = {
   recordGame, unlockAchievements, getLeaderboard, getPlayer, saveNow,
-  has, peek, restore, remove, onChange: null,
+  has, peek, restore, remove, all, onChange: null,
   ACHIEVEMENTS,
 };

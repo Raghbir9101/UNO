@@ -59,6 +59,14 @@ function getPlayer(uid) {
       unlockedLevels: [], // LEVEL_UNLOCKS already granted
       inventory: [],    // owned cosmetic item ids (defaults are implicit)
       equipped: {},     // category → item id (absent = default)
+      // ── Economy v2 ──────────────────────────────────────────────────────
+      ledger: [],       // capped recent coin transactions (full log → Mongo)
+      adRewards: { day: null, count: 0 },        // rewarded-ad daily cap/cooldown
+      spin: { day: null, freeUsed: 0, extra: 0, lastPrize: null }, // wheel
+      referral: { code: null, referredBy: null, referredUids: [], rewardedCount: 0 },
+      gifting: { day: null, sentToday: 0 },      // gift daily cap
+      season: { id: null, xp: 0, claimedTiers: [] },
+      vip: { active: false, expiresAt: 0, adsRemoved: false, multiplier: 1 },
       createdAt: Date.now(),
       lastSeen: Date.now(),
     };
@@ -67,6 +75,18 @@ function getPlayer(uid) {
   // Lazy migration for records created before the cosmetics shop
   if (!Array.isArray(rec.inventory)) rec.inventory = [];
   if (!rec.equipped || typeof rec.equipped !== 'object') rec.equipped = {};
+  // Lazy migration for Economy v2 fields (records predate the expanded store)
+  if (!Array.isArray(rec.ledger)) rec.ledger = [];
+  if (!rec.adRewards || typeof rec.adRewards !== 'object') rec.adRewards = { day: null, count: 0 };
+  if (!rec.spin || typeof rec.spin !== 'object') rec.spin = { day: null, freeUsed: 0, extra: 0, lastPrize: null };
+  if (!rec.referral || typeof rec.referral !== 'object') {
+    rec.referral = { code: null, referredBy: null, referredUids: [], rewardedCount: 0 };
+  }
+  if (!Array.isArray(rec.referral.referredUids)) rec.referral.referredUids = [];
+  if (!rec.gifting || typeof rec.gifting !== 'object') rec.gifting = { day: null, sentToday: 0 };
+  if (!rec.season || typeof rec.season !== 'object') rec.season = { id: null, xp: 0, claimedTiers: [] };
+  if (!Array.isArray(rec.season.claimedTiers)) rec.season.claimedTiers = [];
+  if (!rec.vip || typeof rec.vip !== 'object') rec.vip = { active: false, expiresAt: 0, adsRemoved: false, multiplier: 1 };
   rec.lastSeen = Date.now();
   return rec;
 }
@@ -92,4 +112,33 @@ function remove(uid) {
   saveSoon();
 }
 
-module.exports = { getPlayer, saveSoon, saveNow, has, peek, restore, remove, onChange: null };
+// Every record (for the one-time Mongo backfill and admin tooling).
+function all() {
+  return data.players;
+}
+
+// Look a player up by their public referral code (set lazily by the engine).
+function findByReferralCode(code) {
+  if (!code) return null;
+  for (const uid of Object.keys(data.players)) {
+    const r = data.players[uid];
+    if (r.referral && r.referral.code === code) return { uid, rec: r };
+  }
+  return null;
+}
+
+// Look a player up by (case-insensitive) display name — used for gifting.
+function findByName(name) {
+  if (!name) return null;
+  const needle = String(name).trim().toLowerCase();
+  for (const uid of Object.keys(data.players)) {
+    const r = data.players[uid];
+    if (r.name && r.name.toLowerCase() === needle) return { uid, rec: r };
+  }
+  return null;
+}
+
+module.exports = {
+  getPlayer, saveSoon, saveNow, has, peek, restore, remove, all,
+  findByReferralCode, findByName, onChange: null,
+};

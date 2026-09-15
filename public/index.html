@@ -34,7 +34,7 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600;700&display=swap"
       rel="stylesheet" />
   </noscript>
-  <link rel="stylesheet" href="style.css?v=48" />
+  <link rel="stylesheet" href="style.css?v=51" />
 
   <!-- Google AdSense -->
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5274802993197394"
@@ -58,13 +58,14 @@
   -->
   <script defer src="/socket.io/socket.io.js"></script>
   <script defer src="shared/game-modes.js?v=4"></script>
-  <script defer src="shared/cosmetics.js?v=1"></script>
+  <script defer src="shared/cosmetics.js?v=2"></script>
   <script defer src="assets/cards.js?v=32"></script>
   <script defer src="sounds.js?v=1"></script>
   <script defer src="voice.js?v=2"></script>
   <script defer src="renderer.js?v=46"></script>
   <script defer src="game.js?v=41"></script>
-  <script defer src="main.js?v=51"></script>
+  <script defer src="bannerAd.js?v=1"></script>
+  <script defer src="main.js?v=52"></script>
 
   <style>
     /* Visually hides labels for sighted users while keeping them for screen readers */
@@ -134,6 +135,13 @@
   <!-- ── Screen 1: Lobby ── -->
   <div id="lobby" class="screen active">
     <div class="lobby-container">
+      <!-- Reserved banner slot: bannerAd.js sets the size class (is-728/is-468/
+           is-320) to reserve the exact height BEFORE the Monetag iframe loads, so
+           it never shifts the layout. Full-bleed so wide units clear the 420px
+           form column. Managed by BannerAd.syncScreens() — never on the game board. -->
+      <div class="banner-ad banner-ad--bleed" aria-hidden="true">
+        <div class="banner-ad__container"></div>
+      </div>
       <div class="logo-section">
         <div class="uno-logo">
           <span class="logo-u">U</span><span class="logo-n">N</span><span class="logo-o">O</span>
@@ -211,12 +219,22 @@
         </div>
         <a href="/leaderboard" class="leaderboard-link">🏆 View Leaderboard</a>
       </div>
+
+      <!-- 3 more lobby banner slots (4 total on the lobby). Each is filled by
+           bannerAd.js with one viewport-sized, centered ad. -->
+      <div class="banner-ad banner-ad--bleed" aria-hidden="true"><div class="banner-ad__container"></div></div>
+      <div class="banner-ad banner-ad--bleed" aria-hidden="true"><div class="banner-ad__container"></div></div>
+      <div class="banner-ad banner-ad--bleed" aria-hidden="true"><div class="banner-ad__container"></div></div>
     </div>
   </div>
 
   <!-- ── Browse Rooms Screen ── -->
   <div id="browse-screen" class="screen">
     <div class="lobby-container">
+      <!-- Reserved banner slot (see lobby) — shown when Browse is the active screen. -->
+      <div class="banner-ad banner-ad--bleed" aria-hidden="true">
+        <div class="banner-ad__container"></div>
+      </div>
       <div class="logo-section">
         <div class="uno-logo">
           <span class="logo-u">U</span><span class="logo-n">N</span><span class="logo-o">O</span>
@@ -251,6 +269,11 @@
   <!-- ── Screen 2: Waiting Room ── -->
   <div id="waiting-room" class="screen">
     <div class="lobby-container">
+      <!-- Reserved banner slot (see lobby) — shown in the pre-game waiting room,
+           never on the game board that follows. -->
+      <div class="banner-ad banner-ad--bleed" aria-hidden="true">
+        <div class="banner-ad__container"></div>
+      </div>
       <div class="room-header">
         <h2>Room</h2>
         <div class="room-code-display" id="display-code"></div>
@@ -324,6 +347,26 @@
        the waiting room) rather than in a separate roster. -->
   <button id="btn-voice" class="btn-voice" type="button" title="Join voice chat"
     aria-label="Join voice chat">🎧</button>
+
+  <!-- ── Room Chat ──
+       Text chat with emoji, available in the waiting room and in-game. Shown by
+       main.js whenever you're seated in a room. -->
+  <button id="btn-chat" class="btn-chat" type="button" title="Chat" aria-label="Open chat" hidden>💬<span
+      id="chat-unread" class="chat-unread" hidden></span></button>
+  <div id="chat-panel" class="chat-panel" hidden>
+    <div class="chat-panel-header">
+      <span>💬 Room Chat</span>
+      <button id="btn-close-chat" class="btn-close" aria-label="Close chat">✕</button>
+    </div>
+    <div id="chat-messages" class="chat-messages" aria-live="polite"></div>
+    <div id="chat-emoji-picker" class="chat-emoji-picker" hidden></div>
+    <div class="chat-input-row">
+      <button id="btn-chat-emoji" class="btn-chat-emoji" type="button" aria-label="Emoji">😀</button>
+      <input id="chat-input" class="chat-input" maxlength="200" placeholder="Say something…" autocomplete="off"
+        aria-label="Chat message" />
+      <button id="btn-chat-send" class="btn-chat-send" type="button" aria-label="Send">➤</button>
+    </div>
+  </div>
 
   <!-- Card Style Picker Modal -->
   <div id="card-style-modal" class="modal" style="display: none;">
@@ -446,20 +489,51 @@
     </div>
   </div>
 
-  <!-- Shop: cosmetics purchasable with earned coins (registry-driven) -->
+  <!-- Store: cosmetics + coin packs + VIP pass + season track -->
   <div id="shop-modal" class="modal" style="display: none;">
-    <div class="modal-content shop-modal-content">
+    <div class="modal-content store-modal-content">
       <div class="modal-header">
-        <h3>🛍️ Shop <span class="shop-coins-chip">🪙 <b id="shop-coins">0</b></span></h3>
+        <h3>🛍️ Store <span class="shop-coins-chip">🪙 <b id="shop-coins">0</b></span></h3>
         <button id="btn-close-shop" class="btn-close">✕</button>
       </div>
-      <div id="shop-tabs" class="shop-tabs" role="tablist"></div>
-      <div id="shop-grid" class="shop-grid"></div>
-      <p class="rewards-note">Everything here is bought with coins earned by playing — never with money.</p>
+      <div class="store-nav" role="tablist">
+        <button class="store-nav-btn store-nav-btn--active" data-store="cosmetics" type="button">✨ Cosmetics</button>
+        <button class="store-nav-btn" data-store="coins" type="button">🪙 Coins</button>
+        <button class="store-nav-btn" data-store="vip" type="button">👑 VIP</button>
+        <button class="store-nav-btn" data-store="season" type="button">🏆 Season</button>
+      </div>
+
+      <div class="store-section" id="store-cosmetics">
+        <div id="shop-tabs" class="shop-tabs" role="tablist"></div>
+        <div id="shop-grid" class="shop-grid"></div>
+        <p class="rewards-note">Cosmetics are purely visual — they never change who wins. Fair play, always.</p>
+      </div>
+
+      <div class="store-section" id="store-coins" hidden>
+        <p class="store-lead">Top up instantly. Coins unlock cosmetics &amp; gifts — never an in-game advantage.</p>
+        <div id="coin-pack-grid" class="coinpack-grid"></div>
+        <p id="coins-free-note" class="rewards-note">💡 Prefer free? Earn coins with daily logins, rewarded ads, the wheel, and referrals — all in the 🎁 Rewards panel.</p>
+      </div>
+
+      <div class="store-section" id="store-vip" hidden>
+        <div id="vip-status" class="vip-status"></div>
+        <div id="vip-grid" class="vip-grid"></div>
+        <ul class="vip-perks">
+          <li>🚫 Removes all ads</li>
+          <li>✨ 2× coins on everything you earn</li>
+          <li>🏆 Unlocks VIP-only season tiers</li>
+          <li>💛 Supports a tiny indie game</li>
+        </ul>
+      </div>
+
+      <div class="store-section" id="store-season" hidden>
+        <div id="season-head" class="season-head"></div>
+        <div id="season-track" class="season-track"></div>
+      </div>
     </div>
   </div>
 
-  <!-- Rewards: coins, level, daily login calendar, challenges (uid-based, no signup) -->
+  <!-- Rewards: level, daily login, challenges, earn hub, wallet (uid-based, no signup) -->
   <div id="rewards-modal" class="modal" style="display: none;">
     <div class="modal-content rewards-modal-content">
       <div class="modal-header">
@@ -479,17 +553,145 @@
         <div class="rewards-coins" aria-label="Coins">🪙 <b id="rewards-coins">0</b></div>
       </div>
 
-      <p class="profile-section-title">📅 Daily Login <span id="login-streak" class="login-streak"></span></p>
-      <div id="login-calendar" class="login-calendar"></div>
-      <button id="btn-claim-daily" class="btn btn-primary" style="width:100%;margin-top:8px;">Claim Today's Reward</button>
+      <div class="store-nav" role="tablist">
+        <button class="rewards-nav-btn rewards-nav-btn--active" data-rewards="daily" type="button">📅 Daily</button>
+        <button class="rewards-nav-btn" data-rewards="earn" type="button">💰 Earn</button>
+        <button class="rewards-nav-btn" data-rewards="wallet" type="button">📜 Wallet</button>
+      </div>
 
-      <p class="profile-section-title">☀️ Daily Challenges</p>
-      <div id="daily-challenges" class="challenge-list"></div>
+      <div class="rewards-section" id="rewards-daily">
+        <p class="profile-section-title">📅 Daily Login <span id="login-streak" class="login-streak"></span></p>
+        <div id="login-calendar" class="login-calendar"></div>
+        <button id="btn-claim-daily" class="btn btn-primary" style="width:100%;margin-top:8px;">Claim Today's Reward</button>
 
-      <p class="profile-section-title">📆 Weekly Challenges</p>
-      <div id="weekly-challenges" class="challenge-list"></div>
+        <p class="profile-section-title">☀️ Daily Challenges</p>
+        <div id="daily-challenges" class="challenge-list"></div>
 
-      <p class="rewards-note">Coins are earned by playing — never bought. Cosmetics shop coming soon!</p>
+        <p class="profile-section-title">📆 Weekly Challenges</p>
+        <div id="weekly-challenges" class="challenge-list"></div>
+      </div>
+
+      <div class="rewards-section" id="rewards-earn" hidden>
+        <div class="earn-card">
+          <div class="earn-card-icon">📺</div>
+          <div class="earn-card-body">
+            <span class="earn-card-title">Watch an ad</span>
+            <span class="earn-card-sub" id="ad-reward-sub">Get free coins</span>
+          </div>
+          <button id="btn-watch-ad" class="btn btn-primary earn-card-btn" type="button">Watch</button>
+        </div>
+        <div class="earn-card">
+          <div class="earn-card-icon">🎡</div>
+          <div class="earn-card-body">
+            <span class="earn-card-title">Spin the wheel</span>
+            <span class="earn-card-sub" id="spin-sub">1 free spin daily</span>
+          </div>
+          <button id="btn-open-wheel" class="btn btn-primary earn-card-btn" type="button">Spin</button>
+        </div>
+        <div class="earn-card earn-card--refer">
+          <div class="earn-card-icon">🤝</div>
+          <div class="earn-card-body">
+            <span class="earn-card-title">Refer &amp; earn</span>
+            <span class="earn-card-sub" id="refer-sub">Invite friends — you both get coins</span>
+          </div>
+          <button id="btn-open-refer" class="btn btn-primary earn-card-btn" type="button">Invite</button>
+        </div>
+        <div class="earn-card">
+          <div class="earn-card-icon">🎁</div>
+          <div class="earn-card-body">
+            <span class="earn-card-title">Gift coins</span>
+            <span class="earn-card-sub">Send coins to a friend</span>
+          </div>
+          <button id="btn-open-gift" class="btn btn-outline earn-card-btn" type="button">Send</button>
+        </div>
+      </div>
+
+      <div class="rewards-section" id="rewards-wallet" hidden>
+        <p class="profile-section-title">📜 Transaction History</p>
+        <div id="wallet-list" class="wallet-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Spin the wheel -->
+  <div id="wheel-modal" class="modal" style="display: none;">
+    <div class="modal-content wheel-modal-content">
+      <div class="modal-header">
+        <h3>🎡 Spin the Wheel</h3>
+        <button id="btn-close-wheel" class="btn-close">✕</button>
+      </div>
+      <div class="wheel-stage">
+        <div class="wheel-pointer"></div>
+        <div id="wheel" class="wheel"></div>
+        <div class="wheel-hub">🎡</div>
+      </div>
+      <p id="wheel-status" class="wheel-status">1 free spin a day — good luck!</p>
+      <button id="btn-spin-free" class="btn btn-primary btn-large" style="width:100%;" type="button">Free Spin</button>
+      <button id="btn-spin-ad" class="btn btn-outline" style="width:100%;margin-top:8px;" type="button">📺 Watch an ad for an extra spin</button>
+    </div>
+  </div>
+
+  <!-- Refer & earn -->
+  <div id="refer-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>🤝 Refer &amp; Earn</h3>
+        <button id="btn-close-refer" class="btn-close">✕</button>
+      </div>
+      <p class="store-lead" id="refer-lead"></p>
+      <div class="refer-code-box">
+        <span class="refer-code-label">Your friend code</span>
+        <div class="refer-code" id="refer-code">------</div>
+      </div>
+      <div class="refer-actions">
+        <button id="btn-copy-refer" class="btn btn-primary" type="button">🔗 Copy invite link</button>
+        <button id="btn-share-refer" class="btn btn-outline btn-whatsapp" type="button">💬 WhatsApp</button>
+      </div>
+      <div id="refer-stats" class="refer-stats"></div>
+      <div class="refer-redeem">
+        <p class="profile-section-title">Got a friend's code?</p>
+        <div class="gift-row">
+          <input id="refer-input" class="gift-input" placeholder="Enter code" maxlength="12" autocomplete="off"
+            autocapitalize="characters" spellcheck="false" />
+          <button id="btn-apply-refer" class="btn btn-secondary" type="button">Apply</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gift coins -->
+  <div id="gift-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>🎁 Gift Coins</h3>
+        <button id="btn-close-gift" class="btn-close">✕</button>
+      </div>
+      <p class="store-lead">Send coins to a friend by their friend code or name. Sign-in required.</p>
+      <div class="input-group">
+        <label class="input-label" for="gift-to">Friend code or name</label>
+        <input id="gift-to" class="gift-input" placeholder="e.g. S3ZQ89" maxlength="32" autocomplete="off" />
+      </div>
+      <div class="input-group">
+        <label class="input-label" for="gift-amount">Amount (coins)</label>
+        <input id="gift-amount" class="gift-input" type="number" min="50" step="50" placeholder="50" />
+      </div>
+      <p id="gift-error" class="auth-error" hidden></p>
+      <button id="btn-send-gift" class="btn btn-primary btn-large" style="width:100%;" type="button">Send Gift</button>
+    </div>
+  </div>
+
+  <!-- Rewarded-ad player overlay (Google Ad Manager rewarded, or dev placeholder) -->
+  <div id="ad-overlay" class="ad-overlay" style="display: none;">
+    <div class="ad-overlay-card">
+      <div id="ad-overlay-spinner" class="ad-overlay-spinner"></div>
+      <h3 id="ad-overlay-title">Loading ad…</h3>
+      <p id="ad-overlay-sub">Your reward is granted when the ad finishes.</p>
+      <div id="ad-placeholder" class="ad-placeholder" hidden>
+        <div class="ad-placeholder-badge">AD</div>
+        <p class="ad-placeholder-text">Sample rewarded ad</p>
+        <div class="ad-countdown">Reward in <b id="ad-countdown-num">5</b>s</div>
+      </div>
+      <button id="btn-ad-cancel" class="btn btn-ghost" style="margin-top:12px;" type="button">Cancel</button>
     </div>
   </div>
 

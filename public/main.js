@@ -445,12 +445,24 @@
   function showScreen(screen) {
     [$lobby, $waitingRoom, $gameScreen, $browseScreen].forEach(s => s.classList.remove('active'));
     screen.classList.add('active');
+    // Banner ad: mount into whichever active screen carries a `.banner-ad` slot
+    // (lobby, browse, waiting room) and tear it down on the ad-free game board.
+    // Idempotent + duplicate-safe — see bannerAd.js.
+    if (window.BannerAd) window.BannerAd.syncScreens();
     // The app bar lives on menu screens only — gameplay gets the full viewport
     document.body.classList.toggle('in-game', screen === $gameScreen);
     if (screen === $gameScreen) {
       setTimeout(() => Game.resizeCanvas(), 50);
     }
     renderVoiceUI();
+    // Chat is available whenever you're seated in a room (waiting room or game).
+    const inRoom = screen === $waitingRoom || screen === $gameScreen;
+    const chatBtn = document.getElementById('btn-chat');
+    if (chatBtn) chatBtn.hidden = !inRoom;
+    if (!inRoom) {
+      const cp = document.getElementById('chat-panel');
+      if (cp) cp.hidden = true;
+    }
   }
 
   // ── App Bar menu (☰) ───────────────────────────────────────────────────────
@@ -2311,8 +2323,11 @@
         _dailyToastShown = true;
         showToast('🎁 Daily reward available — tap your coins!');
       }
-      if ($rewardsModal.style.display === 'flex') renderRewardsModal();
-      if ($shopModal && $shopModal.style.display === 'flex') renderShopModal();
+      if ($rewardsModal.style.display === 'flex') {
+        renderRewardsModal();
+        if (_rewardsSection === 'earn') renderEarnHub();
+      }
+      if ($shopModal && $shopModal.style.display === 'flex') showStoreSection(_storeSection);
     } catch { /* offline / server hiccup — the chip just stays stale */ }
   }
 
@@ -2381,6 +2396,7 @@
 
   $progressChip.addEventListener('click', () => {
     $rewardsModal.style.display = 'flex';
+    showRewardsSection('daily');
     renderRewardsModal();
     refreshProgress();
   });
@@ -2421,7 +2437,7 @@
 
   document.getElementById('btn-open-shop').addEventListener('click', () => {
     $shopModal.style.display = 'flex';
-    renderShopModal();
+    showStoreSection('cosmetics');
     refreshProgress();
   });
 
@@ -2537,6 +2553,555 @@
       renderShopModal();
     } catch { showToast('Could not equip — try again', true); }
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── Economy v2: Store sections, real-money checkout, Earn hub, Wheel,
+  //    Referral, Gift, Wallet, and rewarded ads. Everything is server-
+  //    authoritative — the client only displays and requests.
+  // ═══════════════════════════════════════════════════════════════════════════
+  function authHeaders() {
+    const t = localStorage.getItem('uno_token');
+    return t ? { Authorization: 'Bearer ' + t } : {};
+  }
+  function isSignedIn() { return !!(authUser && localStorage.getItem('uno_token')); }
+  function fmtMoney(paise, currency) {
+    const sym = currency === 'INR' ? '₹' : '$';
+    return sym + (paise / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+
+  // Client bootstrap: which ad/payment integrations are live on this server.
+  let _econMeta = { ads: { enabled: false }, payments: { enabled: false } };
+  (async () => {
+    try {
+      const r = await fetch(`${PROGRESS_API}/meta`);
+      if (r.ok) _econMeta = await r.json();
+    } catch { /* keep safe defaults */ }
+  })();
+
+  // ── Store section switching ──
+  let _storeSection = 'cosmetics';
+  function showStoreSection(name) {
+    _storeSection = name;
+    $shopModal.querySelectorAll('.store-nav-btn').forEach(b =>
+      b.classList.toggle('store-nav-btn--active', b.dataset.store === name));
+    ['cosmetics', 'coins', 'vip', 'season'].forEach(s => {
+      const el = document.getElementById('store-' + s);
+      if (el) el.hidden = s !== name;
+    });
+    if (name === 'cosmetics') renderShopModal();
+    else if (name === 'coins') renderCoinPacks();
+    else if (name === 'vip') renderVip();
+    else if (name === 'season') renderSeason();
+  }
+  $shopModal.querySelector('.store-nav').addEventListener('click', (e) => {
+    const b = e.target.closest('.store-nav-btn');
+    if (b) showStoreSection(b.dataset.store);
+  });
+
+  function renderCoinPacks() {
+    const grid = document.getElementById('coin-pack-grid');
+    const packs = (_progress && _progress.coinPacks) || (_econMeta.payments && _econMeta.payments.coinPacks) || [];
+    const cur = (_progress && _progress.currency) || 'INR';
+    grid.innerHTML = '';
+    if (!_econMeta.payments.enabled) {
+      grid.innerHTML = '<p class="wallet-empty">💳 Real-money top-ups aren’t enabled on this server yet — earn coins free in the 🎁 Rewards panel!</p>';
+      return;
+    }
+    for (const p of packs) {
+      const total = p.coins + (p.bonus || 0);
+      const card = document.createElement('div');
+      card.className = 'coinpack';
+      card.innerHTML = `
+        ${p.badge ? `<span class="coinpack-badge">${p.badge}</span>` : ''}
+        <span class="coinpack-emoji">🪙</span>
+        <span class="coinpack-coins">${total.toLocaleString()}<small>${p.bonus ? `+${p.bonus} bonus` : '&nbsp;'}</small></span>
+        <span class="coinpack-name">${p.name}</span>`;
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-primary coinpack-btn';
+      btn.textContent = fmtMoney(p.amount, cur);
+      btn.addEventListener('click', () => buyWithMoney(p.id));
+      card.appendChild(btn);
+      grid.appendChild(card);
+    }
+  }
+
+  function renderVip() {
+    const status = document.getElementById('vip-status');
+    const grid = document.getElementById('vip-grid');
+    const vip = (_progress && _progress.vip) || { active: false };
+    const packs = (_progress && _progress.vipPacks) || (_econMeta.payments && _econMeta.payments.vipPacks) || [];
+    const cur = (_progress && _progress.currency) || 'INR';
+    if (vip.active) {
+      status.className = 'vip-status vip-status--active';
+      const days = Math.max(0, Math.ceil((vip.expiresAt - Date.now()) / 86400000));
+      status.textContent = `👑 VIP active — ${days} day${days === 1 ? '' : 's'} left · 2× coins · ad-free`;
+    } else {
+      status.className = 'vip-status';
+      status.textContent = '👑 Go VIP — remove ads, earn 2× coins, unlock VIP season tiers.';
+    }
+    grid.innerHTML = '';
+    if (!_econMeta.payments.enabled) {
+      grid.innerHTML = '<p class="wallet-empty" style="grid-column:1/-1">VIP isn’t enabled on this server yet.</p>';
+      return;
+    }
+    for (const v of packs) {
+      const card = document.createElement('div');
+      card.className = 'vip-card';
+      card.innerHTML = `
+        ${v.badge ? `<span class="coinpack-badge">${v.badge}</span>` : ''}
+        <div class="vip-card-name">${v.name}</div>
+        <div class="vip-card-price">${fmtMoney(v.amount, cur)}</div>`;
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-primary';
+      btn.style.width = '100%';
+      btn.textContent = 'Get';
+      btn.addEventListener('click', () => buyWithMoney(v.id));
+      card.appendChild(btn);
+      grid.appendChild(card);
+    }
+  }
+
+  function renderSeason() {
+    const head = document.getElementById('season-head');
+    const track = document.getElementById('season-track');
+    const s = _progress && _progress.season;
+    if (!s) { head.innerHTML = ''; track.innerHTML = ''; return; }
+    const maxXp = s.tiers[s.tiers.length - 1].xp || 1;
+    const pct = Math.min(100, Math.round((s.xp / maxXp) * 100));
+    const ends = s.endsAt ? new Date(s.endsAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+    head.innerHTML = `
+      <div class="season-head-title">🏆 ${s.name}</div>
+      <div class="season-head-meta"><span>Tier ${s.currentTier} / ${s.tiers.length}</span><span>${s.xp} season XP</span></div>
+      <div class="season-bar"><div class="season-bar-fill" style="width:${pct}%"></div></div>
+      ${ends ? `<div class="season-head-meta" style="margin-top:8px"><span>${s.vip ? '👑 VIP active' : 'Play games to earn season XP'}</span><span>Ends ${ends}</span></div>` : ''}`;
+    track.innerHTML = '';
+    for (const t of s.tiers) {
+      const row = document.createElement('div');
+      row.className = 'season-tier' + (t.claimed ? ' season-tier--claimed' : (t.unlocked ? '' : ' season-tier--locked'));
+      row.innerHTML = `
+        <div class="season-tier-num">${t.tier}</div>
+        <div class="season-tier-body">
+          <div class="season-tier-reward">🪙 ${t.coins}${t.cosmetic ? ' + cosmetic' : ''}</div>
+          <div class="season-tier-xp">${t.xp} XP${t.vipOnly ? ' · <span class="season-tier-vip">VIP only</span>' : ''}</div>
+        </div>`;
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      if (t.claimed) { btn.textContent = '✓'; btn.disabled = true; btn.classList.add('btn-outline'); }
+      else if (t.claimable) { btn.textContent = 'Claim'; btn.classList.add('btn-primary'); btn.addEventListener('click', () => claimSeasonTier(t.tier)); }
+      else { btn.textContent = (t.vipOnly && !s.vip) ? '👑' : '🔒'; btn.disabled = true; btn.classList.add('btn-outline'); }
+      row.appendChild(btn);
+      track.appendChild(row);
+    }
+  }
+
+  async function claimSeasonTier(tier) {
+    try {
+      const res = await fetch(`${PROGRESS_API}/season/claim`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: myUid, tier }),
+      });
+      const data = await res.json();
+      if (data.error) return showToast(data.error, true);
+      Sound.play('achievement');
+      showToast(`🏆 Tier ${tier}: +${data.coins} coins${data.cosmetic ? ' + a cosmetic!' : '!'}`);
+      await refreshProgress();
+      renderSeason();
+    } catch { showToast('Could not claim — try again', true); }
+  }
+
+  // ── Real-money checkout (Razorpay) ──
+  let _rzpLoading = null;
+  function loadRazorpay() {
+    if (window.Razorpay) return Promise.resolve(true);
+    if (_rzpLoading) return _rzpLoading;
+    _rzpLoading = new Promise((resolve) => {
+      const s = document.createElement('script');
+      s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      s.onload = () => resolve(true);
+      s.onerror = () => resolve(false);
+      document.head.appendChild(s);
+    });
+    return _rzpLoading;
+  }
+
+  async function buyWithMoney(sku) {
+    if (!_econMeta.payments.enabled) return showToast('Payments are not enabled on this server yet', true);
+    if (!isSignedIn()) {
+      showToast('Please sign in to purchase — it keeps your coins safe', true);
+      const a = document.getElementById('btn-open-auth'); if (a) a.click();
+      return;
+    }
+    const ok = await loadRazorpay();
+    if (!ok) return showToast('Could not load the payment window — check your connection', true);
+    let order;
+    try {
+      const res = await fetch('/api/payments/create-order', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ sku }),
+      });
+      order = await res.json();
+      if (!res.ok || order.error) return showToast(order.error || 'Could not start checkout', true);
+    } catch { return showToast('Could not start checkout — try again', true); }
+
+    const rzp = new window.Razorpay({
+      key: order.keyId,
+      order_id: order.orderId,
+      amount: order.amount,
+      currency: order.currency,
+      name: 'Play UNO Free',
+      description: 'UNO Store',
+      theme: { color: '#ff3b5c' },
+      prefill: authUser ? { name: authUser.username, email: authUser.email } : {},
+      handler: async (resp) => {
+        try {
+          const vr = await fetch('/api/payments/verify', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            body: JSON.stringify(resp),
+          });
+          const vd = await vr.json();
+          if (vd.error) return showToast(vd.error, true);
+          Sound.play('achievement');
+          showToast(vd.kind === 'vip' ? '👑 VIP activated — ad-free & 2× coins!' : `🎉 ${vd.coins} coins added!`);
+          await refreshProgress();
+          showStoreSection(_storeSection);
+        } catch { showToast('Payment received — refresh to see your coins', true); }
+      },
+    });
+    rzp.open();
+  }
+
+  // ── Rewards modal: Daily / Earn / Wallet nav ──
+  let _rewardsSection = 'daily';
+  function showRewardsSection(name) {
+    _rewardsSection = name;
+    $rewardsModal.querySelectorAll('.rewards-nav-btn').forEach(b =>
+      b.classList.toggle('rewards-nav-btn--active', b.dataset.rewards === name));
+    ['daily', 'earn', 'wallet'].forEach(s => {
+      const el = document.getElementById('rewards-' + s);
+      if (el) el.hidden = s !== name;
+    });
+    if (name === 'earn') renderEarnHub();
+    if (name === 'wallet') renderWallet();
+  }
+  $rewardsModal.querySelector('.store-nav').addEventListener('click', (e) => {
+    const b = e.target.closest('.rewards-nav-btn');
+    if (b) showRewardsSection(b.dataset.rewards);
+  });
+
+  function renderEarnHub() {
+    const p = _progress; if (!p) return;
+    const ad = p.adReward || {};
+    const adSub = document.getElementById('ad-reward-sub');
+    const btnAd = document.getElementById('btn-watch-ad');
+    if (adSub) adSub.textContent = `+${ad.coins || 0} coins · ${ad.remaining != null ? ad.remaining : ad.cap || 0} left today`;
+    if (btnAd) btnAd.disabled = (ad.remaining === 0);
+    const spinSub = document.getElementById('spin-sub');
+    if (spinSub && p.spin) spinSub.textContent = p.spin.freeAvailable ? '1 free spin ready!' : `${p.spin.adSpinsLeft} ad-spin${p.spin.adSpinsLeft === 1 ? '' : 's'} left`;
+    const refSub = document.getElementById('refer-sub');
+    if (refSub && p.referral) refSub.textContent = `Invite friends — ${p.referral.referredCount} joined so far`;
+  }
+
+  const REASON_META = {
+    game: { icon: '🎮', label: 'Game reward' },
+    daily_login: { icon: '📅', label: 'Daily login' },
+    ad: { icon: '📺', label: 'Watched an ad' },
+    spin: { icon: '🎡', label: 'Wheel spin' },
+    gift_in: { icon: '🎁', label: 'Gift received' },
+    gift_out: { icon: '🎁', label: 'Gift sent' },
+    referral: { icon: '🤝', label: 'Referral bonus' },
+    shop_buy: { icon: '🛍️', label: 'Cosmetic purchase' },
+    purchase: { icon: '💳', label: 'Coin pack' },
+    level_unlock: { icon: '⬆️', label: 'Level up' },
+    season: { icon: '🏆', label: 'Season tier' },
+    admin: { icon: '🔧', label: 'Adjustment' },
+  };
+  function timeAgo(ts) {
+    const s = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+    if (s < 60) return s + 's ago';
+    const m = Math.floor(s / 60); if (m < 60) return m + 'm ago';
+    const h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
+    return Math.floor(h / 24) + 'd ago';
+  }
+  async function renderWallet() {
+    const list = document.getElementById('wallet-list');
+    list.innerHTML = '<p class="wallet-empty">Loading…</p>';
+    let entries = (_progress && _progress.wallet && _progress.wallet.recent) || [];
+    try {
+      const r = await fetch(`${PROGRESS_API}/wallet?uid=${encodeURIComponent(myUid)}&limit=50`);
+      if (r.ok) { const d = await r.json(); entries = d.entries || entries; }
+    } catch { /* fall back to local recent */ }
+    if (!entries.length) { list.innerHTML = '<p class="wallet-empty">No transactions yet — play a game to earn coins!</p>'; return; }
+    list.innerHTML = '';
+    for (const e of entries) {
+      const meta = REASON_META[e.r] || { icon: '•', label: e.r };
+      const row = document.createElement('div');
+      row.className = 'wallet-row';
+      row.innerHTML = `
+        <span class="wallet-row-icon">${meta.icon}</span>
+        <span class="wallet-row-label">${meta.label}<br><span class="wallet-row-when">${e.t ? timeAgo(e.t) : ''}</span></span>
+        <span class="wallet-row-delta wallet-row-delta--${e.d >= 0 ? 'pos' : 'neg'}">${e.d >= 0 ? '+' : ''}${e.d}</span>`;
+      list.appendChild(row);
+    }
+  }
+
+  // ── Rewarded ads (Google Ad Manager rewarded; dev placeholder fallback) ──
+  const $adOverlay = document.getElementById('ad-overlay');
+  let _gptLoading = null;
+  let _adActive = false;
+  function loadGpt() {
+    if (window.googletag && window.googletag.apiReady) return Promise.resolve(true);
+    if (_gptLoading) return _gptLoading;
+    _gptLoading = new Promise((resolve) => {
+      window.googletag = window.googletag || { cmd: [] };
+      const s = document.createElement('script');
+      s.src = 'https://securepubads.g.doubleclick.net/tag/js/gpt.js';
+      s.async = true;
+      s.onload = () => resolve(true);
+      s.onerror = () => resolve(false);
+      document.head.appendChild(s);
+    });
+    return _gptLoading;
+  }
+  function showAdOverlay(title, placeholder) {
+    document.getElementById('ad-overlay-title').textContent = title;
+    document.getElementById('ad-placeholder').hidden = !placeholder;
+    document.getElementById('ad-overlay-spinner').hidden = placeholder;
+    $adOverlay.style.display = 'flex';
+  }
+  function hideAdOverlay() { _adActive = false; $adOverlay.style.display = 'none'; }
+  function devPlaceholderAd(resolve) {
+    showAdOverlay('Sample Ad', true);
+    let n = 5;
+    const numEl = document.getElementById('ad-countdown-num');
+    numEl.textContent = n;
+    _adActive = true;
+    const tick = setInterval(() => {
+      n--;
+      if (numEl) numEl.textContent = Math.max(0, n);
+      if (n <= 0) { clearInterval(tick); if (_adActive) { hideAdOverlay(); resolve(true); } }
+    }, 1000);
+    document.getElementById('btn-ad-cancel').onclick = () => { clearInterval(tick); hideAdOverlay(); resolve(false); };
+  }
+  // Resolves true if the user earned the reward.
+  function showRewardedAd() {
+    return new Promise(async (resolve) => {
+      const ads = _econMeta.ads || {};
+      if (!ads.enabled || !ads.network || !ads.rewardedUnit) return devPlaceholderAd(resolve);
+      const ok = await loadGpt();
+      if (!ok || !window.googletag) return devPlaceholderAd(resolve);
+      showAdOverlay('Loading ad…', false);
+      try {
+        const googletag = window.googletag;
+        googletag.cmd.push(() => {
+          let granted = false;
+          const slot = googletag.defineOutOfPageSlot(`/${ads.network}/${ads.rewardedUnit}`, googletag.enums.OutOfPageFormat.REWARDED);
+          if (!slot) { hideAdOverlay(); return devPlaceholderAd(resolve); }
+          slot.addService(googletag.pubads());
+          googletag.pubads().addEventListener('rewardedSlotGranted', () => { granted = true; });
+          googletag.pubads().addEventListener('rewardedSlotReady', (e) => { e.makeRewardedVisible(); });
+          googletag.pubads().addEventListener('rewardedSlotClosed', () => { googletag.destroySlots([slot]); hideAdOverlay(); resolve(granted); });
+          googletag.enableServices();
+          googletag.display(slot);
+        });
+      } catch { hideAdOverlay(); devPlaceholderAd(resolve); }
+    });
+  }
+  async function getAdNonce() {
+    try {
+      const r = await fetch(`${PROGRESS_API}/ad/start`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: myUid }),
+      });
+      return (await r.json()).nonce;
+    } catch { return null; }
+  }
+  async function watchAd() {
+    const nonce = await getAdNonce();
+    if (!nonce) return showToast('Could not load an ad — try again', true);
+    const watched = await showRewardedAd();
+    if (!watched) return;
+    try {
+      const r = await fetch(`${PROGRESS_API}/ad/claim`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: myUid, nonce }),
+      });
+      const d = await r.json();
+      if (d.error) return showToast(d.error, true);
+      Sound.play('achievement');
+      showToast(`📺 +${d.coins} coins!`);
+      await refreshProgress();
+      renderEarnHub();
+    } catch { showToast('Reward failed — try again', true); }
+  }
+
+  // ── Spin the wheel ──
+  const $wheelModal = document.getElementById('wheel-modal');
+  const $wheel = document.getElementById('wheel');
+  const $wheelStatus = document.getElementById('wheel-status');
+  let _wheelSpinning = false;
+  let _wheelRotation = 0;
+  const WHEEL_COLORS = ['#ff3b5c', '#ffd23f', '#2ee88a', '#3d9dff', '#bb86fc', '#ff8c42', '#2ee8c0', '#f15bb5'];
+  function buildWheel(segments) {
+    const n = segments.length, seg = 360 / n;
+    const stops = segments.map((s, i) => `${WHEEL_COLORS[i % WHEEL_COLORS.length]} ${i * seg}deg ${(i + 1) * seg}deg`).join(', ');
+    $wheel.style.background = `conic-gradient(${stops})`;
+    $wheel.querySelectorAll('.wheel-seg-label').forEach(e => e.remove());
+    segments.forEach((s, i) => {
+      const label = document.createElement('div');
+      label.className = 'wheel-seg-label';
+      label.style.transform = `rotate(${i * seg + seg / 2}deg)`;
+      label.textContent = s.label.replace(/ ?Coins/i, '').replace('JACKPOT ', '💰');
+      $wheel.appendChild(label);
+    });
+  }
+  function updateWheelButtons() {
+    const s = _progress && _progress.spin; if (!s) return;
+    const free = document.getElementById('btn-spin-free');
+    const ad = document.getElementById('btn-spin-ad');
+    free.disabled = !s.freeAvailable || _wheelSpinning;
+    free.textContent = s.freeAvailable ? 'Free Spin' : 'Free spin used';
+    ad.hidden = s.adSpinsLeft <= 0;
+    ad.disabled = _wheelSpinning;
+    ad.textContent = `📺 Watch an ad for a spin (${s.adSpinsLeft} left)`;
+  }
+  function openWheel() {
+    if (!_progress || !_progress.spin) return;
+    buildWheel(_progress.spin.segments);
+    updateWheelButtons();
+    $wheelStatus.className = 'wheel-status';
+    $wheelStatus.textContent = _progress.spin.freeAvailable ? '1 free spin — good luck!' : 'Free spin used. Watch an ad for more!';
+    $wheelModal.style.display = 'flex';
+  }
+  async function doSpin(viaAd) {
+    if (_wheelSpinning) return;
+    let nonce = null;
+    if (viaAd) {
+      nonce = await getAdNonce();
+      if (!nonce) return showToast('Could not load an ad — try again', true);
+      const watched = await showRewardedAd();
+      if (!watched) return;
+    }
+    _wheelSpinning = true; updateWheelButtons();
+    try {
+      const r = await fetch(`${PROGRESS_API}/spin`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: myUid, viaAd, nonce }),
+      });
+      const d = await r.json();
+      if (d.error) { _wheelSpinning = false; updateWheelButtons(); return showToast(d.error, true); }
+      const segs = _progress.spin.segments, n = segs.length, seg = 360 / n;
+      const idx = d.prize.index >= 0 ? d.prize.index : 0;
+      const resting = 360 - (idx * seg + seg / 2); // segment center under the top pointer
+      _wheelRotation = _wheelRotation - (_wheelRotation % 360) + 360 * 6 + resting;
+      $wheel.style.transform = `rotate(${_wheelRotation}deg)`;
+      setTimeout(async () => {
+        _wheelSpinning = false;
+        Sound.play('achievement');
+        $wheelStatus.className = 'wheel-status wheel-status--win';
+        $wheelStatus.textContent = d.prize.item ? `🎉 Won a cosmetic: ${d.prize.label}!` : `🎉 Won ${d.prize.coins} coins!`;
+        showToast(d.prize.item ? '🎡 Won a cosmetic!' : `🎡 +${d.prize.coins} coins!`);
+        await refreshProgress();
+        updateWheelButtons();
+      }, 4300);
+    } catch { _wheelSpinning = false; updateWheelButtons(); showToast('Spin failed — try again', true); }
+  }
+  document.getElementById('btn-open-wheel').addEventListener('click', openWheel);
+  document.getElementById('btn-spin-free').addEventListener('click', () => doSpin(false));
+  document.getElementById('btn-spin-ad').addEventListener('click', () => doSpin(true));
+  document.getElementById('btn-close-wheel').addEventListener('click', () => { if (!_wheelSpinning) $wheelModal.style.display = 'none'; });
+  document.getElementById('btn-watch-ad').addEventListener('click', watchAd);
+
+  // ── Refer & earn ──
+  const $referModal = document.getElementById('refer-modal');
+  function referLink(code) { return `${location.origin}/play?ref=${encodeURIComponent(code)}`; }
+  function openRefer() {
+    const ref = _progress && _progress.referral;
+    if (!ref) return;
+    document.getElementById('refer-code').textContent = ref.code || '—';
+    document.getElementById('refer-lead').textContent =
+      `Share your code. Your friend gets ${ref.refereeBonus} coins to start, and you get ${ref.referrerBonus} coins once they finish ${ref.unlockGames} games.`;
+    document.getElementById('refer-stats').innerHTML = `
+      <div class="refer-stat"><div class="refer-stat-num">${ref.referredCount}</div><div class="refer-stat-label">Invited</div></div>
+      <div class="refer-stat"><div class="refer-stat-num">${ref.rewardedCount}</div><div class="refer-stat-label">Rewarded</div></div>
+      <div class="refer-stat"><div class="refer-stat-num">🪙${ref.rewardedCount * ref.referrerBonus}</div><div class="refer-stat-label">Earned</div></div>`;
+    const redeem = document.querySelector('.refer-redeem');
+    if (redeem) redeem.style.display = ref.referredBy ? 'none' : '';
+    $referModal.style.display = 'flex';
+  }
+  document.getElementById('btn-open-refer').addEventListener('click', openRefer);
+  document.getElementById('btn-copy-refer').addEventListener('click', async () => {
+    const ref = _progress && _progress.referral; if (!ref || !ref.code) return;
+    try { await navigator.clipboard.writeText(referLink(ref.code)); showToast('🔗 Invite link copied!'); }
+    catch { showToast(referLink(ref.code)); }
+  });
+  document.getElementById('btn-share-refer').addEventListener('click', () => {
+    const ref = _progress && _progress.referral; if (!ref || !ref.code) return;
+    const text = `🃏 Play UNO with me! Use code ${ref.code} and we both get free coins: ${referLink(ref.code)}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  });
+  async function applyReferral(code, silent) {
+    try {
+      const r = await fetch(`${PROGRESS_API}/referral/apply`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: myUid, code }),
+      });
+      const d = await r.json();
+      if (d.success) {
+        Sound.play('achievement');
+        showToast(`🤝 Referral applied — +${d.bonus} coins!`);
+        await refreshProgress();
+        if ($referModal.style.display === 'flex') openRefer();
+      } else if (!silent && d.error) {
+        showToast(d.error, true);
+      }
+    } catch { if (!silent) showToast('Could not apply code — try again', true); }
+  }
+  document.getElementById('btn-apply-refer').addEventListener('click', () => {
+    const code = (document.getElementById('refer-input').value || '').trim().toUpperCase();
+    if (code) applyReferral(code, false);
+  });
+  document.getElementById('btn-close-refer').addEventListener('click', () => { $referModal.style.display = 'none'; });
+  // Auto-apply a ?ref= code from an invite link (once progress has loaded).
+  (function handleRefParam() {
+    try {
+      const ref = new URLSearchParams(location.search).get('ref');
+      if (ref && /^[A-Za-z0-9]{4,12}$/.test(ref)) setTimeout(() => applyReferral(ref.toUpperCase(), true), 1800);
+    } catch { /* ignore */ }
+  })();
+
+  // ── Gift coins ──
+  const $giftModal = document.getElementById('gift-modal');
+  function openGift() {
+    if (!isSignedIn()) {
+      showToast('Sign in to gift coins', true);
+      const a = document.getElementById('btn-open-auth'); if (a) a.click();
+      return;
+    }
+    document.getElementById('gift-error').hidden = true;
+    $giftModal.style.display = 'flex';
+  }
+  document.getElementById('btn-open-gift').addEventListener('click', openGift);
+  document.getElementById('btn-send-gift').addEventListener('click', async () => {
+    const to = (document.getElementById('gift-to').value || '').trim();
+    const amount = parseInt(document.getElementById('gift-amount').value, 10);
+    const err = document.getElementById('gift-error');
+    if (!to || !amount) { err.textContent = 'Enter a friend code/name and amount'; err.hidden = false; return; }
+    try {
+      const r = await fetch(`${PROGRESS_API}/gift`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ to, amount }),
+      });
+      const d = await r.json();
+      if (d.error) { err.textContent = d.error; err.hidden = false; return; }
+      Sound.play('achievement');
+      showToast(`🎁 Sent ${d.amount} coins to ${d.to}!`);
+      $giftModal.style.display = 'none';
+      document.getElementById('gift-to').value = '';
+      document.getElementById('gift-amount').value = '';
+      await refreshProgress();
+    } catch { err.textContent = 'Could not send — try again'; err.hidden = false; }
+  });
+  document.getElementById('btn-close-gift').addEventListener('click', () => { $giftModal.style.display = 'none'; });
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ── Profile (open by tapping the account chip) ─────────────────────────────
@@ -3343,6 +3908,80 @@
       Game.showEmoteBubble(data.playerId, data.emote);
     } else {
       showToast(`${data.nickname}: ${data.emote}`);
+    }
+  });
+
+  // ── Room Chat (text + emoji; waiting room and in-game) ─────────────────────
+  const $chatPanel = document.getElementById('chat-panel');
+  const $chatBtn = document.getElementById('btn-chat');
+  const $chatMessages = document.getElementById('chat-messages');
+  const $chatInput = document.getElementById('chat-input');
+  const $chatUnread = document.getElementById('chat-unread');
+  const $chatEmojiPicker = document.getElementById('chat-emoji-picker');
+  const CHAT_EMOJIS = ['😀','😂','😅','😍','😎','🤔','😮','😭','😡','🥳','😴','🤯','👍','👏','🙏','🔥','💯','🎉','❤️','💀','🃏','🎮','🍀','⏰','⚡','✨','🤝','🎁','🪙','🏆','👑','🤡','🫡','😇','🙈','🤞'];
+  let _chatUnread = 0;
+  let _chatLoadedRoom = null; // the room whose history is currently shown
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  function appendChatMessage(m) {
+    const empty = $chatMessages.querySelector('.chat-empty');
+    if (empty) empty.remove();
+    const row = document.createElement('div');
+    const mine = m.playerId && myPlayerId && m.playerId === myPlayerId;
+    row.className = 'chat-msg' + (mine ? ' chat-msg--me' : '');
+    row.innerHTML = `<span class="chat-msg-name">${escapeHtml(m.nickname)}</span><span class="chat-msg-text">${escapeHtml(m.text)}</span>`;
+    $chatMessages.appendChild(row);
+    $chatMessages.scrollTop = $chatMessages.scrollHeight;
+  }
+  function setChatUnread(n) {
+    _chatUnread = n;
+    if ($chatUnread) { $chatUnread.hidden = n <= 0; $chatUnread.textContent = n > 9 ? '9+' : String(n); }
+  }
+  function openChat() {
+    $chatPanel.hidden = false;
+    setChatUnread(0);
+    // Fresh room → reload its history (the server keeps a per-room buffer).
+    if (_chatLoadedRoom !== currentRoomCode && currentRoomCode) {
+      _chatLoadedRoom = currentRoomCode;
+      socket.emit('chat_history', { roomCode: currentRoomCode }, (res) => {
+        $chatMessages.innerHTML = '';
+        const msgs = (res && res.messages) || [];
+        if (!msgs.length) { $chatMessages.innerHTML = '<p class="chat-empty">No messages yet — say hi! 👋</p>'; return; }
+        msgs.forEach(appendChatMessage);
+      });
+    }
+    setTimeout(() => $chatInput.focus(), 50);
+  }
+  function sendChat() {
+    const text = ($chatInput.value || '').trim();
+    if (!text || !currentRoomCode) return;
+    socket.emit('send_chat', { roomCode: currentRoomCode, text });
+    $chatInput.value = '';
+    $chatEmojiPicker.hidden = true;
+  }
+  if ($chatBtn) $chatBtn.addEventListener('click', () => { if ($chatPanel.hidden) openChat(); else $chatPanel.hidden = true; });
+  document.getElementById('btn-close-chat').addEventListener('click', () => { $chatPanel.hidden = true; });
+  document.getElementById('btn-chat-send').addEventListener('click', sendChat);
+  $chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendChat(); } });
+  // Emoji picker
+  CHAT_EMOJIS.forEach((em) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = em;
+    b.addEventListener('click', () => { $chatInput.value += em; $chatInput.focus(); });
+    $chatEmojiPicker.appendChild(b);
+  });
+  document.getElementById('btn-chat-emoji').addEventListener('click', () => { $chatEmojiPicker.hidden = !$chatEmojiPicker.hidden; });
+
+  socket.on('chat', (m) => {
+    // Only render live if we're already showing this room's log; otherwise
+    // openChat() will pull the full history (including this message).
+    if (_chatLoadedRoom === currentRoomCode) appendChatMessage(m);
+    const mine = m.playerId && myPlayerId && m.playerId === myPlayerId;
+    if ($chatPanel.hidden && !mine) {
+      setChatUnread(_chatUnread + 1);
+      Sound.play('emote');
     }
   });
 

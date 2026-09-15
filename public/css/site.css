@@ -673,6 +673,34 @@ a:hover { color: #fff; }
   padding: 64px 0 32px;
 }
 .footer-inner { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+/* ── Banner ad (Monetag) — content pages ──────────────────────────────────────
+   Full-width band above the footer. Height is reserved by a size class set by
+   bannerAd.js BEFORE the ad script loads (no layout shift); the block is clipped
+   so it can never cause horizontal scroll (body already has overflow-x:hidden).
+   Vertical margin applies only once a unit is chosen, so there is no empty gap
+   before the ad loads. Never rendered on the game board (that is the /play SPA). */
+.banner-ad {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  height: 0;
+}
+.banner-ad.is-728 { height: 90px; }
+.banner-ad.is-468 { height: 60px; }
+.banner-ad.is-320 { height: 50px; }
+.banner-ad--page.is-728,
+.banner-ad--page.is-468,
+.banner-ad--page.is-320 { margin: 32px auto; }
+.banner-ad__container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  line-height: 0;
+}
 .footer-grid {
   display: grid; grid-template-columns: 2fr repeat(4, 1fr); gap: 40px;
   margin-bottom: 48px;

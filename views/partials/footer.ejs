@@ -1,3 +1,13 @@
+  <!-- ── Banner ad (Monetag) ── -->
+  <!-- Shown on every server-rendered page, above the footer. bannerAd.js reserves
+       the viewport-sized unit's height before the iframe loads (no layout shift)
+       and injects exactly one unit. The game board (/play SPA) is intentionally
+       excluded — it has no `.banner-ad` slot. -->
+  <div class="banner-ad banner-ad--page" aria-hidden="true">
+    <div class="banner-ad__container"></div>
+  </div>
+  <script defer src="/bannerAd.js?v=1"></script>
+
   <!-- ── Footer ── -->
   <footer class="site-footer" role="contentinfo">
     <div class="footer-inner">

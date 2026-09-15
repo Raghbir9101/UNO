@@ -137,6 +137,36 @@ body {
   gap: 20px;
 }
 
+/* ── Banner ad (Monetag) ──────────────────────────────────────────────────────
+   First child of a centered screen column (lobby / browse / waiting room). Height
+   is reserved by a size modifier (added before the ad script loads) so nothing
+   shifts, and the block is clipped so it can never cause horizontal scroll or
+   overlay the controls below it. The --bleed modifier breaks it out of the 420px
+   column so the wide 728/468 units have room while the form column stays 420px. */
+.banner-ad {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  height: 0; /* nothing reserved until a unit is selected */
+}
+.banner-ad--bleed {
+  width: 100vw;
+  max-width: 100vw;
+  margin-inline: calc(50% - 50vw); /* full-bleed, stay centered */
+}
+.banner-ad.is-728 { height: 90px; }
+.banner-ad.is-468 { height: 60px; }
+.banner-ad.is-320 { height: 50px; }
+.banner-ad__container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  line-height: 0; /* kill iframe descender gap */
+}
+
 /* ── Logo ─────────────────────────────────────────────────────────────────── */
 .logo-section {
   text-align: center;
@@ -4527,4 +4557,520 @@ body.landscape .btn-voice {
 
 body.landscape .btn-voice:active {
   transform: rotate(-90deg) scale(0.92);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ECONOMY v2 — Store (coins/VIP/season), Earn hub, Wheel, Referral, Gift,
+   Wallet, Rewarded-ad overlay, and Room Chat.
+   Reuses the Holo-Arena tokens (--void-*, --uno-*, --glass-*, --radius-*).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.store-modal-content {
+  max-width: 540px;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+/* Segmented nav (store + rewards) */
+.store-nav {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background: rgba(5, 7, 13, 0.5);
+  border: 1px solid rgba(232, 235, 243, 0.08);
+}
+
+.store-nav-btn,
+.rewards-nav-btn {
+  flex: 1 1 0;
+  padding: 9px 6px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--steel-300, #8b93a8);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.1s ease;
+}
+
+.store-nav-btn:active,
+.rewards-nav-btn:active { transform: scale(0.96); }
+
+.store-nav-btn--active,
+.rewards-nav-btn--active {
+  background: linear-gradient(135deg, rgba(255, 59, 92, 0.9), rgba(61, 157, 255, 0.85));
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(255, 59, 92, 0.25);
+}
+
+.store-lead {
+  font-size: 13px;
+  color: var(--steel-300, #8b93a8);
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+
+/* Coin packs */
+.coinpack-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.coinpack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 210, 63, 0.22);
+  background: linear-gradient(160deg, rgba(255, 210, 63, 0.08), rgba(11, 15, 26, 0.6));
+  text-align: center;
+}
+
+.coinpack-badge {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ff3b5c, #ffd23f);
+  color: #1a0f00;
+  white-space: nowrap;
+}
+
+.coinpack-emoji { font-size: 34px; line-height: 1; }
+.coinpack-coins { font-size: 18px; font-weight: 900; color: #ffd23f; }
+.coinpack-coins small { font-size: 11px; color: var(--uno-green, #2ee88a); font-weight: 800; display: block; }
+.coinpack-name { font-size: 12px; color: var(--steel-300, #8b93a8); }
+.coinpack-btn { width: 100%; margin-top: 6px; }
+
+/* VIP */
+.vip-status {
+  padding: 14px;
+  border-radius: 14px;
+  margin-bottom: 14px;
+  text-align: center;
+  font-weight: 800;
+  border: 1px solid rgba(187, 134, 252, 0.3);
+  background: rgba(187, 134, 252, 0.08);
+}
+.vip-status--active {
+  border-color: rgba(46, 232, 138, 0.4);
+  background: rgba(46, 232, 138, 0.08);
+  color: var(--uno-green, #2ee88a);
+}
+
+.vip-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+.vip-card {
+  position: relative;
+  padding: 16px 8px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(187, 134, 252, 0.25);
+  background: linear-gradient(160deg, rgba(187, 134, 252, 0.1), rgba(11, 15, 26, 0.6));
+  text-align: center;
+}
+.vip-card-name { font-size: 12px; font-weight: 800; margin-bottom: 4px; }
+.vip-card-price { font-size: 16px; font-weight: 900; color: #bb86fc; margin-bottom: 8px; }
+
+.vip-perks {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+  display: grid;
+  gap: 8px;
+}
+.vip-perks li {
+  font-size: 13px;
+  color: var(--steel-100, #e8ebf3);
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(232, 235, 243, 0.04);
+}
+
+/* Season track */
+.season-head {
+  padding: 14px;
+  border-radius: 14px;
+  margin-bottom: 14px;
+  background: linear-gradient(135deg, rgba(61, 157, 255, 0.12), rgba(255, 59, 92, 0.1));
+  border: 1px solid rgba(61, 157, 255, 0.22);
+}
+.season-head-title { font-size: 16px; font-weight: 900; margin: 0 0 8px; }
+.season-head-meta { font-size: 12px; color: var(--steel-300, #8b93a8); display: flex; justify-content: space-between; }
+.season-bar { height: 8px; border-radius: 999px; background: rgba(5, 7, 13, 0.6); overflow: hidden; margin-top: 10px; }
+.season-bar-fill { height: 100%; background: linear-gradient(90deg, #3d9dff, #2ee88a); border-radius: 999px; transition: width 0.4s ease; }
+
+.season-track { display: grid; gap: 10px; }
+.season-tier {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(232, 235, 243, 0.08);
+  background: rgba(232, 235, 243, 0.03);
+}
+.season-tier--locked { opacity: 0.5; }
+.season-tier--claimed { border-color: rgba(46, 232, 138, 0.3); background: rgba(46, 232, 138, 0.06); }
+.season-tier-num {
+  flex: 0 0 38px;
+  height: 38px; width: 38px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  font-weight: 900;
+  background: rgba(61, 157, 255, 0.16);
+  border: 1px solid rgba(61, 157, 255, 0.3);
+}
+.season-tier-body { flex: 1; min-width: 0; }
+.season-tier-reward { font-size: 13px; font-weight: 700; }
+.season-tier-xp { font-size: 11px; color: var(--steel-300, #8b93a8); }
+.season-tier-vip { font-size: 10px; color: #bb86fc; font-weight: 800; }
+.season-tier .btn { flex: 0 0 auto; padding: 6px 14px; font-size: 12px; }
+
+/* Earn hub cards */
+.earn-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(232, 235, 243, 0.08);
+  background: rgba(232, 235, 243, 0.03);
+}
+.earn-card--refer {
+  border-color: rgba(46, 232, 138, 0.25);
+  background: linear-gradient(135deg, rgba(46, 232, 138, 0.08), rgba(11, 15, 26, 0.4));
+}
+.earn-card-icon { font-size: 26px; flex: 0 0 auto; }
+.earn-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.earn-card-title { font-size: 14px; font-weight: 800; }
+.earn-card-sub { font-size: 12px; color: var(--steel-300, #8b93a8); }
+.earn-card-btn { flex: 0 0 auto; padding: 8px 18px; font-size: 13px; }
+.earn-card-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* Wallet */
+.wallet-list { display: grid; gap: 6px; }
+.wallet-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(232, 235, 243, 0.03);
+  font-size: 13px;
+}
+.wallet-row-icon { font-size: 16px; }
+.wallet-row-label { flex: 1; min-width: 0; }
+.wallet-row-when { font-size: 11px; color: var(--steel-300, #8b93a8); }
+.wallet-row-delta { font-weight: 900; font-variant-numeric: tabular-nums; }
+.wallet-row-delta--pos { color: var(--uno-green, #2ee88a); }
+.wallet-row-delta--neg { color: var(--uno-red, #ff3b5c); }
+.wallet-empty { text-align: center; color: var(--steel-300, #8b93a8); padding: 20px; font-size: 13px; }
+
+/* Spin the wheel */
+.wheel-modal-content { max-width: 400px; text-align: center; }
+.wheel-stage {
+  position: relative;
+  width: 260px;
+  max-width: 78vw;
+  aspect-ratio: 1;
+  margin: 8px auto 14px;
+}
+.wheel {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 6px solid rgba(255, 210, 63, 0.7);
+  box-shadow: 0 0 0 4px rgba(5, 7, 13, 0.8), 0 12px 40px rgba(0, 0, 0, 0.5);
+  transition: transform 4.2s cubic-bezier(0.17, 0.67, 0.12, 0.99);
+  position: relative;
+  overflow: hidden;
+}
+.wheel-seg-label {
+  position: absolute;
+  top: 0; left: 50%;
+  height: 50%;
+  transform-origin: bottom center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #10131f;
+  padding-top: 16px;
+  width: 80px;
+  margin-left: -40px;
+  text-align: center;
+  pointer-events: none;
+}
+.wheel-pointer {
+  position: absolute;
+  top: -6px; left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 12px solid transparent;
+  border-right: 12px solid transparent;
+  border-top: 22px solid #ff3b5c;
+  z-index: 3;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
+}
+.wheel-hub {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--void-900, #0b0f1a);
+  border: 3px solid rgba(255, 210, 63, 0.7);
+  font-size: 22px;
+  z-index: 2;
+}
+.wheel-status { font-size: 13px; color: var(--steel-300, #8b93a8); min-height: 20px; margin: 4px 0 12px; }
+.wheel-status--win { color: var(--uno-yellow, #ffd23f); font-weight: 800; }
+
+/* Referral */
+.refer-code-box {
+  text-align: center;
+  padding: 16px;
+  border-radius: 14px;
+  margin: 14px 0;
+  background: rgba(46, 232, 138, 0.06);
+  border: 1px dashed rgba(46, 232, 138, 0.4);
+}
+.refer-code-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--steel-300, #8b93a8); }
+.refer-code {
+  font-family: var(--font-data, monospace);
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: var(--uno-green, #2ee88a);
+  margin-top: 6px;
+}
+.refer-actions { display: flex; gap: 10px; }
+.refer-actions .btn { flex: 1; }
+.refer-stats {
+  display: flex;
+  justify-content: space-around;
+  margin: 16px 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(232, 235, 243, 0.04);
+}
+.refer-stat { text-align: center; }
+.refer-stat-num { font-size: 22px; font-weight: 900; color: var(--uno-blue, #3d9dff); }
+.refer-stat-label { font-size: 11px; color: var(--steel-300, #8b93a8); }
+.refer-redeem { margin-top: 14px; border-top: 1px solid rgba(232, 235, 243, 0.08); padding-top: 12px; }
+
+/* Gift */
+.gift-row { display: flex; gap: 8px; }
+.gift-input {
+  flex: 1;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(232, 235, 243, 0.16);
+  background: rgba(5, 7, 13, 0.5);
+  color: var(--steel-100, #e8ebf3);
+  font-family: inherit;
+  font-size: 14px;
+}
+.gift-input:focus { outline: none; border-color: var(--uno-blue, #3d9dff); }
+
+/* Rewarded-ad overlay */
+.ad-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 7, 13, 0.92);
+  backdrop-filter: blur(6px);
+  padding: 20px;
+}
+.ad-overlay-card {
+  width: 100%;
+  max-width: 360px;
+  text-align: center;
+  padding: 26px 22px;
+  border-radius: 18px;
+  background: var(--void-900, #0b0f1a);
+  border: 1px solid rgba(232, 235, 243, 0.1);
+}
+.ad-overlay-card h3 { margin: 14px 0 6px; }
+.ad-overlay-card p { font-size: 13px; color: var(--steel-300, #8b93a8); margin: 0; }
+.ad-overlay-spinner {
+  width: 42px; height: 42px;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 4px solid rgba(232, 235, 243, 0.15);
+  border-top-color: var(--uno-blue, #3d9dff);
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.ad-placeholder {
+  margin: 16px 0 4px;
+  padding: 26px 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #1b2236, #0d1120);
+  border: 1px solid rgba(232, 235, 243, 0.1);
+}
+.ad-placeholder-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 900;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(232, 235, 243, 0.15);
+  letter-spacing: 1px;
+}
+.ad-placeholder-text { margin: 10px 0 !important; font-weight: 700; color: var(--steel-100, #e8ebf3) !important; }
+.ad-countdown { font-size: 13px; color: var(--uno-yellow, #ffd23f) !important; font-weight: 800; }
+.ad-countdown b { font-size: 18px; }
+
+/* Room chat */
+.btn-chat {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right));
+  /* Next slot in the right-side column (fullscreen 16 · sound 64 · card-style
+     112 · voice 160), sitting directly above the voice button so the two
+     comms buttons don't overlap. */
+  bottom: calc(208px + env(safe-area-inset-bottom));
+  z-index: 60;
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(61, 157, 255, 0.92);
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  transition: transform 0.12s ease;
+}
+.btn-chat:active { transform: scale(0.92); }
+/* Author display rules beat the UA [hidden] default — restore hiding explicitly
+   (same pattern as .emote-picker / .app-menu above). Without this the chat
+   panel, emoji grid, and unread badge would show on the lobby too. */
+.chat-panel[hidden],
+.chat-emoji-picker[hidden],
+.chat-unread[hidden] { display: none !important; }
+.chat-unread {
+  position: absolute;
+  top: -4px; right: -4px;
+  min-width: 18px; height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--uno-red, #ff3b5c);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  display: grid; place-items: center;
+}
+.chat-panel {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 61;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  height: 60vh;
+  max-height: 440px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--void-900, #0b0f1a);
+  border: 1px solid rgba(232, 235, 243, 0.12);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  animation: modalContentIn 0.18s ease;
+}
+.chat-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  font-weight: 800;
+  border-bottom: 1px solid rgba(232, 235, 243, 0.08);
+  background: rgba(61, 157, 255, 0.08);
+}
+.chat-panel-header .btn-close { position: static; }
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+.chat-msg { font-size: 13px; line-height: 1.35; word-break: break-word; }
+.chat-msg-name { font-weight: 800; color: var(--uno-blue, #3d9dff); margin-right: 6px; }
+.chat-msg--me .chat-msg-name { color: var(--uno-green, #2ee88a); }
+.chat-msg-text { color: var(--steel-100, #e8ebf3); }
+.chat-empty { color: var(--steel-300, #8b93a8); font-size: 12px; text-align: center; margin: auto; }
+.chat-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  border-top: 1px solid rgba(232, 235, 243, 0.08);
+}
+.chat-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(232, 235, 243, 0.16);
+  background: rgba(5, 7, 13, 0.5);
+  color: var(--steel-100, #e8ebf3);
+  font-family: inherit;
+  font-size: 14px;
+}
+.chat-input:focus { outline: none; border-color: var(--uno-blue, #3d9dff); }
+.btn-chat-emoji, .btn-chat-send {
+  flex: 0 0 auto;
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  font-size: 17px;
+  background: rgba(232, 235, 243, 0.08);
+  color: var(--steel-100, #e8ebf3);
+}
+.btn-chat-send { background: var(--uno-blue, #3d9dff); color: #fff; }
+.chat-emoji-picker {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  padding: 8px;
+  max-height: 150px;
+  overflow-y: auto;
+  border-top: 1px solid rgba(232, 235, 243, 0.08);
+}
+.chat-emoji-picker button {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  padding: 5px;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.chat-emoji-picker button:active { background: rgba(232, 235, 243, 0.12); }
+
+@media (max-width: 640px) {
+  .coinpack-grid { grid-template-columns: 1fr 1fr; }
+  .vip-grid { grid-template-columns: 1fr; }
+  .chat-panel { height: 56vh; }
 }
