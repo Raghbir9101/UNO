@@ -47,11 +47,6 @@
     f.setAttribute('frameborder', '0');
     f.setAttribute('title', 'Advertisement');
     f.setAttribute('aria-hidden', 'true');
-    // Contain the ad. `allow-scripts` lets the banner render; the DELIBERATE
-    // absence of allow-top-navigation, allow-popups and allow-same-origin means
-    // the ad code cannot redirect the page (window.top.location) or open
-    // popunders (window.open) — the exact abuse Monetag's payloads attempt.
-    f.setAttribute('sandbox', 'allow-scripts');
     f.style.cssText = 'width:' + unit.width + 'px;height:' + unit.height +
       'px;border:0;display:block;margin:0 auto;overflow:hidden';
     f.srcdoc = doc;
