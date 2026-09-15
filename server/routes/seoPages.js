@@ -528,12 +528,14 @@ router.get('/cookie-policy', (req, res) => {
   });
 });
 
-// ── ads.txt (Authorized Digital Sellers — required by AdSense once approved) ──
-// Declares Google as an authorized seller of this site's ad inventory. The
-// publisher ID matches the AdSense loader in views/partials/head.ejs.
+// ── ads.txt (Authorized Digital Sellers) ─────────────────────────────────────
+// AdSense is currently disabled, so the Google seller line is commented out
+// (ads.txt treats `#` as a comment). Re-enable it when the AdSense loader is
+// restored in views/partials/head.ejs. Add Monetag's ads.txt lines here if/when
+// Monetag requires them.
 router.get('/ads.txt', (req, res) => {
   res.type('text/plain');
-  res.send('google.com, pub-5274802993197394, DIRECT, f08c47fec0942fa0\n');
+  res.send('# google.com, pub-5274802993197394, DIRECT, f08c47fec0942fa0\n');
 });
 
 // ── robots.txt ──
