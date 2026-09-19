@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 // A real-money purchase of coins or the VIP / Remove-Ads pass, via Razorpay.
 // `orderId` is unique so a replayed verify/webhook can never double-grant
 // (the grant is idempotent: status flips draft → paid exactly once).
+
 const paymentSchema = new mongoose.Schema({
   uid: { type: String, required: true, index: true },
   provider: { type: String, default: 'razorpay' },

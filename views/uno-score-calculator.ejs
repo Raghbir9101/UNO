@@ -1,0 +1,497 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+<main id="main-content" class="content-page">
+  <div class="container">
+    <nav class="breadcrumbs" aria-label="Breadcrumb">
+      <a href="/">Home</a><span class="sep">›</span><span>UNO Score Calculator</span>
+    </nav>
+
+    <h1>UNO Score Calculator</h1>
+    <p class="page-subtitle">Add your players, log the points at the end of each round, and play to 500. This free calculator does the math for you, tracks a running total, and crowns the winner — no paper, no arguments. There's a printable blank score sheet lower down if you'd rather keep score by hand.</p>
+
+    <!-- ── Interactive calculator ─────────────────────────────────────────── -->
+    <section class="calc" aria-label="UNO score calculator">
+      <div class="calc-toolbar">
+        <label class="calc-field">
+          <span>Play to</span>
+          <input type="number" id="calc-target" min="1" step="1" value="500" inputmode="numeric" aria-label="Target score to win">
+        </label>
+        <label class="calc-field calc-field--mode">
+          <span>Scoring</span>
+          <select id="calc-mode" aria-label="Scoring mode">
+            <option value="winner">Winner scores opponents' cards (official)</option>
+            <option value="self">Each player scores their own cards (golf)</option>
+          </select>
+        </label>
+        <button type="button" id="calc-reset" class="btn btn-outline btn-sm">Reset game</button>
+      </div>
+
+      <p class="calc-mode-note" id="calc-mode-note"></p>
+
+      <div class="calc-table-wrap">
+        <table class="calc-table" id="calc-table">
+          <thead>
+            <tr id="calc-head-row">
+              <th class="calc-round-col">Round</th>
+              <!-- player columns injected here -->
+              <th class="calc-add-col">
+                <button type="button" id="calc-add-player" class="calc-icon-btn" aria-label="Add player">+ Player</button>
+              </th>
+            </tr>
+          </thead>
+          <tbody id="calc-body"><!-- round rows injected here --></tbody>
+          <tfoot>
+            <tr id="calc-total-row">
+              <th class="calc-round-col">Total</th>
+              <!-- player totals injected here -->
+              <td class="calc-add-col"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="calc-actions">
+        <button type="button" id="calc-add-round" class="btn btn-hero">+ Add round</button>
+        <span class="calc-status" id="calc-status" role="status" aria-live="polite"></span>
+      </div>
+
+      <p class="calc-hint">Tip: enter the <strong>points of the cards still in each player's hand</strong> when the round ends. Number cards are worth their face value, action cards (Skip, Reverse, Draw Two) are worth 20, and Wild / Wild Draw Four are worth 50.</p>
+    </section>
+
+    <!-- ── Card value quick reference ─────────────────────────────────────── -->
+    <h2>UNO card point values</h2>
+    <div class="calc-values">
+      <table class="calc-values-table">
+        <thead><tr><th>Card</th><th>Points</th></tr></thead>
+        <tbody>
+          <tr><td>Number cards (0–9)</td><td>Face value (a 7 = 7 points)</td></tr>
+          <tr><td>Skip</td><td>20</td></tr>
+          <tr><td>Reverse</td><td>20</td></tr>
+          <tr><td>Draw Two (+2)</td><td>20</td></tr>
+          <tr><td>Wild</td><td>50</td></tr>
+          <tr><td>Wild Draw Four (+4)</td><td>50</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── How scoring works ──────────────────────────────────────────────── -->
+    <h2>How UNO scoring actually works</h2>
+    <p>Most people play UNO round by round and never keep score — and that's perfectly fine. But the <em>official</em> game is played to a points total, and scoring is what turns a series of quick rounds into a real match. Here is the standard method, exactly as Mattel prints it in the rulebook.</p>
+
+    <h3>1. Someone wins the round</h3>
+    <p>A round ends the moment one player plays their last card. Everyone else is left holding cards — and those leftover cards are worth points.</p>
+
+    <h3>2. The winner scores everyone else's cards</h3>
+    <p>The player who went out scores points equal to the <strong>total value of all the cards still in the other players' hands</strong>. So if the three losing players are holding 14, 32, and 55 points' worth of cards, the winner scores 101 for that round. This is the mode the calculator uses by default — pick "Winner scores opponents' cards" at the top.</p>
+
+    <h3>3. First to 500 wins the match</h3>
+    <p>You keep playing rounds and adding to the winner's running total until one player reaches <strong>500 points</strong>. That player wins the whole game. The calculator flags it automatically the moment anyone crosses your target, and you can change the target if your group prefers a shorter game to, say, 200.</p>
+
+    <h3>The popular alternative: "golf" scoring</h3>
+    <p>A lot of groups flip the scoring on its head: instead of the winner banking points, <strong>every player adds up the cards left in their own hand</strong> at the end of each round, and the goal is to have the <em>lowest</em> total. Play until someone hits 500 — and that person <em>loses</em>. It's a great format for big groups because everyone stays invested in dumping high cards, not just the leader. Choose "Each player scores their own cards" in the calculator to track it this way.</p>
+
+    <!-- ── Printable score sheet ──────────────────────────────────────────── -->
+    <h2>Free printable UNO score sheet</h2>
+    <p>Prefer pen and paper? Print this blank score sheet and keep score the old-fashioned way. It fits a full match on one page.</p>
+    <div class="calc-print-actions">
+      <button type="button" id="calc-print" class="btn btn-secondary">🖨️ Print blank score sheet</button>
+    </div>
+
+    <div class="print-sheet" id="print-sheet" aria-label="Printable UNO score sheet">
+      <div class="print-sheet-head">
+        <h3>UNO Score Sheet</h3>
+        <p>Play to 500 — first player to reach the target wins. playunofree.com</p>
+      </div>
+      <table class="print-sheet-table">
+        <thead>
+          <tr>
+            <th>Round</th>
+            <th>Player 1</th><th>Player 2</th><th>Player 3</th>
+            <th>Player 4</th><th>Player 5</th><th>Player 6</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (var r = 1; r <= 14; r++) { %>
+          <tr><td class="print-round"><%= r %></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+          <% } %>
+          <tr class="print-total"><td>Total</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── FAQ ────────────────────────────────────────────────────────────── -->
+    <h2>UNO scoring — frequently asked questions</h2>
+    <div class="faq-list">
+      <details class="faq-item">
+        <summary class="faq-question">How many points do you play to in UNO?</summary>
+        <div class="faq-answer"><p>The official target is <strong>500 points</strong>. The first player to reach 500 across multiple rounds wins the match. Many groups shorten this to 200 or 300 for a faster game — set whatever target you like in the calculator above.</p></div>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-question">How much is a Wild card worth?</summary>
+        <div class="faq-answer"><p>Both the Wild and the Wild Draw Four are worth <strong>50 points</strong> each — the most of any card. That's why getting caught holding wilds at the end of a round hurts so much.</p></div>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-question">Who adds up the points at the end of a round?</summary>
+        <div class="faq-answer"><p>In the standard rules, the player who went out (the round winner) totals up the value of the cards left in everyone else's hands and adds that sum to their own score. In "golf" scoring, each player totals their own remaining cards instead.</p></div>
+      </details>
+      <details class="faq-item">
+        <summary class="faq-question">Do you have to keep score to play UNO?</summary>
+        <div class="faq-answer"><p>No. Plenty of casual games are played round by round with no scoring at all — winning the round is enough. Scoring simply lets you play a longer, more competitive match to a set target. When you play <a href="/play">UNO online here</a>, you can do either.</p></div>
+      </details>
+    </div>
+
+    <div class="cta-banner">
+      <h3>Ready to play?</h3>
+      <p>Start a free game right now — no download, no signup, up to 20 players — and let the game keep score for you.</p>
+      <a href="/play" class="btn btn-hero">Play UNO Free</a>
+    </div>
+
+    <p class="related-links">Related reading:
+      <a href="/blog/how-to-win-at-uno">How to win at UNO</a> ·
+      <a href="/blog/uno-card-counting-and-odds">UNO card counting &amp; odds</a> ·
+      <a href="/rules">Full UNO rules</a>
+    </p>
+  </div>
+</main>
+
+<style>
+  /* ── Score calculator (scoped to this page) ───────────────────────────── */
+  .calc {
+    margin: 24px 0 8px;
+    padding: 20px;
+    background: var(--glass-bg, rgba(255,255,255,0.04));
+    border: 1px solid var(--glass-border, rgba(255,255,255,0.12));
+    border-radius: 16px;
+  }
+  .calc-toolbar {
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end;
+    margin-bottom: 10px;
+  }
+  .calc-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; font-weight: 600; }
+  .calc-field input, .calc-field select {
+    padding: 8px 10px; border-radius: 10px;
+    border: 1px solid var(--glass-border, rgba(255,255,255,0.18));
+    background: rgba(0,0,0,0.18); color: inherit; font-size: 1rem; font-weight: 700;
+  }
+  .calc-field input#calc-target { width: 96px; }
+  .calc-field--mode select { min-width: 240px; }
+  .btn-sm { padding: 8px 14px; font-size: 0.85rem; }
+  .calc-mode-note { font-size: 0.85rem; opacity: 0.8; margin: 4px 0 14px; }
+
+  .calc-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .calc-table { width: 100%; border-collapse: collapse; min-width: 320px; }
+  .calc-table th, .calc-table td {
+    padding: 8px; text-align: center; border: 1px solid var(--glass-border, rgba(255,255,255,0.10));
+  }
+  .calc-round-col { width: 64px; opacity: 0.85; font-size: 0.85rem; }
+  .calc-player-th { min-width: 108px; }
+  .calc-player-name {
+    width: 92px; max-width: 92px; padding: 6px 8px; text-align: center;
+    border-radius: 8px; border: 1px solid transparent; background: transparent;
+    color: inherit; font-weight: 800; font-size: 0.95rem;
+  }
+  .calc-player-name:focus { border-color: var(--glass-border, rgba(255,255,255,0.3)); background: rgba(0,0,0,0.2); outline: none; }
+  .calc-remove-player {
+    display: inline-flex; margin-left: 4px; border: 0; background: transparent;
+    color: inherit; opacity: 0.45; cursor: pointer; font-size: 0.9rem; line-height: 1;
+  }
+  .calc-remove-player:hover { opacity: 1; }
+  .calc-score-input {
+    width: 72px; padding: 6px; text-align: center; border-radius: 8px;
+    border: 1px solid var(--glass-border, rgba(255,255,255,0.16));
+    background: rgba(0,0,0,0.18); color: inherit; font-size: 1rem; font-weight: 700;
+  }
+  .calc-winner-radio { margin-top: 4px; }
+  .calc-winner-radio label { font-size: 0.72rem; opacity: 0.8; cursor: pointer; display: inline-flex; gap: 3px; align-items: center; }
+  .calc-total { font-size: 1.15rem; font-weight: 900; }
+  .calc-leader { color: #4ade80; }
+  .calc-icon-btn {
+    border: 1px dashed var(--glass-border, rgba(255,255,255,0.3)); background: transparent;
+    color: inherit; padding: 6px 10px; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 0.82rem; white-space: nowrap;
+  }
+  .calc-icon-btn:hover { background: rgba(255,255,255,0.06); }
+  .calc-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 16px; }
+  .calc-status { font-weight: 800; }
+  .calc-status.is-win { color: #facc15; }
+  .calc-hint { font-size: 0.85rem; opacity: 0.82; margin-top: 12px; }
+  .calc-round-remove { border: 0; background: transparent; color: inherit; opacity: 0.4; cursor: pointer; }
+  .calc-round-remove:hover { opacity: 1; }
+
+  .calc-values-table, .calc-values { max-width: 460px; }
+  .calc-values-table { width: 100%; border-collapse: collapse; margin: 8px 0 4px; }
+  .calc-values-table th, .calc-values-table td { padding: 8px 12px; border: 1px solid var(--glass-border, rgba(255,255,255,0.12)); text-align: left; }
+
+  .calc-print-actions { margin: 8px 0 16px; }
+
+  /* Printable sheet — hidden on screen, shown only when printing */
+  .print-sheet { display: none; }
+  .print-sheet-table { width: 100%; border-collapse: collapse; }
+  .print-sheet-table th, .print-sheet-table td { border: 1px solid #333; padding: 10px 6px; text-align: center; }
+  .print-round { font-weight: 700; }
+
+  @media print {
+    body * { visibility: hidden !important; }
+    .print-sheet, .print-sheet * { visibility: visible !important; }
+    .print-sheet {
+      display: block !important; position: absolute; left: 0; top: 0; width: 100%;
+      color: #000; background: #fff;
+    }
+    .print-sheet-head { text-align: center; margin-bottom: 12px; }
+    .print-sheet-head h3 { font-size: 22px; margin: 0 0 4px; }
+    .print-sheet-table th, .print-sheet-table td { height: 34px; }
+    .print-total td { font-weight: 700; }
+  }
+
+  .related-links { font-size: 0.9rem; opacity: 0.85; margin-top: 28px; }
+  @media (max-width: 640px) {
+    .calc-field--mode select { min-width: 0; width: 100%; }
+    .calc-field--mode { flex: 1 1 100%; }
+  }
+</style>
+
+<script>
+(function () {
+  'use strict';
+  var STORAGE_KEY = 'uno-score-calc-v1';
+  var els = {
+    headRow: document.getElementById('calc-head-row'),
+    body: document.getElementById('calc-body'),
+    totalRow: document.getElementById('calc-total-row'),
+    addPlayer: document.getElementById('calc-add-player'),
+    addRound: document.getElementById('calc-add-round'),
+    reset: document.getElementById('calc-reset'),
+    print: document.getElementById('calc-print'),
+    target: document.getElementById('calc-target'),
+    mode: document.getElementById('calc-mode'),
+    modeNote: document.getElementById('calc-mode-note'),
+    status: document.getElementById('calc-status'),
+  };
+
+  // state: players = [{name}], rounds = [{scores: {playerIndex: number}, winner: index|null}]
+  var state = { players: [], rounds: [], target: 500, mode: 'winner' };
+
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+  }
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.players)) state = parsed;
+      }
+    } catch (e) {}
+    if (!state.players.length) {
+      state = { players: [{ name: 'Player 1' }, { name: 'Player 2' }], rounds: [], target: 500, mode: 'winner' };
+    }
+  }
+
+  function totals() {
+    var t = state.players.map(function () { return 0; });
+    state.rounds.forEach(function (round) {
+      state.players.forEach(function (p, i) {
+        var v = Number(round.scores[i]) || 0;
+        if (state.mode === 'winner') {
+          // winner banks the sum of everyone else's card points
+          if (round.winner === i) {
+            var sum = 0;
+            state.players.forEach(function (_, j) { if (j !== i) sum += Number(round.scores[j]) || 0; });
+            t[i] += sum;
+          }
+        } else {
+          t[i] += v; // golf: each player accumulates their own leftover points
+        }
+      });
+    });
+    return t;
+  }
+
+  function leaderIndex(t) {
+    // "Best" depends on mode: winner mode = highest, golf = lowest
+    if (!t.length) return -1;
+    var best = 0;
+    for (var i = 1; i < t.length; i++) {
+      if (state.mode === 'winner' ? t[i] > t[best] : t[i] < t[best]) best = i;
+    }
+    return best;
+  }
+
+  function render() {
+    // ── header: one <th> per player, before the +Player cell ──
+    var addCell = els.headRow.querySelector('.calc-add-col');
+    Array.prototype.slice.call(els.headRow.querySelectorAll('.calc-player-th')).forEach(function (n) { n.remove(); });
+    state.players.forEach(function (p, i) {
+      var th = document.createElement('th');
+      th.className = 'calc-player-th';
+      var input = document.createElement('input');
+      input.className = 'calc-player-name';
+      input.value = p.name;
+      input.setAttribute('aria-label', 'Player ' + (i + 1) + ' name');
+      input.addEventListener('input', function () { state.players[i].name = input.value; save(); });
+      th.appendChild(input);
+      if (state.players.length > 2) {
+        var rm = document.createElement('button');
+        rm.className = 'calc-remove-player';
+        rm.type = 'button';
+        rm.textContent = '✕';
+        rm.setAttribute('aria-label', 'Remove ' + p.name);
+        rm.addEventListener('click', function () { removePlayer(i); });
+        th.appendChild(rm);
+      }
+      els.headRow.insertBefore(th, addCell);
+    });
+
+    // ── body: one row per round ──
+    els.body.innerHTML = '';
+    state.rounds.forEach(function (round, r) {
+      var tr = document.createElement('tr');
+      var rc = document.createElement('td');
+      rc.className = 'calc-round-col';
+      rc.textContent = (r + 1);
+      var rm = document.createElement('button');
+      rm.className = 'calc-round-remove';
+      rm.type = 'button';
+      rm.textContent = ' ✕';
+      rm.setAttribute('aria-label', 'Remove round ' + (r + 1));
+      rm.addEventListener('click', function () { state.rounds.splice(r, 1); save(); render(); });
+      rc.appendChild(rm);
+      tr.appendChild(rc);
+
+      state.players.forEach(function (p, i) {
+        var td = document.createElement('td');
+        var input = document.createElement('input');
+        input.className = 'calc-score-input';
+        input.type = 'number';
+        input.min = '0';
+        input.setAttribute('inputmode', 'numeric');
+        input.value = (round.scores[i] != null ? round.scores[i] : '');
+        input.placeholder = '0';
+        input.setAttribute('aria-label', p.name + ', round ' + (r + 1) + ' card points');
+        input.addEventListener('input', function () {
+          round.scores[i] = input.value === '' ? 0 : Number(input.value);
+          save(); renderTotals();
+        });
+        td.appendChild(input);
+
+        if (state.mode === 'winner') {
+          var wrap = document.createElement('div');
+          wrap.className = 'calc-winner-radio';
+          var lbl = document.createElement('label');
+          var radio = document.createElement('input');
+          radio.type = 'radio';
+          radio.name = 'winner-' + r;
+          radio.checked = round.winner === i;
+          radio.setAttribute('aria-label', p.name + ' won round ' + (r + 1));
+          radio.addEventListener('change', function () { round.winner = i; save(); renderTotals(); });
+          lbl.appendChild(radio);
+          lbl.appendChild(document.createTextNode('won'));
+          wrap.appendChild(lbl);
+          td.appendChild(wrap);
+        }
+        tr.appendChild(td);
+      });
+
+      var pad = document.createElement('td');
+      tr.appendChild(pad);
+      els.body.appendChild(tr);
+    });
+
+    renderTotals();
+  }
+
+  function renderTotals() {
+    var t = totals();
+    var addCell = els.totalRow.querySelector('.calc-add-col');
+    Array.prototype.slice.call(els.totalRow.querySelectorAll('.calc-total')).forEach(function (n) { n.remove(); });
+    var lead = leaderIndex(t);
+    state.players.forEach(function (p, i) {
+      var td = document.createElement('td');
+      td.className = 'calc-total';
+      if (i === lead && state.rounds.length) td.classList.add('calc-leader');
+      td.textContent = t[i];
+      els.totalRow.insertBefore(td, addCell);
+    });
+
+    // ── win detection ──
+    var target = Number(state.target) || 500;
+    els.status.classList.remove('is-win');
+    if (state.rounds.length) {
+      if (state.mode === 'winner') {
+        var reached = [];
+        t.forEach(function (v, i) { if (v >= target) reached.push(i); });
+        if (reached.length) {
+          var top = reached.sort(function (a, b) { return t[b] - t[a]; })[0];
+          els.status.textContent = '🏆 ' + state.players[top].name + ' wins with ' + t[top] + ' points!';
+          els.status.classList.add('is-win');
+          return;
+        }
+      } else {
+        var out = [];
+        t.forEach(function (v, i) { if (v >= target) out.push(i); });
+        if (out.length) {
+          els.status.textContent = '🏁 Game over at ' + target + '. Lowest score wins: ' + state.players[lead].name + ' (' + t[lead] + ').';
+          els.status.classList.add('is-win');
+          return;
+        }
+      }
+      els.status.textContent = 'Leader: ' + state.players[lead].name + ' (' + t[lead] + ')';
+    } else {
+      els.status.textContent = '';
+    }
+  }
+
+  function addPlayer() {
+    if (state.players.length >= 10) return;
+    state.players.push({ name: 'Player ' + (state.players.length + 1) });
+    state.rounds.forEach(function (round) { round.scores[state.players.length - 1] = 0; });
+    save(); render();
+  }
+  function removePlayer(idx) {
+    state.players.splice(idx, 1);
+    state.rounds.forEach(function (round) {
+      var next = {};
+      Object.keys(round.scores).forEach(function (k) {
+        var ki = Number(k);
+        if (ki < idx) next[ki] = round.scores[ki];
+        else if (ki > idx) next[ki - 1] = round.scores[ki];
+      });
+      round.scores = next;
+      if (round.winner === idx) round.winner = null;
+      else if (round.winner > idx) round.winner -= 1;
+    });
+    save(); render();
+  }
+  function addRound() {
+    var scores = {};
+    state.players.forEach(function (_, i) { scores[i] = 0; });
+    state.rounds.push({ scores: scores, winner: null });
+    save(); render();
+    // focus the first score input of the new round
+    var lastRow = els.body.lastElementChild;
+    if (lastRow) { var f = lastRow.querySelector('.calc-score-input'); if (f) f.focus(); }
+  }
+  function resetGame() {
+    state = { players: [{ name: 'Player 1' }, { name: 'Player 2' }], rounds: [], target: Number(els.target.value) || 500, mode: els.mode.value };
+    save(); syncMode(); render();
+  }
+  function syncMode() {
+    els.modeNote.textContent = state.mode === 'winner'
+      ? 'Enter the card points left in each losing hand, then mark who went out. The winner banks the total. First to the target wins.'
+      : 'Golf mode: enter the card points left in every hand each round. Lowest total when someone hits the target wins.';
+  }
+
+  els.addPlayer.addEventListener('click', addPlayer);
+  els.addRound.addEventListener('click', addRound);
+  els.reset.addEventListener('click', resetGame);
+  els.print.addEventListener('click', function () { window.print(); });
+  els.target.addEventListener('input', function () { state.target = Number(els.target.value) || 500; save(); renderTotals(); });
+  els.mode.addEventListener('change', function () { state.mode = els.mode.value; save(); syncMode(); render(); });
+
+  load();
+  els.target.value = state.target || 500;
+  els.mode.value = state.mode || 'winner';
+  syncMode();
+  render();
+})();
+</script>
+<%- include('partials/footer') %>

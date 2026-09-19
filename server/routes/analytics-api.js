@@ -63,7 +63,7 @@ router.get('/visits', async (req, res) => {
         .sort({ ts: -1 })
         .skip(skip)
         .limit(limit)
-        .select('path ip country city device referer ts')
+        .select('path ip country city device referer ts playerName playerUid')
         .lean(),
       Visit.countDocuments(filter),
     ]);

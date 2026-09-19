@@ -674,33 +674,6 @@ a:hover { color: #fff; }
 }
 .footer-inner { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
 
-/* ── Banner ad (Monetag) — content pages ──────────────────────────────────────
-   Full-width band above the footer. Height is reserved by a size class set by
-   bannerAd.js BEFORE the ad script loads (no layout shift); the block is clipped
-   so it can never cause horizontal scroll (body already has overflow-x:hidden).
-   Vertical margin applies only once a unit is chosen, so there is no empty gap
-   before the ad loads. Never rendered on the game board (that is the /play SPA). */
-.banner-ad {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
-  height: 0;
-}
-.banner-ad.is-728 { height: 90px; }
-.banner-ad.is-468 { height: 60px; }
-.banner-ad.is-320 { height: 50px; }
-.banner-ad--page.is-728,
-.banner-ad--page.is-468,
-.banner-ad--page.is-320 { margin: 32px auto; }
-.banner-ad__container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
-  line-height: 0;
-}
 .footer-grid {
   display: grid; grid-template-columns: 2fr repeat(4, 1fr); gap: 40px;
   margin-bottom: 48px;
@@ -860,6 +833,41 @@ a:hover { color: #fff; }
   font-size: 1.4rem;
   margin-top: 24px;
 }
+
+/* ── Article byline + author box (E-E-A-T) ── */
+.article-byline { text-transform: none; letter-spacing: 0; }
+.article-byline a { color: var(--steel-200); text-decoration: underline; }
+.author-box {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin-top: 48px;
+  padding: 20px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+}
+.author-box-avatar {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  font-size: 1.6rem;
+  background: rgba(0,0,0,0.2);
+  border-radius: 12px;
+}
+.author-box-name {
+  font-weight: 800;
+  margin: 0 0 6px;
+}
+.author-box-bio {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--steel-200);
+  line-height: 1.6;
+}
+.author-box-bio a { color: var(--uno-yellow); }
 
 /* ── 404 — the misdealt card ── */
 .card-404 {

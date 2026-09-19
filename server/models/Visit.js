@@ -8,6 +8,10 @@ const visitSchema = new mongoose.Schema({
   country: { type: String, index: true },
   region: { type: String },
   city: { type: String },
+  // Player identity when known — set from the client's uno_player/uno_pid cookies
+  // (guest nickname or signed-in account name). Anonymous page views leave these null.
+  playerName: { type: String },
+  playerUid: { type: String, index: true },
   referer: { type: String },
   utmSource: { type: String },
   userAgent: { type: String },

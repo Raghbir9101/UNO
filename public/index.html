@@ -36,6 +36,11 @@
   </noscript>
   <link rel="stylesheet" href="style.css?v=51" />
 
+  <!-- Google AdSense: ownership-verification meta tag + loader (Auto ads + the manual units below serve through it). -->
+  <meta name="google-adsense-account" content="ca-pub-5274802993197394">
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5274802993197394"
+     crossorigin="anonymous"></script>
+
   <!--
     Game scripts: moved to <head> with `defer` instead of the old runtime loader
     that appended <script> tags one-by-one in a body inline-script.
@@ -60,8 +65,7 @@
   <script defer src="voice.js?v=2"></script>
   <script defer src="renderer.js?v=46"></script>
   <script defer src="game.js?v=41"></script>
-  <script defer src="bannerAd.js?v=3"></script>
-  <script defer src="main.js?v=53"></script>
+  <script defer src="main.js?v=55"></script>
 
   <style>
     /* Visually hides labels for sighted users while keeping them for screen readers */
@@ -131,13 +135,6 @@
   <!-- ── Screen 1: Lobby ── -->
   <div id="lobby" class="screen active">
     <div class="lobby-container">
-      <!-- Reserved banner slot: bannerAd.js sets the size class (is-728/is-468/
-           is-320) to reserve the exact height BEFORE the Monetag iframe loads, so
-           it never shifts the layout. Full-bleed so wide units clear the 420px
-           form column. Managed by BannerAd.syncScreens() — never on the game board. -->
-      <div class="banner-ad banner-ad--bleed" aria-hidden="true">
-        <div class="banner-ad__container"></div>
-      </div>
       <div class="logo-section">
         <div class="uno-logo">
           <span class="logo-u">U</span><span class="logo-n">N</span><span class="logo-o">O</span>
@@ -214,23 +211,24 @@
           </button>
         </div>
         <a href="/leaderboard" class="leaderboard-link">🏆 View Leaderboard</a>
-      </div>
 
-      <!-- 3 more lobby banner slots (4 total on the lobby). Each is filled by
-           bannerAd.js with one viewport-sized, centered ad. -->
-      <div class="banner-ad banner-ad--bleed" aria-hidden="true"><div class="banner-ad__container"></div></div>
-      <div class="banner-ad banner-ad--bleed" aria-hidden="true"><div class="banner-ad__container"></div></div>
-      <div class="banner-ad banner-ad--bleed" aria-hidden="true"><div class="banner-ad__container"></div></div>
+        <!-- AdSense: Lobby ad (non-intrusive, below main actions).
+             Replace data-ad-slot with your real Lobby ad-unit slot ID. -->
+        <div class="lobby-ad-container">
+          <ins class="adsbygoogle"
+               style="display:block"
+               data-ad-client="ca-pub-5274802993197394"
+               data-ad-slot="9876543210"
+               data-ad-format="auto"
+               data-full-width-responsive="true"></ins>
+        </div>
+      </div>
     </div>
   </div>
 
   <!-- ── Browse Rooms Screen ── -->
   <div id="browse-screen" class="screen">
     <div class="lobby-container">
-      <!-- Reserved banner slot (see lobby) — shown when Browse is the active screen. -->
-      <div class="banner-ad banner-ad--bleed" aria-hidden="true">
-        <div class="banner-ad__container"></div>
-      </div>
       <div class="logo-section">
         <div class="uno-logo">
           <span class="logo-u">U</span><span class="logo-n">N</span><span class="logo-o">O</span>
@@ -265,11 +263,6 @@
   <!-- ── Screen 2: Waiting Room ── -->
   <div id="waiting-room" class="screen">
     <div class="lobby-container">
-      <!-- Reserved banner slot (see lobby) — shown in the pre-game waiting room,
-           never on the game board that follows. -->
-      <div class="banner-ad banner-ad--bleed" aria-hidden="true">
-        <div class="banner-ad__container"></div>
-      </div>
       <div class="room-header">
         <h2>Room</h2>
         <div class="room-code-display" id="display-code"></div>
@@ -766,6 +759,18 @@
       </div>
       <div id="postgame-rewards"></div>
       <div id="postgame-achievements"></div>
+
+      <!-- AdSense: Post-game ad (shown after a match ends).
+           Replace data-ad-slot with your real Post-game ad-unit slot ID. -->
+      <div class="postgame-ad-container">
+        <ins class="adsbygoogle"
+             style="display:block"
+             data-ad-client="ca-pub-5274802993197394"
+             data-ad-slot="1234567890"
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
+      </div>
+
       <div class="postgame-table-wrap">
         <table id="postgame-table">
           <thead>

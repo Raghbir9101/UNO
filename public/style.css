@@ -137,36 +137,6 @@ body {
   gap: 20px;
 }
 
-/* ── Banner ad (Monetag) ──────────────────────────────────────────────────────
-   First child of a centered screen column (lobby / browse / waiting room). Height
-   is reserved by a size modifier (added before the ad script loads) so nothing
-   shifts, and the block is clipped so it can never cause horizontal scroll or
-   overlay the controls below it. The --bleed modifier breaks it out of the 420px
-   column so the wide 728/468 units have room while the form column stays 420px. */
-.banner-ad {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
-  height: 0; /* nothing reserved until a unit is selected */
-}
-.banner-ad--bleed {
-  width: 100vw;
-  max-width: 100vw;
-  margin-inline: calc(50% - 50vw); /* full-bleed, stay centered */
-}
-.banner-ad.is-728 { height: 90px; }
-.banner-ad.is-468 { height: 60px; }
-.banner-ad.is-320 { height: 50px; }
-.banner-ad__container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
-  line-height: 0; /* kill iframe descender gap */
-}
-
 /* ── Logo ─────────────────────────────────────────────────────────────────── */
 .logo-section {
   text-align: center;

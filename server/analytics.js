@@ -27,6 +27,23 @@ function clientIp(req) {
   return req.headers['cf-connecting-ip'] || req.ip || '';
 }
 
+// Read one cookie from the raw header (no cookie-parser dependency). Cookies are
+// sent automatically on page navigations, so the client tags itself by writing
+// uno_player (display name) and uno_pid (stats uid) — see setPlayerCookie() in main.js.
+function readCookie(req, name) {
+  const raw = req.headers.cookie;
+  if (!raw) return null;
+  for (const part of raw.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() === name) {
+      try { return decodeURIComponent(part.slice(eq + 1).trim()) || null; }
+      catch { return part.slice(eq + 1).trim() || null; }
+    }
+  }
+  return null;
+}
+
 // ── Middleware: record the page view, never block the request ──
 function middleware(req, res, next) {
   next(); // respond first — tracking is entirely out-of-band
@@ -43,6 +60,8 @@ function middleware(req, res, next) {
     const geo = ip ? geoip.lookup(ip) : null;
     const referer = req.headers.referer || '';
     const day = new Date().toISOString().slice(0, 10);
+    const playerName = (readCookie(req, 'uno_player') || '').slice(0, 40) || null;
+    const playerUid = (readCookie(req, 'uno_pid') || '').slice(0, 64) || null;
 
     Visit.create({
       path: p,
@@ -50,6 +69,8 @@ function middleware(req, res, next) {
       country: geo ? geo.country : null,
       region: geo ? geo.region : null,
       city: geo ? geo.city : null,
+      playerName,
+      playerUid,
       referer: referer.slice(0, 300),
       utmSource: (req.query.utm_source || '').toString().slice(0, 60) || null,
       userAgent: ua.slice(0, 300),
@@ -118,10 +139,10 @@ async function getDashboard() {
       { $sort: { _id: 1 } },
     ]),
     Visit.find(human).sort({ ts: -1 }).limit(500)
-      .select('path ip country city device referer ts isBot').lean(),
+      .select('path ip country city device referer ts isBot playerName playerUid').lean(),
     // Also fetch bot visits separately
     Visit.find({ isBot: true }).sort({ ts: -1 }).limit(50)
-      .select('path ip country city device referer ts isBot').lean(),
+      .select('path ip country city device referer ts isBot playerName playerUid').lean(),
     // Hourly breakdown for today
     Visit.aggregate([
       { $match: { ...human, ts: { $gte: startOfToday } } },

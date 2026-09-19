@@ -189,6 +189,21 @@
     localStorage.setItem('uno_uid', myUid);
   }
 
+  // ── Tag page visits with the player's identity (for the admin dashboard) ──
+  // Page navigations carry no auth token, so we mirror the display name + uid
+  // into cookies the analytics middleware reads. Named guests and signed-in
+  // accounts are both covered; a purely anonymous first-timer stays untagged.
+  function setPlayerCookie() {
+    // Read the saved display name — handleAuthSuccess() writes the account
+    // username here on sign-in, so this covers guests and members alike.
+    const name = (localStorage.getItem('uno_nickname') || '').trim();
+    const maxAge = 180 * 24 * 60 * 60; // match the Visit TTL
+    const opts = `; path=/; max-age=${maxAge}; SameSite=Lax`;
+    if (name) document.cookie = 'uno_player=' + encodeURIComponent(name.slice(0, 40)) + opts;
+    if (myUid) document.cookie = 'uno_pid=' + encodeURIComponent(myUid) + opts;
+  }
+  setPlayerCookie();
+
   // ── Game settings: one place to sync server settings → UI + game engine ───
   // The full mode/rules registry lives in shared/game-modes.js (window.GameModes)
   let roomSettings = GameModes.normalizeSettings(null);
@@ -445,10 +460,6 @@
   function showScreen(screen) {
     [$lobby, $waitingRoom, $gameScreen, $browseScreen].forEach(s => s.classList.remove('active'));
     screen.classList.add('active');
-    // Banner ad: mount into whichever active screen carries a `.banner-ad` slot
-    // (lobby, browse, waiting room) and tear it down on the ad-free game board.
-    // Idempotent + duplicate-safe — see bannerAd.js.
-    if (window.BannerAd) window.BannerAd.syncScreens();
     // The app bar lives on menu screens only — gameplay gets the full viewport
     document.body.classList.toggle('in-game', screen === $gameScreen);
     if (screen === $gameScreen) {
@@ -2130,6 +2141,7 @@
     }
     $nickname.value = authUser.username;
     localStorage.setItem('uno_nickname', authUser.username);
+    setPlayerCookie(); // tag future page visits with the account name
     setAuthUI();
     $authModal.style.display = 'none';
     showToast(`✓ Signed in as ${authUser.username}`);
@@ -2247,6 +2259,10 @@
         myUid = authUser.uid;
         localStorage.setItem('uno_uid', myUid);
       }
+      // Keep the reserved account name as the display name, and re-tag visits
+      // with the (possibly adopted) account uid.
+      localStorage.setItem('uno_nickname', authUser.username);
+      setPlayerCookie();
       setAuthUI();
     } catch {
       localStorage.removeItem('uno_token'); // expired/invalid — quiet cleanup
@@ -3819,6 +3835,8 @@
     }
 
     $postgameModal.style.display = 'flex';
+    // Initialize post-game ad after modal is shown
+    initPostgameAd();
   }
 
   socket.on('game_over_stats', (data) => {
@@ -4105,4 +4123,47 @@
     });
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── AdSense Integration ────────────────────────────────────────────────────
+  // Non-intrusive Google ads shown in the lobby and after games end.
+  // ═══════════════════════════════════════════════════════════════════════════
+  let _lobbyAdInitialized = false;
+  let _postgameAdInitialized = false;
+
+  // Initialize lobby ad when user first visits lobby
+  function initLobbyAd() {
+    if (_lobbyAdInitialized) return;
+    try {
+      const adElements = document.querySelectorAll('.lobby-ad-container .adsbygoogle');
+      adElements.forEach(ad => {
+        if (!ad.dataset.adsbygoogleStatus) {
+          (window.adsbygoogle = window.adsbygoogle || []).push({});
+        }
+      });
+      _lobbyAdInitialized = true;
+    } catch (e) {
+      console.warn('[AdSense] Lobby ad init failed:', e);
+    }
+  }
+
+  // Initialize post-game ad when modal is shown
+  function initPostgameAd() {
+    if (_postgameAdInitialized) return;
+    try {
+      const adElements = document.querySelectorAll('.postgame-ad-container .adsbygoogle');
+      adElements.forEach(ad => {
+        if (!ad.dataset.adsbygoogleStatus) {
+          (window.adsbygoogle = window.adsbygoogle || []).push({});
+        }
+      });
+      _postgameAdInitialized = true;
+    } catch (e) {
+      console.warn('[AdSense] Post-game ad init failed:', e);
+    }
+  }
+
+  // Initialize lobby ad after page load
+  window.addEventListener('load', () => {
+    setTimeout(initLobbyAd, 2000); // Delay to not interfere with game load
+  });
 })();

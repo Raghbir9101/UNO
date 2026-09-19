@@ -125,7 +125,7 @@ const FAQS = [
   { q: 'Can the host kick players?', a: 'Yes. The host can remove any player from the room at any time, both in the lobby and during the game.' },
   { q: 'What are coins and levels?', a: 'You earn coins and XP by playing and winning — plus daily login rewards, achievements, and daily/weekly challenges. Spend coins on cosmetics like card themes, table styles, and victory effects. Coins can never be bought with real money, and cosmetics never affect gameplay.' },
   { q: 'Do I need an account?', a: 'No — you can play and even earn rewards without one. Signing in (email or Google) is optional and saves your stats, coins, and cosmetics across devices.' },
-  { q: 'Is it safe for kids?', a: 'Yes. There is no text chat (only preset emoji reactions), accounts are optional, and no personal data is needed to play. The game is family-friendly.' },
+  { q: 'Is it safe for kids?', a: 'It is designed to be family-friendly. In-game chat is text-only and profanity-filtered (no image or link sharing), quick emoji reactions are available, accounts are optional, and no personal data is needed to play.' },
   { q: 'How many cards are in the deck?', a: 'The classic deck has 108 cards: 76 number cards, 24 action cards (Skip, Reverse, Draw Two), and 8 wild cards. Optional Wild +8 and Shuffle Hands cards add more, and games with 11+ players use a double deck.' },
   { q: 'Can I play UNO solo?', a: 'Yes! Tap "Play vs Bots" for an instant game against computer players, or add bots to any room. Bots play every mode — including No Mercy.' },
   { q: 'Is this affiliated with Mattel?', a: 'No. This is an independent fan-made project. UNO® is a registered trademark of Mattel, Inc.' },
@@ -478,6 +478,53 @@ router.get('/blog/:slug', (req, res, next) => {
   });
 });
 
+// ── UNO Score Calculator (original interactive tool) ──
+router.get('/uno-score-calculator', (req, res) => {
+  const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
+  const url = `${base}/uno-score-calculator`;
+  renderPage(res, 'uno-score-calculator', {
+    title: 'UNO Score Calculator — Track Points & Play to 500 (Free)',
+    description: 'Free UNO score calculator: add players, log each round, and play to 500. Supports official and "golf" scoring, shows a running total and the winner, plus a printable UNO score sheet.',
+    canonical: url,
+    jsonLd: [
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "UNO Score Calculator",
+        "url": url,
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any (Web Browser)",
+        "browserRequirements": "Requires JavaScript",
+        "description": "Interactive UNO score keeper that tallies each round, tracks running totals, and declares the winner at 500 points. Includes a printable score sheet.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "isAccessibleForFree": true,
+        "publisher": { "@type": "Organization", "name": SITE_NAME },
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "HowTo",
+        "name": "How to keep score in UNO",
+        "description": "Score an UNO match to 500 points using the official rules.",
+        "step": [
+          { "@type": "HowToStep", "name": "Win the round", "text": "A round ends when one player plays their last card. Everyone else keeps the cards left in their hand." },
+          { "@type": "HowToStep", "name": "Total the leftover cards", "text": "Number cards score their face value, action cards score 20 each, and Wild and Wild Draw Four score 50 each." },
+          { "@type": "HowToStep", "name": "Score the winner", "text": "The player who went out scores the combined value of all the cards still in the other players' hands." },
+          { "@type": "HowToStep", "name": "Play to 500", "text": "Add each round to the running total. The first player to reach 500 points wins the match." },
+        ],
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          { "@type": "Question", "name": "How many points do you play to in UNO?", "acceptedAnswer": { "@type": "Answer", "text": "The official target is 500 points. The first player to reach 500 across multiple rounds wins the match. Many groups shorten this to 200 or 300." } },
+          { "@type": "Question", "name": "How much is a Wild card worth in UNO?", "acceptedAnswer": { "@type": "Answer", "text": "Both the Wild and the Wild Draw Four are worth 50 points each — the highest of any card." } },
+          { "@type": "Question", "name": "Who adds up the points at the end of a round?", "acceptedAnswer": { "@type": "Answer", "text": "In the standard rules the round winner totals the value of the cards left in everyone else's hands and adds that to their score. In golf scoring, each player totals their own remaining cards." } },
+        ],
+      },
+    ],
+  });
+});
+
 // ── About ──
 router.get('/about', (req, res) => {
   const base = res.locals.baseUrl || process.env.BASE_URL || 'https://playunofree.com';
@@ -529,13 +576,12 @@ router.get('/cookie-policy', (req, res) => {
 });
 
 // ── ads.txt (Authorized Digital Sellers) ─────────────────────────────────────
-// AdSense is currently disabled, so the Google seller line is commented out
-// (ads.txt treats `#` as a comment). Re-enable it when the AdSense loader is
-// restored in views/partials/head.ejs. Add Monetag's ads.txt lines here if/when
-// Monetag requires them.
+// Declares Google as an authorized seller of this site's ad inventory; the
+// publisher ID matches the AdSense loader in views/partials/head.ejs and
+// public/index.html.
 router.get('/ads.txt', (req, res) => {
   res.type('text/plain');
-  res.send('# google.com, pub-5274802993197394, DIRECT, f08c47fec0942fa0\n');
+  res.send('google.com, pub-5274802993197394, DIRECT, f08c47fec0942fa0\n');
 });
 
 // ── robots.txt ──
@@ -562,6 +608,7 @@ router.get('/sitemap.xml', (req, res) => {
     { url: '/rules/stacking', changefreq: 'monthly', priority: '0.7' },
     { url: '/house-rules', changefreq: 'monthly', priority: '0.7' },
     { url: '/game-modes', changefreq: 'monthly', priority: '0.7' },
+    { url: '/uno-score-calculator', changefreq: 'monthly', priority: '0.7' },
     { url: '/faq', changefreq: 'monthly', priority: '0.7' },
     { url: '/20-player-uno', changefreq: 'monthly', priority: '0.7' },
     { url: '/multiplayer', changefreq: 'monthly', priority: '0.7' },

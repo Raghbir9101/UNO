@@ -437,7 +437,7 @@
     <div class="filters-bar">
       <div class="filter-group">
         <label class="filter-label">Search Visits</label>
-        <input type="text" class="filter-input" id="pathSearch" placeholder="Search by path, location, IP, or device...">
+        <input type="text" class="filter-input" id="pathSearch" placeholder="Search by path, player, location, IP, or device...">
       </div>
       <div class="filter-group">
         <label class="filter-label">Device Filter</label>
@@ -447,6 +447,12 @@
           <option value="desktop">Desktop</option>
           <option value="tablet">Tablet</option>
           <option value="bot">Bots Only</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label class="filter-label">Location Filter</label>
+        <select class="filter-select" id="locationFilter">
+          <option value="all">All Locations</option>
         </select>
       </div>
       <div class="filter-group">
@@ -813,6 +819,7 @@
             <tr>
               <th class="sortable" data-sort="time">Time</th>
               <th class="sortable" data-sort="path">Path</th>
+              <th class="sortable" data-sort="player">Player</th>
               <th class="sortable" data-sort="location">Location</th>
               <th class="sortable" data-sort="ip">IP</th>
               <th class="sortable" data-sort="device">Device</th>
@@ -835,6 +842,7 @@
                 <tr class="<%= rowClass %>" data-is-bot="<%= dataBot %>">
                   <td class="metric-cell"><%= new Date(v.ts).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) %></td>
                   <td><a href="<%= fullUrl %>" target="_blank"><%= fullUrl %></a></td>
+                  <td<% if (v.playerUid) { %> title="uid: <%= v.playerUid %>"<% } %>><%= v.playerName || '—' %></td>
                   <td><%= [v.city, v.country].filter(Boolean).join(', ') || '—' %></td>
                   <td class="metric-cell" style="font-family: monospace;"><%= v.ip || '—' %></td>
                   <td style="text-transform: capitalize;">
@@ -846,7 +854,7 @@
               <% }); %>
             <% } else { %>
               <tr>
-                <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                <td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted);">
                   No visits recorded yet. Visits will appear here once users access the site.
                 </td>
               </tr>
@@ -1006,10 +1014,30 @@ document.getElementById('nextPage').addEventListener('click', () => {
   if (currentPage < totalPages) changePage(currentPage + 1);
 });
 
+// Column layout: Time(0), Path(1), Player(2), Location(3), IP(4), Device(5), Referrer(6)
+const cellText = (row, i) => (row.children[i]?.textContent || '').trim();
+
+// Populate the Location dropdown from the locations actually present in the table
+(function buildLocationOptions() {
+  const locationFilter = document.getElementById('locationFilter');
+  const seen = new Set();
+  allRows.forEach(row => {
+    const loc = cellText(row, 3);
+    if (loc && loc !== '—') seen.add(loc);
+  });
+  [...seen].sort((a, b) => a.localeCompare(b)).forEach(loc => {
+    const opt = document.createElement('option');
+    opt.value = loc.toLowerCase();
+    opt.textContent = loc;
+    locationFilter.appendChild(opt);
+  });
+})();
+
 // Apply all filters
 function applyAllFilters() {
   const search = document.getElementById('pathSearch').value.toLowerCase().trim();
   const selectedDevice = document.getElementById('deviceFilter').value.toLowerCase();
+  const selectedLocation = document.getElementById('locationFilter').value.toLowerCase();
   const viewMode = document.getElementById('viewMode').value;
 
   allRows.forEach(row => {
@@ -1023,15 +1051,16 @@ function applyAllFilters() {
       viewModeMatches = false;
     }
 
-    // Search in: path (column 1), location (column 2), IP (column 3), device (column 4)
-    const path = row.children[1]?.textContent.toLowerCase() || '';
-    const location = row.children[2]?.textContent.toLowerCase() || '';
-    const ip = row.children[3]?.textContent.toLowerCase() || '';
-    const device = row.children[4]?.textContent.toLowerCase().replace(/\s*bot\s*/g, '') || '';
+    const path = cellText(row, 1).toLowerCase();
+    const player = cellText(row, 2).toLowerCase();
+    const location = cellText(row, 3).toLowerCase();
+    const ip = cellText(row, 4).toLowerCase();
+    const device = cellText(row, 5).toLowerCase().replace(/\s*bot\s*/g, '');
 
-    // Check search match
+    // Check search match (path, player, location, IP, device)
     const searchMatches = !search ||
                          path.includes(search) ||
+                         player.includes(search) ||
                          location.includes(search) ||
                          ip.includes(search) ||
                          device.includes(search);
@@ -1044,8 +1073,11 @@ function applyAllFilters() {
       deviceMatches = device === selectedDevice;
     }
 
+    // Check location match
+    const locationMatches = selectedLocation === 'all' || location === selectedLocation;
+
     // Mark row as hidden if any filter doesn't match
-    row.setAttribute('data-filter-hidden', (!searchMatches || !deviceMatches || !viewModeMatches) ? 'true' : 'false');
+    row.setAttribute('data-filter-hidden', (!searchMatches || !deviceMatches || !locationMatches || !viewModeMatches) ? 'true' : 'false');
   });
 
   currentPage = 1; // Reset to first page when filtering
@@ -1057,6 +1089,9 @@ document.getElementById('pathSearch').addEventListener('input', applyAllFilters)
 
 // Device filter
 document.getElementById('deviceFilter').addEventListener('change', applyAllFilters);
+
+// Location filter
+document.getElementById('locationFilter').addEventListener('change', applyAllFilters);
 
 // View mode filter
 document.getElementById('viewMode').addEventListener('change', applyAllFilters);

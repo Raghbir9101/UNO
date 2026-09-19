@@ -7,12 +7,12 @@
 // Bump CACHE_VERSION together with the ?v= asset versions in index.html.
 // ──────────────────────────────────────────────────────────────────────────────
 
-const CACHE_VERSION = 'uno-v56';
+const CACHE_VERSION = 'uno-v58';
 
 const CORE_ASSETS = [
   '/play',
   '/style.css?v=47',
-  '/main.js?v=53',
+  '/main.js?v=55',
   '/game.js?v=41',
   '/renderer.js?v=46',
   '/sounds.js?v=1',
